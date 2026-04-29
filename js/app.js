@@ -909,10 +909,30 @@
       b.onclick = () => {
         $$('#page-history .seg-btn').forEach(x => x.classList.toggle('active', x === b));
         STATE.currentTab = b.dataset.tab;
+        $('#filter-category').value = '';  // 切 tab 時重置分類
         renderHistory();
       };
     });
     $('#filter-search').oninput = renderHistory;
+    $('#filter-category').onchange = renderHistory;
+  }
+
+  function populateCategoryFilter(tab, raw) {
+    const sel = $('#filter-category');
+    const cur = sel.value;
+    let label = '全部', options = [];
+    if (tab === 'purchases') {
+      label = '全部代號';
+      options = [...new Set(raw.map(r => r.symbol).filter(Boolean))].sort();
+    } else if (tab === 'bank') {
+      label = '全部類型';
+      options = [...new Set(raw.map(r => r.type).filter(Boolean))].sort();
+    } else if (tab === 'savings') {
+      label = '全部年份';
+      options = [...new Set(raw.map(r => String(r.year)).filter(Boolean))].sort();
+    }
+    sel.innerHTML = `<option value="">${label}</option>` + options.map(o => `<option value="${o}">${o}</option>`).join('');
+    if (options.includes(cur)) sel.value = cur;
   }
 
   function renderHistory() {
@@ -921,14 +941,25 @@
     const personFilter = STATE.defaultPerson;
     const search = $('#filter-search').value.trim().toLowerCase();
 
-    // 先抓「已套用人員篩選」的原始資料(供統計用)
+    // 先抓「已套用人員篩選」的原始資料(供統計、圖表、分類下拉用)
     let raw = [];
     if (tab === 'purchases')   raw = (STATE.data.purchases || []).filter(r => !personFilter || r.person === personFilter);
     else if (tab === 'bank')   raw = (STATE.data.bank || []).filter(r => !personFilter || r.person === personFilter);
     else if (tab === 'savings')raw = (STATE.data.savings || []).filter(r => !personFilter || r.person === personFilter);
 
+    populateCategoryFilter(tab, raw);
+    const category = $('#filter-category').value;
+
+    // 統計與圖表用「未套用分類篩選」的資料(不變)
     renderHistorySummary(tab, raw, personFilter);
     renderHistoryChart(tab, raw);
+
+    // 列表才套用分類篩選
+    if (category) {
+      if (tab === 'purchases')   raw = raw.filter(r => r.symbol === category);
+      else if (tab === 'bank')   raw = raw.filter(r => r.type === category);
+      else if (tab === 'savings')raw = raw.filter(r => String(r.year) === category);
+    }
 
     // 列表(再套搜尋)
     let rows = [];
