@@ -4,7 +4,7 @@
   const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 
   const KEY = CONFIG.STORAGE_KEYS;
-  let STATE = { data: null, currentTab: 'purchases', defaultPerson: '黃' };
+  let STATE = { data: null, currentTab: 'purchases', defaultPerson: '黃', editing: null };
 
   // ============== Utils ==============
 
@@ -233,7 +233,137 @@
 
     renderHoldings(p);
     renderPayoutCalendar(p);
+    renderHoldingsChart(p);
     renderSavingsProgress(stats);
+  }
+
+  // 圖表實例(用以重複渲染時銷毀舊的)
+  const _charts = {};
+
+  function renderHoldingsChart(personFilter) {
+    const canvas = $('#chart-holdings');
+    if (!canvas || !window.Chart) return;
+    const symMap = {};
+    (STATE.data.symbols || []).forEach(s => symMap[s.symbol] = s);
+    const agg = {};
+    (STATE.data.purchases || []).forEach(r => {
+      if (personFilter && r.person !== personFilter) return;
+      if (!r.symbol) return;
+      if (!agg[r.symbol]) agg[r.symbol] = 0;
+      agg[r.symbol] += (Number(r.shares) || 0) * 1000 * (Number((symMap[r.symbol] || {}).current_price) || 0);
+    });
+    const labels = Object.keys(agg).sort();
+    const data   = labels.map(k => Math.round(agg[k]));
+    if (data.every(v => v === 0)) {
+      canvas.parentElement.parentElement.classList.add('hidden');
+      return;
+    }
+    canvas.parentElement.parentElement.classList.remove('hidden');
+    const colors = ['#f59e0b', '#a855f7', '#3b82f6', '#16a34a', '#dc2626', '#ec4899', '#14b8a6', '#eab308', '#8b5cf6', '#06b6d4', '#84cc16'];
+    if (_charts.holdings) _charts.holdings.destroy();
+    _charts.holdings = new Chart(canvas, {
+      type: 'doughnut',
+      data: { labels, datasets: [{ data, backgroundColor: colors, borderWidth: 0 }] },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'right', labels: { color: getCssVar('--text'), boxWidth: 12 } },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => `${ctx.label}: ${fmt.money(ctx.parsed)} (${(ctx.parsed / data.reduce((s,v)=>s+v,0) * 100).toFixed(1)}%)`
+            }
+          }
+        }
+      }
+    });
+  }
+
+  function getCssVar(name) {
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || '#1f2937';
+  }
+
+  function renderHistoryChart(tab, raw) {
+    const wrap = $('#history-chart-wrap');
+    const canvas = $('#chart-history');
+    if (!canvas || !window.Chart) return;
+    if (tab === 'purchases') {
+      // 月份累計購買金額
+      const byMonth = {};
+      raw.forEach(r => {
+        const m = String(r.date || '').slice(0, 7);
+        if (!m) return;
+        byMonth[m] = (byMonth[m] || 0) + (Number(r.amount) || 0);
+      });
+      const months = Object.keys(byMonth).sort();
+      if (months.length === 0) { wrap.classList.add('hidden'); return; }
+      wrap.classList.remove('hidden');
+      $('#history-chart-title').textContent = '每月購買金額';
+      if (_charts.history) _charts.history.destroy();
+      _charts.history = new Chart(canvas, {
+        type: 'bar',
+        data: { labels: months, datasets: [{ label: '本金', data: months.map(m => byMonth[m]), backgroundColor: '#3b82f6' }] },
+        options: chartBarOptions()
+      });
+    } else if (tab === 'bank') {
+      // 月份收入 vs 支出
+      const byMonth = {};
+      raw.forEach(r => {
+        const m = String(r.date || '').slice(0, 7);
+        if (!m) return;
+        if (!byMonth[m]) byMonth[m] = { income: 0, expense: 0 };
+        const a = Number(r.amount) || 0;
+        if (String(r.type).startsWith('支出')) byMonth[m].expense += a;
+        else byMonth[m].income += a;
+      });
+      const months = Object.keys(byMonth).sort();
+      if (months.length === 0) { wrap.classList.add('hidden'); return; }
+      wrap.classList.remove('hidden');
+      $('#history-chart-title').textContent = '每月收入 vs 支出';
+      if (_charts.history) _charts.history.destroy();
+      _charts.history = new Chart(canvas, {
+        type: 'bar',
+        data: {
+          labels: months,
+          datasets: [
+            { label: '收入', data: months.map(m => byMonth[m].income),  backgroundColor: '#16a34a' },
+            { label: '支出', data: months.map(m => -byMonth[m].expense), backgroundColor: '#dc2626' }
+          ]
+        },
+        options: chartBarOptions()
+      });
+    } else if (tab === 'savings') {
+      const byMonth = {};
+      raw.forEach(r => {
+        const k = `${r.year}-${String(r.month).padStart(2,'0')}`;
+        byMonth[k] = (byMonth[k] || 0) + (Number(r.amount) || 0);
+      });
+      const months = Object.keys(byMonth).sort();
+      if (months.length === 0) { wrap.classList.add('hidden'); return; }
+      wrap.classList.remove('hidden');
+      $('#history-chart-title').textContent = '每月存入金額';
+      if (_charts.history) _charts.history.destroy();
+      _charts.history = new Chart(canvas, {
+        type: 'bar',
+        data: { labels: months, datasets: [{ label: '存入', data: months.map(m => byMonth[m]), backgroundColor: '#a855f7' }] },
+        options: chartBarOptions()
+      });
+    }
+  }
+
+  function chartBarOptions() {
+    return {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { labels: { color: getCssVar('--text') } },
+        tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${fmt.money(ctx.parsed.y)}` } }
+      },
+      scales: {
+        x: { ticks: { color: getCssVar('--muted') }, grid: { color: getCssVar('--border') } },
+        y: { ticks: { color: getCssVar('--muted'), callback: (v) => fmt.money(v) }, grid: { color: getCssVar('--border') } }
+      }
+    };
   }
 
   function computePersonStats() {
@@ -649,7 +779,11 @@
   }
 
   function openModal(id) { $('#' + id).classList.remove('hidden'); }
-  function closeAllModals() { $$('.modal').forEach(m => m.classList.add('hidden')); }
+  function closeAllModals() {
+    $$('.modal').forEach(m => m.classList.add('hidden'));
+    STATE.editing = null;
+    resetModalLabels();
+  }
 
   function prefillForm(which) {
     const today = new Date().toISOString().slice(0, 10);
@@ -700,18 +834,23 @@
         price:  Number($('#purchase-price').value)  || 0,
         shares: Number($('#purchase-shares').value) || 0,
         date:   $('#purchase-date').value,
-        note:   $('#purchase-note').value,
-        created_by: STATE.defaultPerson
+        note:   $('#purchase-note').value
       };
       if (!data.person) return alert('請選購買人');
       if (!data.symbol) return alert('請選代號');
       if (!data.amount || !data.shares) return alert('請輸入金額和張數');
       try {
-        await API.addPurchase(data);
+        if (STATE.editing && STATE.editing.type === 'purchase') {
+          await API.updateRecord(STATE.editing.sheet, STATE.editing.id, data);
+          showToast('已更新');
+        } else {
+          await API.addPurchase({ ...data, created_by: STATE.defaultPerson });
+          showToast('已新增購買');
+        }
         closeAllModals();
-        showToast('已新增購買');
         await loadAndRender();
-      } catch (e) { alert('新增失敗:' + e.message); }
+        if ($('#page-history').classList.contains('active')) renderHistory();
+      } catch (e) { alert('儲存失敗:' + e.message); }
     };
 
     $('#bank-submit').onclick = async () => {
@@ -720,17 +859,22 @@
         type:   $('#bank-type').value,
         amount: Number($('#bank-amount').value) || 0,
         date:   $('#bank-date').value,
-        note:   $('#bank-note').value,
-        created_by: STATE.defaultPerson
+        note:   $('#bank-note').value
       };
       if (!data.person) return alert('請選人');
       if (!data.amount) return alert('請輸入金額');
       try {
-        await API.addBank(data);
+        if (STATE.editing && STATE.editing.type === 'bank') {
+          await API.updateRecord(STATE.editing.sheet, STATE.editing.id, data);
+          showToast('已更新');
+        } else {
+          await API.addBank({ ...data, created_by: STATE.defaultPerson });
+          showToast('已新增收支');
+        }
         closeAllModals();
-        showToast('已新增收支');
         await loadAndRender();
-      } catch (e) { alert('新增失敗:' + e.message); }
+        if ($('#page-history').classList.contains('active')) renderHistory();
+      } catch (e) { alert('儲存失敗:' + e.message); }
     };
 
     $('#savings-submit').onclick = async () => {
@@ -739,17 +883,22 @@
         year:   Number($('#savings-year').value),
         month:  Number($('#savings-month').value),
         amount: Number($('#savings-amount').value) || 0,
-        note:   $('#savings-note').value,
-        created_by: STATE.defaultPerson
+        note:   $('#savings-note').value
       };
       if (!data.person) return alert('請選人');
       if (!data.amount) return alert('請輸入金額');
       try {
-        await API.addSavings(data);
+        if (STATE.editing && STATE.editing.type === 'savings') {
+          await API.updateRecord(STATE.editing.sheet, STATE.editing.id, data);
+          showToast('已更新');
+        } else {
+          await API.addSavings({ ...data, created_by: STATE.defaultPerson });
+          showToast('已新增月存');
+        }
         closeAllModals();
-        showToast('已新增月存');
         await loadAndRender();
-      } catch (e) { alert('新增失敗:' + e.message); }
+        if ($('#page-history').classList.contains('active')) renderHistory();
+      } catch (e) { alert('儲存失敗:' + e.message); }
     };
   }
 
@@ -779,6 +928,7 @@
     else if (tab === 'savings')raw = (STATE.data.savings || []).filter(r => !personFilter || r.person === personFilter);
 
     renderHistorySummary(tab, raw, personFilter);
+    renderHistoryChart(tab, raw);
 
     // 列表(再套搜尋)
     let rows = [];
@@ -824,7 +974,10 @@
           </div>
           <div class="right">
             <div class="amount ${cls}">${fmt.moneySigned(r.amount)}</div>
-            <button class="delete-btn" data-del-sheet="${r.sheet}" data-del-id="${r.id}" title="刪除">🗑</button>
+            <div class="row-actions">
+              <button class="edit-btn"   data-edit-sheet="${r.sheet}" data-edit-id="${r.id}" title="編輯">✏️</button>
+              <button class="delete-btn" data-del-sheet="${r.sheet}"  data-del-id="${r.id}"  title="刪除">🗑</button>
+            </div>
           </div>
         </div>`;
       }).join('');
@@ -839,6 +992,67 @@
         renderHistory();
       } catch (e) { alert('刪除失敗:' + e.message); }
     });
+
+    $$('.edit-btn').forEach(b => b.onclick = () => {
+      openEditModal(b.dataset.editSheet, b.dataset.editId);
+    });
+  }
+
+  function openEditModal(sheet, id) {
+    const find = (arr) => (arr || []).find(r => String(r.id) === String(id));
+    if (sheet === '_purchases') {
+      const r = find(STATE.data.purchases);
+      if (!r) return;
+      STATE.editing = { sheet, id, type: 'purchase' };
+      pickPerson('purchase-person', r.person);
+      // 確保下拉選單有此代號
+      const sel = $('#purchase-symbol');
+      if (![...sel.options].some(o => o.value === r.symbol)) {
+        sel.add(new Option(r.symbol, r.symbol));
+      }
+      sel.value = r.symbol;
+      $('#purchase-amount').value = r.amount;
+      $('#purchase-price').value  = r.price;
+      $('#purchase-shares').value = r.shares;
+      $('#purchase-date').value   = String(r.date || '').slice(0, 10);
+      $('#purchase-note').value   = r.note || '';
+      $('#modal-purchase h2').textContent = '編輯 ETF 購買';
+      $('#purchase-submit').textContent = '儲存修改';
+      openModal('modal-purchase');
+    } else if (sheet === '_bank') {
+      const r = find(STATE.data.bank);
+      if (!r) return;
+      STATE.editing = { sheet, id, type: 'bank' };
+      pickPerson('bank-person', r.person);
+      $('#bank-type').value   = r.type;
+      $('#bank-amount').value = r.amount;
+      $('#bank-date').value   = String(r.date || '').slice(0, 10);
+      $('#bank-note').value   = r.note || '';
+      $('#modal-bank h2').textContent = '編輯銀行收支';
+      $('#bank-submit').textContent = '儲存修改';
+      openModal('modal-bank');
+    } else if (sheet === '_savings') {
+      const r = find(STATE.data.savings);
+      if (!r) return;
+      STATE.editing = { sheet, id, type: 'savings' };
+      pickPerson('savings-person', r.person);
+      $('#savings-year').value   = r.year;
+      $('#savings-month').value  = r.month;
+      $('#savings-amount').value = r.amount;
+      $('#savings-note').value   = r.note || '';
+      $('#modal-savings h2').textContent = '編輯月存記錄';
+      $('#savings-submit').textContent = '儲存修改';
+      openModal('modal-savings');
+    }
+  }
+
+  function resetModalLabels() {
+    $('#modal-purchase h2').textContent = '新增 ETF 購買';
+    $('#purchase-submit').textContent   = '儲存';
+    $('#modal-bank h2').textContent     = '新增銀行收支';
+    $('#bank-submit').textContent       = '儲存';
+    $('#modal-savings h2').textContent  = '新增月存記錄';
+    $('#savings-submit').textContent    = '儲存';
   }
 
   function renderHistorySummary(tab, raw, person) {
