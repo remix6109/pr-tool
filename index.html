@@ -259,17 +259,27 @@
       <label>代號
         <input id="sym-code" type="text" placeholder="例如 00878" autocomplete="off" />
       </label>
-      <label>除息月份 (用逗號分隔)
-        <input id="sym-months" type="text" placeholder="季配填 1,4,7,10;月配填 1,2,3,4,5,6,7,8,9,10,11,12;留空=不定" />
+      <label>除息月份
+        <select id="sym-months-preset">
+          <option value="">— 請選擇 —</option>
+          <option value="1,4,7,10">季配 (1.4.7.10 月)</option>
+          <option value="2,5,8,11">季配 (2.5.8.11 月)</option>
+          <option value="3,6,9,12">季配 (3.6.9.12 月)</option>
+          <option value="1,2,3,4,5,6,7,8,9,10,11,12">月配</option>
+          <option value="6,12">半年配 (6.12 月)</option>
+          <option value="12">年配 (12 月)</option>
+          <option value="">無配息</option>
+          <option value="__custom__">自訂…</option>
+        </select>
+        <input id="sym-months" type="text" placeholder="或自訂月份(逗號分隔,例如 3,9)" />
         <small class="hint">配息行事曆會自動 +1 月顯示為實際入帳月</small>
       </label>
       <div class="row-2">
         <label>現價
           <input id="sym-price" type="number" inputmode="decimal" step="0.01" />
         </label>
-        <label>每張年配息 (估)
-          <input id="sym-yield" type="number" inputmode="decimal" step="1" />
-          <small class="hint">1 張 = 1000 股,例如 0056 約 3,400 / 張</small>
+        <label>每股年配息 (估)
+          <input id="sym-yield" type="number" inputmode="decimal" step="0.01" />
         </label>
       </div>
       <button class="btn primary" id="sym-add-submit">儲存代號</button>
