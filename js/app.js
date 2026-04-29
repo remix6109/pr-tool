@@ -656,7 +656,7 @@
           <span>${s.freq || inferFreq(s.months)}</span>
           <span>除息月: ${months}</span>
           <span>現價: ${price ? price.toFixed(2) : '—'}</span>
-          <span>年配/股: ${ypp ? ypp.toFixed(2) : '—'}</span>
+          <span>年配/張: ${ypp ? fmt.money(ypp * 1000) : '—'}</span>
         </div>
       </div>`;
     }).join('');
@@ -682,7 +682,8 @@
       $('#sym-code').readOnly = true;  // 編輯時 code 不可改
       $('#sym-months').value = target.months || '';
       $('#sym-price').value  = target.current_price || '';
-      $('#sym-yield').value  = target.annual_yield_per_share || '';
+      // 顯示為每張(× 1000)
+      $('#sym-yield').value  = target.annual_yield_per_share ? Math.round(target.annual_yield_per_share * 1000) : '';
       $('#sym-add-submit').textContent = '儲存修改';
       $('#sym-code').scrollIntoView({ behavior: 'smooth', block: 'center' });
     });
@@ -702,8 +703,9 @@
       const code = $('#sym-code').value.trim();
       if (!code) return alert('請輸入代號');
       const months = $('#sym-months').value.trim();
-      const price  = Number($('#sym-price').value) || 0;
-      const ypp    = Number($('#sym-yield').value) || 0;
+      const price    = Number($('#sym-price').value) || 0;
+      const yieldLot = Number($('#sym-yield').value) || 0;   // 使用者輸入「每張」
+      const ypp      = yieldLot / 1000;                       // 轉回後台儲存的「每股」
       const ms = months.split(',').map(x => Number(x.trim())).filter(n => n >= 1 && n <= 12);
       const data = {
         symbol: code, name: '', freq: inferFreq(months), months: ms.join(','),

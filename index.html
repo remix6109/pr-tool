@@ -267,8 +267,9 @@
         <label>現價
           <input id="sym-price" type="number" inputmode="decimal" step="0.01" />
         </label>
-        <label>每股年配息 (估)
-          <input id="sym-yield" type="number" inputmode="decimal" step="0.01" />
+        <label>每張年配息 (估)
+          <input id="sym-yield" type="number" inputmode="decimal" step="1" />
+          <small class="hint">1 張 = 1000 股,例如 0056 約 3,400 / 張</small>
         </label>
       </div>
       <button class="btn primary" id="sym-add-submit">儲存代號</button>
