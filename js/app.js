@@ -308,6 +308,26 @@
     tbody.innerHTML = rows || `<tr><td colspan="5" class="muted">尚無持股資料</td></tr>`;
 
     $('#btn-update-prices').onclick = updatePricesFlow;
+    const refreshBtn = $('#btn-refresh-prices');
+    if (refreshBtn) refreshBtn.onclick = refreshPricesFlow;
+  }
+
+  async function refreshPricesFlow() {
+    const btn = $('#btn-refresh-prices');
+    const orig = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = '⏳ 抓取中…';
+    showToast('正在從 Google 抓現價(約 5 秒)…');
+    try {
+      await API.refreshPrices();
+      await loadAndRender();
+      showToast('✅ 現價已更新');
+    } catch (e) {
+      alert('更新失敗:' + e.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = orig;
+    }
   }
 
   function updatePricesFlow() {

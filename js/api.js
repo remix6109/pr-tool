@@ -37,6 +37,7 @@ window.API = (function() {
     updateSymbol:  (d) => post('update_symbol', d),
     updateRecord:  (sheet, id, patch) => post('update_record', { sheet, id, patch }),
     deleteRecord:  (sheet, id) => post('delete_record', { sheet, id }),
-    setMeta:       (key, value) => post('set_meta', { key, value })
+    setMeta:       (key, value) => post('set_meta', { key, value }),
+    refreshPrices: () => post('refresh_prices', {})
   };
 })();
