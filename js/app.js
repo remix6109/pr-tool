@@ -566,8 +566,9 @@
       if (!out[p]) return;
       const shares = Number(r.shares) || 0;
       const amount = Number(r.amount) || 0;
+      const fee    = Number(r.fee)    || 0;
       out[p].totalShares += shares;
-      out[p].totalCost   += amount;
+      out[p].totalCost   += amount + fee;
       const sym = symMap[r.symbol];
       if (sym) {
         const y = Number(sym.annual_yield_per_share) || 0;
@@ -601,26 +602,29 @@
       const k = r.symbol;
       if (!k) return;
       if (personFilter && r.person !== personFilter) return;
-      if (!agg[k]) agg[k] = { shares: 0, amount: 0 };
+      if (!agg[k]) agg[k] = { shares: 0, amount: 0, fee: 0 };
       agg[k].shares += Number(r.shares) || 0;
       agg[k].amount += Number(r.amount) || 0;
+      agg[k].fee    += Number(r.fee)    || 0;
     });
     const tbody = $('#holdings-table tbody');
     const rows = Object.keys(agg).sort().map(sym => {
       const a = agg[sym];
       const totalUnits = a.shares;
-      const avgPrice = totalUnits > 0 ? a.amount / totalUnits : 0;
+      const totalCost  = a.amount + a.fee;        // 成本基礎(含手續費)
+      const avgPrice   = totalUnits > 0 ? totalCost / totalUnits : 0;
       const cur = Number((symMap[sym] || {}).current_price) || 0;
       const marketValue = cur > 0 ? cur * totalUnits : 0;
-      const gain = cur > 0 ? (cur - avgPrice) * totalUnits : 0;
+      const gain    = cur > 0 ? marketValue - totalCost : 0;
       const gainCls = gain >= 0 ? 'gain' : 'loss';
-      const gainTxt = cur > 0 ? `${fmt.moneySigned(gain)} <small>(${fmt.pct((cur - avgPrice) / avgPrice * 100)})</small>` : '—';
+      const gainPct = (cur > 0 && avgPrice > 0) ? (cur - avgPrice) / avgPrice * 100 : 0;
+      const gainTxt = cur > 0 ? `${fmt.moneySigned(gain)} <small>(${fmt.pct(gainPct)})</small>` : '—';
       return `<tr data-sym="${sym}">
         <td>${sym}</td>
         <td>${fmt.money(a.shares)} 股</td>
         <td>${avgPrice.toFixed(2)}</td>
         <td class="price">${cur > 0 ? cur.toFixed(2) : '—'}</td>
-        <td>${fmt.money(a.amount)}</td>
+        <td>${fmt.money(totalCost)}</td>
         <td>${cur > 0 ? fmt.money(marketValue) : '—'}</td>
         <td class="${gainCls}">${gainTxt}</td>
       </tr>`;
@@ -1002,6 +1006,7 @@
       $('#purchase-amount').value = '';
       $('#purchase-price').value = '';
       $('#purchase-shares').value = '';
+      $('#purchase-fee').value = '';
       $('#purchase-note').value = '';
       setPurchaseUnit('stocks');
       updateSharesHint();
@@ -1076,6 +1081,7 @@
         amount: Number($('#purchase-amount').value) || 0,
         price:  Number($('#purchase-price').value)  || 0,
         shares: sharesAsStocks,
+        fee:    Number($('#purchase-fee').value)    || 0,
         date:   $('#purchase-date').value,
         note:   $('#purchase-note').value
       };
@@ -1324,9 +1330,10 @@
                     : '月存';
       let title = '', sub = '', amount = 0;
       if (entry.sheet === '_purchases') {
+        const fee = Number(r.fee) || 0;
         title = `${r.symbol || '?'} × ${fmt.money(r.shares || 0)} 股`;
-        sub = `${fmt.date(r.date)}${r.note ? ' · ' + r.note : ''}`;
-        amount = -Number(r.amount || 0);
+        sub = `${fmt.date(r.date)}${fee > 0 ? ' · 手續費 ' + fmt.money(fee) : ''}${r.note ? ' · ' + r.note : ''}`;
+        amount = -(Number(r.amount || 0) + fee);
       } else if (entry.sheet === '_bank') {
         title = r.type || '';
         sub = `${fmt.date(r.date)}${r.note ? ' · ' + r.note : ''}`;
@@ -1456,13 +1463,16 @@
     // 列表(再套搜尋)
     let rows = [];
     if (tab === 'purchases') {
-      rows = raw.slice().reverse().map(r => ({
-        id: r.id, sheet: '_purchases', person: r.person,
-        title: `${r.symbol} × ${fmt.money(r.shares)} 股`,
-        sub: `${fmt.date(r.date)} · 均價 ${Number(r.price).toFixed(2)}${r.note ? ' · ' + r.note : ''}`,
-        amount: -Number(r.amount),
-        searchText: `${r.symbol} ${r.note || ''}`.toLowerCase()
-      }));
+      rows = raw.slice().reverse().map(r => {
+        const fee = Number(r.fee) || 0;
+        return {
+          id: r.id, sheet: '_purchases', person: r.person,
+          title: `${r.symbol} × ${fmt.money(r.shares)} 股`,
+          sub: `${fmt.date(r.date)} · 均價 ${Number(r.price).toFixed(2)}${fee > 0 ? ' · 手續費 ' + fmt.money(fee) : ''}${r.note ? ' · ' + r.note : ''}`,
+          amount: -(Number(r.amount) + fee),
+          searchText: `${r.symbol} ${r.note || ''}`.toLowerCase()
+        };
+      });
     } else if (tab === 'bank') {
       rows = raw.slice().reverse().map(r => ({
         id: r.id, sheet: '_bank', person: r.person,
@@ -1575,6 +1585,7 @@
       $('#purchase-amount').value = r.amount;
       $('#purchase-price').value  = r.price;
       $('#purchase-shares').value = r.shares;
+      $('#purchase-fee').value    = r.fee || '';
       $('#purchase-date').value   = String(r.date || '').slice(0, 10);
       $('#purchase-note').value   = r.note || '';
       setPurchaseUnit('stocks');
@@ -1626,7 +1637,7 @@
 
     if (tab === 'purchases') {
       const totalShares = raw.reduce((s, r) => s + (Number(r.shares) || 0), 0);
-      const totalCost   = raw.reduce((s, r) => s + (Number(r.amount) || 0), 0);
+      const totalCost   = raw.reduce((s, r) => s + (Number(r.amount) || 0) + (Number(r.fee) || 0), 0);
       const avgPrice    = totalShares > 0 ? totalCost / totalShares : 0;
       cards = `
         <div class="stat-card"><div class="lbl">筆數</div><div class="val">${raw.length}</div></div>
@@ -1639,7 +1650,7 @@
         const k = r.symbol || '?';
         if (!bySym[k]) bySym[k] = { shares: 0, cost: 0, count: 0 };
         bySym[k].shares += Number(r.shares) || 0;
-        bySym[k].cost   += Number(r.amount) || 0;
+        bySym[k].cost   += (Number(r.amount) || 0) + (Number(r.fee) || 0);
         bySym[k].count  += 1;
       });
       const rows = Object.keys(bySym).sort().map(k => {
@@ -1653,14 +1664,14 @@
         if (!byYear[y]) byYear[y] = { count: 0, shares: 0, cost: 0 };
         byYear[y].count  += 1;
         byYear[y].shares += Number(r.shares) || 0;
-        byYear[y].cost   += Number(r.amount) || 0;
+        byYear[y].cost   += (Number(r.amount) || 0) + (Number(r.fee) || 0);
       });
       const yearRows = Object.keys(byYear).sort().map(y => {
         const a = byYear[y];
         return `<tr><td>${y}</td><td>${a.count}</td><td>${fmt.money(a.shares)}</td><td>${fmt.money(a.cost)}</td></tr>`;
       }).join('');
 
-      // 樞紐: 代號 × 年(顯示本金)
+      // 樞紐: 代號 × 年(顯示本金 + 手續費)
       const pivot = {}; const yearSet = new Set();
       raw.forEach(r => {
         const sym = r.symbol || '?';
@@ -1668,7 +1679,7 @@
         yearSet.add(y);
         if (!pivot[sym]) pivot[sym] = {};
         if (!pivot[sym][y]) pivot[sym][y] = 0;
-        pivot[sym][y] += Number(r.amount) || 0;
+        pivot[sym][y] += (Number(r.amount) || 0) + (Number(r.fee) || 0);
       });
       const yearList = Array.from(yearSet).sort();
       const pivotHead = `<tr><th>代號</th>${yearList.map(y => `<th>${y}</th>`).join('')}<th>合計</th></tr>`;
