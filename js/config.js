@@ -9,8 +9,10 @@ window.CONFIG = {
     theme: 'pr.theme',
     palette: 'pr.palette',
     personLabels: 'pr.personLabels',
-    historyDetailsOpen: 'pr.historyDetailsOpen'
+    historyDetailsOpen: 'pr.historyDetailsOpen',
+    deletedHistory: 'pr.deletedHistory'
   },
+  DELETED_HISTORY_MAX: 50,
   TITLE_DEFAULT: '5 年存入計劃 (合計目標)',
   SESSION_HOURS: 24 * 30,                     // PIN 解鎖後保持登入 30 天
   PEOPLE: ['黃', '蘇'],

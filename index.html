@@ -355,12 +355,26 @@
       <div class="hint muted small">留空則顯示原本的「黃 / 蘇」。資料底層仍以這兩個 key 儲存,改顯示名稱不會影響現有記錄。</div>
     </div>
     <button class="btn ghost wide" id="btn-refresh">🔄 重新載入資料</button>
+    <button class="btn ghost wide" id="btn-deleted-history">📋 最近刪除</button>
     <button class="btn ghost wide" id="btn-change-pin">🔑 變更 PIN</button>
     <button class="btn ghost wide" id="btn-change-api">🔗 變更 API URL</button>
     <button class="btn ghost wide" id="btn-export">📤 匯出 JSON 備份</button>
     <button class="btn danger wide" id="btn-logout">🚪 登出 (清除本機資料)</button>
     <p class="muted small">資料來源:Google 試算表(透過 Apps Script)</p>
     <div class="modal-actions">
+      <button class="btn primary" data-close>關閉</button>
+    </div>
+  </div>
+</div>
+
+<!-- 最近刪除 -->
+<div class="modal hidden" id="modal-deleted">
+  <div class="modal-box wide">
+    <h2>最近刪除</h2>
+    <p class="muted small">最多保留最近 50 筆。點「復原」會把該筆以新 id 重新加入試算表。</p>
+    <div class="deleted-list" id="deleted-list"></div>
+    <div class="modal-actions">
+      <button class="btn ghost" id="btn-clear-deleted">清空全部</button>
       <button class="btn primary" data-close>關閉</button>
     </div>
   </div>

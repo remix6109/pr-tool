@@ -1167,14 +1167,43 @@
 
   // ============== History ==============
 
-  async function undoDelete(sheet, removed) {
-    if (!confirm('確認要復原此筆嗎?')) return;
-    const key = sheet === '_purchases' ? 'purchases' : sheet === '_bank' ? 'bank' : 'savings';
-    // 拿掉舊 id / created_at,讓後端產生新的
-    const cleaned = { ...removed };
+  // ----- 最近刪除清單(localStorage) -----
+  function getDeletedHistory() {
+    try { return JSON.parse(localStorage.getItem(KEY.deletedHistory) || '[]') || []; }
+    catch (_) { return []; }
+  }
+  function saveDeletedHistory(list) {
+    localStorage.setItem(KEY.deletedHistory, JSON.stringify(list));
+  }
+  function pushToDeletedHistory(sheet, removed) {
+    const list = getDeletedHistory();
+    const entry = {
+      sheet,
+      deletedAt: new Date().toISOString(),
+      data: removed
+    };
+    list.unshift(entry);
+    if (list.length > (CONFIG.DELETED_HISTORY_MAX || 50)) list.length = CONFIG.DELETED_HISTORY_MAX || 50;
+    saveDeletedHistory(list);
+    return entry;
+  }
+  function removeFromDeletedHistory(deletedAt) {
+    const list = getDeletedHistory().filter(e => e.deletedAt !== deletedAt);
+    saveDeletedHistory(list);
+  }
+
+  // 復原單筆(toast undo 與「最近刪除」清單共用)
+  // 回傳 true 表示有實際復原(API 成功),false 表示使用者取消或失敗
+  async function restoreEntry(entry) {
+    if (!entry) return false;
+    if (!confirm('確認要復原此筆嗎?')) return false;
+    const cleaned = { ...entry.data };
     delete cleaned.id;
     delete cleaned.created_at;
 
+    const key = entry.sheet === '_purchases' ? 'purchases'
+              : entry.sheet === '_bank'      ? 'bank'
+              : 'savings';
     const arr = STATE.data[key] = STATE.data[key] || [];
     const tmpId = '__tmp_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
     arr.push({ id: tmpId, ...cleaned, created_at: new Date().toISOString() });
@@ -1184,12 +1213,14 @@
 
     try {
       let res;
-      if      (sheet === '_purchases') res = await API.addPurchase(cleaned);
-      else if (sheet === '_bank')      res = await API.addBank(cleaned);
-      else if (sheet === '_savings')   res = await API.addSavings(cleaned);
+      if      (entry.sheet === '_purchases') res = await API.addPurchase(cleaned);
+      else if (entry.sheet === '_bank')      res = await API.addBank(cleaned);
+      else if (entry.sheet === '_savings')   res = await API.addSavings(cleaned);
       const i = arr.findIndex(r => r.id === tmpId);
       if (i >= 0 && res && res.id) arr[i] = { ...arr[i], id: res.id };
       localStorage.setItem(KEY.cache, JSON.stringify(STATE.data));
+      removeFromDeletedHistory(entry.deletedAt);
+      return true;
     } catch (e) {
       const i = arr.findIndex(r => r.id === tmpId);
       if (i >= 0) arr.splice(i, 1);
@@ -1197,7 +1228,69 @@
       renderAll();
       if ($('#page-history').classList.contains('active')) renderHistory();
       alert('復原失敗:' + e.message + '\n建議按「重新載入」同步');
+      return false;
     }
+  }
+
+  function renderDeletedHistory() {
+    const list = $('#deleted-list');
+    if (!list) return;
+    const items = getDeletedHistory();
+    if (items.length === 0) {
+      list.innerHTML = `<div class="empty">沒有最近刪除的紀錄</div>`;
+      return;
+    }
+    list.innerHTML = items.map(entry => {
+      const r = entry.data || {};
+      const tabType = entry.sheet === '_purchases' ? '購買'
+                    : entry.sheet === '_bank'      ? '銀行'
+                    : '月存';
+      let title = '', sub = '', amount = 0;
+      if (entry.sheet === '_purchases') {
+        title = `${r.symbol || '?'} × ${r.shares || 0} 張`;
+        sub = `${fmt.date(r.date)}${r.note ? ' · ' + r.note : ''}`;
+        amount = -Number(r.amount || 0);
+      } else if (entry.sheet === '_bank') {
+        title = r.type || '';
+        sub = `${fmt.date(r.date)}${r.note ? ' · ' + r.note : ''}`;
+        amount = (String(r.type).startsWith('支出') ? -1 : 1) * Number(r.amount || 0);
+      } else if (entry.sheet === '_savings') {
+        title = `${r.year} 年 ${r.month} 月`;
+        sub = r.note || '月存';
+        amount = Number(r.amount || 0);
+      }
+      const cls = amount >= 0 ? 'pos' : 'neg';
+      const personCls = r.person === '黃' ? 'huang' : 'su';
+      const dt = new Date(entry.deletedAt);
+      const deletedTime = isNaN(dt.getTime()) ? '' :
+        dt.toLocaleString('zh-TW', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+      return `<div class="list-item deleted-item">
+        <div class="badge ${personCls}">${escapeHtml(getPersonLabel(r.person)) || '?'}</div>
+        <div class="main">
+          <div class="row1"><span class="tag-type">${tabType}</span> ${escapeHtml(title)}</div>
+          <div class="row2">${escapeHtml(sub)}</div>
+          <div class="deleted-time">已刪除 · ${deletedTime}</div>
+        </div>
+        <div class="right">
+          <div class="amount ${cls}">${fmt.moneySigned(amount)}</div>
+          <button class="btn small primary restore-btn" data-restore="${entry.deletedAt}">復原</button>
+        </div>
+      </div>`;
+    }).join('');
+
+    $$('#deleted-list .restore-btn').forEach(b => b.onclick = async () => {
+      const ts = b.dataset.restore;
+      const entry = getDeletedHistory().find(e => e.deletedAt === ts);
+      const ok = await restoreEntry(entry);
+      if (ok) renderDeletedHistory();
+    });
+  }
+
+  function updateDeletedCountBadge() {
+    const btn = $('#btn-deleted-history');
+    if (!btn) return;
+    const count = getDeletedHistory().length;
+    btn.textContent = count > 0 ? `📋 最近刪除 (${count})` : '📋 最近刪除';
   }
 
   function bindHistory() {
@@ -1363,16 +1456,18 @@
       arr.splice(idx, 1);
       renderAll();
       renderHistory();
-      showActionToast('已刪除', '復原', () => undoDelete(sheet, removed), 6000);
+      const entry = pushToDeletedHistory(sheet, removed);
+      showActionToast('已刪除', '復原', () => restoreEntry(entry), 6000);
       (async () => {
         try {
           await API.deleteRecord(sheet, id);
           localStorage.setItem(KEY.cache, JSON.stringify(STATE.data));
         } catch (e) {
-          // 雲端刪除失敗:還原本地、收掉 undo toast(已沒意義)
+          // 雲端刪除失敗:還原本地、收掉 undo toast、把這筆從刪除清單移除(沒真的刪)
           const t = $('#toast');
           t.classList.add('hidden');
           t.textContent = '';
+          removeFromDeletedHistory(entry.deletedAt);
           arr.splice(idx, 0, removed);
           localStorage.setItem(KEY.cache, JSON.stringify(STATE.data));
           renderAll();
@@ -1671,7 +1766,23 @@
     $('#btn-settings').onclick = () => {
       renderPalettePicker();
       renderPersonLabelEditor();
+      updateDeletedCountBadge();
       openModal('modal-settings');
+    };
+
+    $('#btn-deleted-history').onclick = () => {
+      renderDeletedHistory();
+      closeAllModals();
+      openModal('modal-deleted');
+    };
+
+    $('#btn-clear-deleted').onclick = () => {
+      const count = getDeletedHistory().length;
+      if (count === 0) return;
+      if (!confirm(`確定要清空 ${count} 筆「最近刪除」紀錄嗎?清空後就無法再復原。`)) return;
+      saveDeletedHistory([]);
+      renderDeletedHistory();
+      showToast('已清空');
     };
 
     $('#btn-refresh').onclick = async () => {
