@@ -75,6 +75,36 @@
       .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
 
+  // ============== App title ==============
+
+  function getAppTitle() {
+    return localStorage.getItem(KEY.appTitle) || CONFIG.APP_TITLE_DEFAULT;
+  }
+  function setAppTitle(t) {
+    const v = String(t || '').trim();
+    if (!v || v === CONFIG.APP_TITLE_DEFAULT) {
+      localStorage.removeItem(KEY.appTitle);
+    } else {
+      localStorage.setItem(KEY.appTitle, v);
+    }
+  }
+  function applyAppTitle() {
+    const title = getAppTitle();
+    document.title = title;
+    const el = document.querySelector('.topbar .title');
+    if (el) el.textContent = title;
+  }
+  function renderAppTitleEditor() {
+    const input = $('#app-title-input');
+    if (!input) return;
+    const cur = getAppTitle();
+    input.value = (cur === CONFIG.APP_TITLE_DEFAULT) ? '' : cur;
+    input.oninput = () => {
+      setAppTitle(input.value);
+      applyAppTitle();
+    };
+  }
+
   // ============== Person labels ==============
 
   function readPersonLabels() {
@@ -318,6 +348,7 @@
   async function enterApp() {
     showScreen('screen-app');
     STATE.historyDetailsOpen = localStorage.getItem(KEY.historyDetailsOpen) === '1';
+    applyAppTitle();
     applyPersonLabels();
     bindThemeToggle();
     bindNav();
@@ -2070,6 +2101,7 @@
     $('#btn-settings').onclick = () => {
       renderPalettePicker();
       renderIconPicker();
+      renderAppTitleEditor();
       renderPersonLabelEditor();
       updateDeletedCountBadge();
       openModal('modal-settings');

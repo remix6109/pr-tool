@@ -11,8 +11,10 @@ window.CONFIG = {
     personLabels: 'pr.personLabels',
     historyDetailsOpen: 'pr.historyDetailsOpen',
     deletedHistory: 'pr.deletedHistory',
-    iconChoice: 'pr.iconChoice'
+    iconChoice: 'pr.iconChoice',
+    appTitle: 'pr.appTitle'
   },
+  APP_TITLE_DEFAULT: '購買記錄',
   DELETED_HISTORY_MAX: 50,
   ICON_CHOICES: [
     { id: 'gold',  name: '金塊堆' },

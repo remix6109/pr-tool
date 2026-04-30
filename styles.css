@@ -468,6 +468,14 @@ th { color: var(--muted); font-weight: 600; font-size: .8rem; }
 }
 .icon-swatch.active .swatch-name { color: var(--primary); }
 
+/* === Plain text input inside settings sections === */
+.palette-section input[type="text"] {
+  padding: 8px 12px; font-size: .95rem;
+  border: 1px solid var(--border); border-radius: 8px;
+  background: var(--surface); color: var(--text);
+  width: 100%;
+}
+
 /* === Person label editor === */
 .person-labels {
   display: flex; flex-direction: column; gap: 8px;
