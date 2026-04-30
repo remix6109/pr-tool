@@ -41,6 +41,68 @@
     $('#' + id).classList.remove('hidden');
   }
 
+  function escapeHtml(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  // ============== Person labels ==============
+
+  function readPersonLabels() {
+    try { return JSON.parse(localStorage.getItem(KEY.personLabels) || '{}') || {}; }
+    catch (_) { return {}; }
+  }
+  function getPersonLabel(key) {
+    if (!key) return '';
+    const stored = readPersonLabels();
+    return stored[key] || key;
+  }
+  function setPersonLabel(key, label) {
+    const stored = readPersonLabels();
+    if (!label || label === key) delete stored[key];
+    else stored[key] = label;
+    localStorage.setItem(KEY.personLabels, JSON.stringify(stored));
+  }
+  function applyPersonLabels() {
+    // 更新靜態 HTML 元素(topbar chips、modal 內人員選擇按鈕)
+    CONFIG.PEOPLE.forEach(p => {
+      const label = getPersonLabel(p);
+      $$(`.chip[data-person="${p}"]`).forEach(el => el.textContent = label);
+      $$(`[data-pick][data-val="${p}"]`).forEach(el => el.textContent = label);
+    });
+  }
+  function renderPersonLabelEditor() {
+    const wrap = $('#person-labels');
+    if (!wrap) return;
+    const cls = (i) => i === 0 ? 'huang' : 'su';
+    wrap.innerHTML = CONFIG.PEOPLE.map((p, i) => {
+      const cur = getPersonLabel(p);
+      const val = (cur === p) ? '' : cur;
+      return `<label class="person-label-row">
+        <span class="dot ${cls(i)}"></span>
+        <span class="label-key">${escapeHtml(p)}</span>
+        <span class="label-arrow">→</span>
+        <input type="text" data-person="${escapeHtml(p)}" value="${escapeHtml(val)}" placeholder="${escapeHtml(p)}" maxlength="12" />
+      </label>`;
+    }).join('');
+    let timer = null;
+    $$('#person-labels input').forEach(input => {
+      input.oninput = () => {
+        const key = input.dataset.person;
+        setPersonLabel(key, input.value.trim());
+        applyPersonLabels();
+        clearTimeout(timer);
+        timer = setTimeout(() => {
+          if (STATE.data) {
+            renderDashboard();
+            if ($('#page-history').classList.contains('active')) renderHistory();
+          }
+        }, 200);
+      };
+    });
+  }
+
   // ============== Theme + Palette ==============
 
   function getCurrentPalette() {
@@ -188,6 +250,7 @@
 
   async function enterApp() {
     showScreen('screen-app');
+    applyPersonLabels();
     bindThemeToggle();
     bindNav();
     bindPersonSwitcher();
@@ -277,7 +340,7 @@
     const gainPct = s.totalCost > 0 ? (gain / s.totalCost * 100) : 0;
     elPeople.innerHTML = `
       <div class="person-card ${cls} solo">
-        <div class="name">${p}</div>
+        <div class="name">${escapeHtml(getPersonLabel(p))}</div>
         <div class="stat"><span class="label">總張數</span><span class="val">${fmt.money(s.totalShares)}</span></div>
         <div class="stat"><span class="label">總本金</span><span class="val">${fmt.money(s.totalCost)}</span></div>
         <div class="stat"><span class="label">總市值</span><span class="val">${fmt.money(s.marketValue)} <small class="${gainCls}">(${fmt.moneySigned(gain)} / ${fmt.pct(gainPct)})</small></span></div>
@@ -1194,7 +1257,7 @@
         const cls = r.amount >= 0 ? 'pos' : 'neg';
         const personCls = r.person === '黃' ? 'huang' : 'su';
         return `<div class="list-item">
-          <div class="badge ${personCls}">${r.person || '?'}</div>
+          <div class="badge ${personCls}">${escapeHtml(getPersonLabel(r.person)) || '?'}</div>
           <div class="main">
             <div class="row1">${r.title}</div>
             <div class="row2">${r.sub}</div>
@@ -1302,7 +1365,7 @@
   function renderHistorySummary(tab, raw, person) {
     const wrap = $('#history-summary');
     if (raw.length === 0) { wrap.innerHTML = ''; return; }
-    const personLabel = person ? person : '全部';
+    const personLabel = person ? getPersonLabel(person) : '全部';
     let cards = '', breakdown = '';
 
     if (tab === 'purchases') {
@@ -1501,7 +1564,7 @@
 
     const personCls = person === '黃' ? 'huang' : person === '蘇' ? 'su' : '';
     wrap.innerHTML = `<div class="card history-summary ${personCls}">
-      <div class="card-title">${personLabel} · 統計</div>
+      <div class="card-title">${escapeHtml(personLabel)} · 統計</div>
       <div class="stat-row">${cards}</div>
       ${breakdown}
     </div>`;
@@ -1512,6 +1575,7 @@
   function bindSettings() {
     $('#btn-settings').onclick = () => {
       renderPalettePicker();
+      renderPersonLabelEditor();
       openModal('modal-settings');
     };
 

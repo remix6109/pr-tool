@@ -369,6 +369,29 @@ th { color: var(--muted); font-weight: 600; font-size: .8rem; }
 }
 .palette-swatch.active .swatch-name { color: var(--primary); }
 
+/* === Person label editor === */
+.person-labels {
+  display: flex; flex-direction: column; gap: 8px;
+}
+.person-label-row {
+  display: flex; align-items: center; gap: 10px;
+  font-size: .9rem;
+}
+.person-label-row .dot {
+  width: 14px; height: 14px; border-radius: 999px; flex: 0 0 auto;
+}
+.person-label-row .dot.huang { background: var(--huang); }
+.person-label-row .dot.su    { background: var(--su); }
+.person-label-row .label-key {
+  font-weight: 700; min-width: 1.5em; text-align: center;
+}
+.person-label-row .label-arrow { color: var(--muted); }
+.person-label-row input {
+  flex: 1; padding: 8px 12px; font-size: .95rem;
+  border: 1px solid var(--border); border-radius: 8px;
+  background: var(--surface); color: var(--text);
+}
+
 /* === Loading + empty === */
 .loading { padding: 40px; text-align: center; color: var(--muted); }
 .empty { padding: 32px; text-align: center; color: var(--muted); font-size: .9rem; }
