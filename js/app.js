@@ -2,7 +2,7 @@
 (function() {
   const $  = (sel, root = document) => root.querySelector(sel);
   const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
-  const HISTORY_PAGE_SIZE = 20;
+  const HISTORY_PAGE_SIZE = 15;
 
   const KEY = CONFIG.STORAGE_KEYS;
   let STATE = { data: null, currentTab: 'purchases', defaultPerson: '黃', editing: null, historyDetailsOpen: false, historyLimit: HISTORY_PAGE_SIZE };
