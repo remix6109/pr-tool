@@ -1,51 +1,51 @@
 /* === 基礎 === */
 * { box-sizing: border-box; }
 :root {
-  /* 顏色:預設淺色主題 */
-  --bg: #f4f6fb;
-  --surface: #ffffff;
-  --surface-2: var(--surface-2);        /* 卡片內小背景 (stat-card / new-sym 區塊) */
-  --bar-bg: var(--bar-bg);
-  --text: #1f2937;
-  --muted: #6b7280;
-  --border: #e5e7eb;
-  --primary: #2563eb;
-  --primary-d: #1d4ed8;
-  --green: #16a34a;
-  --purple: #9333ea;
-  --red: #dc2626;
-  --huang: #f59e0b;
-  --su: #a855f7;
-  --slate: #475569;
-  --time: #94a3b8;
-  --gain-bg: #ecfdf5;
-  --loss-bg: #fef2f2;
-  --neutral-bg: #f1f5f9;
-  --shadow: 0 1px 3px rgba(0,0,0,.06), 0 1px 2px rgba(0,0,0,.04);
+  /* 顏色:質感耐看 — 沉靜大地色系(青 + 橄欖 + 米) */
+  --bg: #F2F1F0;
+  --surface: #FFFFFF;
+  --surface-2: #E8EFF0;                 /* 卡片內小背景 (stat-card / new-sym 區塊) */
+  --bar-bg: #C5D7D9;
+  --text: #2A3938;
+  --muted: #6B7676;
+  --border: #C5D7D9;
+  --primary: #3F7373;
+  --primary-d: #2D5959;
+  --green: #768C45;                     /* 收益:橄欖綠 */
+  --purple: #5C8C7D;                    /* 第三色:中沙青(用於月存大按鈕等) */
+  --red: #B85042;                       /* 虧損:陶土紅 — 與 sage / teal 經典搭配 */
+  --huang: #768C45;                     /* 黃 — 暖系大地 */
+  --su: #3F7373;                        /* 蘇 — 冷系水墨 */
+  --slate: #6B7676;
+  --time: #A8BDBF;
+  --gain-bg: rgba(118, 140, 69, .12);
+  --loss-bg: rgba(184, 80, 66, .10);
+  --neutral-bg: rgba(168, 189, 191, .18);
+  --shadow: 0 1px 3px rgba(63, 115, 115, .07), 0 1px 2px rgba(63, 115, 115, .04);
 }
 
-/* 深色主題 */
+/* 深色主題 — 同色家族調亮,維持質感 */
 [data-theme="dark"] {
-  --bg: #0b1120;
-  --surface: #1e293b;
-  --surface-2: #273344;
-  --bar-bg: #334155;
-  --text: #e2e8f0;
-  --muted: #94a3b8;
-  --border: #334155;
-  --primary: #3b82f6;
-  --primary-d: #2563eb;
-  --green: #4ade80;
-  --purple: #c084fc;
-  --red: #f87171;
-  --huang: #fbbf24;
-  --su: #c084fc;
-  --slate: #64748b;
-  --time: #64748b;
-  --gain-bg: rgba(74, 222, 128, .12);
-  --loss-bg: rgba(248, 113, 113, .12);
-  --neutral-bg: #273344;
-  --shadow: 0 1px 4px rgba(0,0,0,.45), 0 1px 2px rgba(0,0,0,.3);
+  --bg: #1A2424;
+  --surface: #2A3636;
+  --surface-2: #354242;
+  --bar-bg: #3D4D4D;
+  --text: #F2F1F0;
+  --muted: #A8BDBF;
+  --border: #3D4D4D;
+  --primary: #A8BDBF;
+  --primary-d: #C5D7D9;
+  --green: #A4B96C;
+  --purple: #8FA68F;
+  --red: #D49278;
+  --huang: #A4B96C;
+  --su: #C5D7D9;
+  --slate: #A8BDBF;
+  --time: #A8BDBF;
+  --gain-bg: rgba(164, 185, 108, .14);
+  --loss-bg: rgba(212, 146, 120, .14);
+  --neutral-bg: rgba(168, 189, 191, .10);
+  --shadow: 0 1px 4px rgba(0, 0, 0, .4), 0 1px 2px rgba(0, 0, 0, .25);
 }
 html, body {
   margin: 0; padding: 0;
@@ -262,7 +262,7 @@ th { color: var(--muted); font-weight: 600; font-size: .8rem; }
 /* === Modal === */
 .modal {
   position: fixed; inset: 0;
-  background: rgba(15, 23, 42, .55);
+  background: rgba(31, 50, 50, .45);
   display: flex; align-items: flex-end; justify-content: center;
   z-index: 100;
   padding: 0;
@@ -338,7 +338,7 @@ th { color: var(--muted); font-weight: 600; font-size: .8rem; }
 .toast {
   position: fixed; left: 50%; bottom: 100px;
   transform: translateX(-50%);
-  background: rgba(31, 41, 55, .95);
+  background: rgba(63, 115, 115, .95);
   color: white;
   padding: 10px 18px;
   border-radius: 999px;

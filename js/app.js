@@ -49,7 +49,7 @@
     const btn = $('#btn-theme');
     if (btn) btn.textContent = t === 'dark' ? '☀️' : '🌙';
     const meta = document.querySelector('meta[name="theme-color"]');
-    if (meta) meta.setAttribute('content', t === 'dark' ? '#0b1120' : '#2563eb');
+    if (meta) meta.setAttribute('content', t === 'dark' ? '#1A2424' : '#3F7373');
   }
 
   function getInitialTheme() {
@@ -259,7 +259,7 @@
       return;
     }
     canvas.parentElement.parentElement.classList.remove('hidden');
-    const colors = ['#f59e0b', '#a855f7', '#3b82f6', '#16a34a', '#dc2626', '#ec4899', '#14b8a6', '#eab308', '#8b5cf6', '#06b6d4', '#84cc16'];
+    const colors = ['#3F7373', '#768C45', '#A8BDBF', '#B85042', '#5C8C7D', '#8FA068', '#B8945E', '#6B5947', '#A88C5A', '#4A6B5C', '#C5D7D9'];
     if (_charts.holdings) _charts.holdings.destroy();
     _charts.holdings = new Chart(canvas, {
       type: 'doughnut',
@@ -280,7 +280,7 @@
   }
 
   function getCssVar(name) {
-    return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || '#1f2937';
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || '#2A3938';
   }
 
   function renderHistoryChart(tab, raw) {
@@ -302,7 +302,7 @@
       if (_charts.history) _charts.history.destroy();
       _charts.history = new Chart(canvas, {
         type: 'bar',
-        data: { labels: months, datasets: [{ label: '本金', data: months.map(m => byMonth[m]), backgroundColor: '#3b82f6' }] },
+        data: { labels: months, datasets: [{ label: '本金', data: months.map(m => byMonth[m]), backgroundColor: '#3F7373' }] },
         options: chartBarOptions()
       });
     } else if (tab === 'bank') {
@@ -326,8 +326,8 @@
         data: {
           labels: months,
           datasets: [
-            { label: '收入', data: months.map(m => byMonth[m].income),  backgroundColor: '#16a34a' },
-            { label: '支出', data: months.map(m => -byMonth[m].expense), backgroundColor: '#dc2626' }
+            { label: '收入', data: months.map(m => byMonth[m].income),  backgroundColor: '#768C45' },
+            { label: '支出', data: months.map(m => -byMonth[m].expense), backgroundColor: '#B85042' }
           ]
         },
         options: chartBarOptions()
@@ -345,7 +345,7 @@
       if (_charts.history) _charts.history.destroy();
       _charts.history = new Chart(canvas, {
         type: 'bar',
-        data: { labels: months, datasets: [{ label: '存入', data: months.map(m => byMonth[m]), backgroundColor: '#a855f7' }] },
+        data: { labels: months, datasets: [{ label: '存入', data: months.map(m => byMonth[m]), backgroundColor: '#5C8C7D' }] },
         options: chartBarOptions()
       });
     }
