@@ -8,7 +8,8 @@ window.CONFIG = {
     cache: 'pr.cache',
     theme: 'pr.theme',
     palette: 'pr.palette',
-    personLabels: 'pr.personLabels'
+    personLabels: 'pr.personLabels',
+    historyDetailsOpen: 'pr.historyDetailsOpen'
   },
   TITLE_DEFAULT: '5 年存入計劃 (合計目標)',
   SESSION_HOURS: 24 * 30,                     // PIN 解鎖後保持登入 30 天

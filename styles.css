@@ -229,6 +229,25 @@ th { color: var(--muted); font-weight: 600; font-size: .8rem; }
 .stat-card .val.gain { color: var(--green); }
 .stat-card .val.loss { color: var(--red); }
 .breakdown-title { font-size: .85rem; color: var(--muted); font-weight: 600; margin: 4px 0 8px; }
+.breakdown-toggle { margin-top: 4px; }
+.breakdown-toggle > summary {
+  cursor: pointer; user-select: none;
+  font-size: .85rem; font-weight: 600; color: var(--muted);
+  padding: 10px 4px;
+  border-top: 1px solid var(--border);
+  list-style: none;
+  display: flex; align-items: center; gap: 8px;
+}
+.breakdown-toggle > summary::-webkit-details-marker { display: none; }
+.breakdown-toggle > summary::before {
+  content: '▶'; font-size: .65em;
+  display: inline-block; transition: transform .15s;
+  color: var(--muted);
+}
+.breakdown-toggle[open] > summary::before { transform: rotate(90deg); }
+.breakdown-toggle > summary:hover { color: var(--text); }
+.breakdown-toggle[open] > summary { color: var(--text); }
+.breakdown-body { padding-top: 4px; }
 
 /* === List items === */
 .list { display: flex; flex-direction: column; gap: 8px; }

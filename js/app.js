@@ -4,7 +4,7 @@
   const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 
   const KEY = CONFIG.STORAGE_KEYS;
-  let STATE = { data: null, currentTab: 'purchases', defaultPerson: '黃', editing: null };
+  let STATE = { data: null, currentTab: 'purchases', defaultPerson: '黃', editing: null, historyDetailsOpen: false };
 
   // ============== Utils ==============
 
@@ -250,6 +250,7 @@
 
   async function enterApp() {
     showScreen('screen-app');
+    STATE.historyDetailsOpen = localStorage.getItem(KEY.historyDetailsOpen) === '1';
     applyPersonLabels();
     bindThemeToggle();
     bindNav();
@@ -1563,11 +1564,24 @@
     }
 
     const personCls = person === '黃' ? 'huang' : person === '蘇' ? 'su' : '';
+    const detailsBlock = breakdown
+      ? `<details class="breakdown-toggle" ${STATE.historyDetailsOpen ? 'open' : ''}>
+          <summary>明細統計</summary>
+          <div class="breakdown-body">${breakdown}</div>
+        </details>`
+      : '';
     wrap.innerHTML = `<div class="card history-summary ${personCls}">
       <div class="card-title">${escapeHtml(personLabel)} · 統計</div>
       <div class="stat-row">${cards}</div>
-      ${breakdown}
+      ${detailsBlock}
     </div>`;
+    const det = wrap.querySelector('.breakdown-toggle');
+    if (det) {
+      det.addEventListener('toggle', () => {
+        STATE.historyDetailsOpen = det.open;
+        localStorage.setItem(KEY.historyDetailsOpen, det.open ? '1' : '0');
+      });
+    }
   }
 
   // ============== Settings ==============
