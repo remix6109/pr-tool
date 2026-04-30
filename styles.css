@@ -568,6 +568,12 @@ th { color: var(--muted); font-weight: 600; font-size: .8rem; }
 .bar .seg.time { background: var(--time); }
 
 .prog-block { margin-bottom: 14px; }
+.prog-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 16px 0;
+  opacity: .6;
+}
 .prog-head {
   display: flex; justify-content: space-between; align-items: baseline;
   margin-bottom: 6px; font-size: .9rem;

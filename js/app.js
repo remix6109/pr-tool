@@ -837,14 +837,32 @@
     const diff = total - expectedSaved;
     const diffPct = moneyPct - timePct;
 
-    let cmpHtml = '';
-    if (timePct > 0 && timePct < 100) {
-      const cls = diff >= 0 ? 'gain' : 'loss';
-      const label = diff >= 0 ? '✅ 領先進度' : '⚠️ 落後進度';
-      cmpHtml = `<div class="cmp-line ${cls}">
-        ${label} ${fmt.moneySigned(diff)} (${fmt.pct(diffPct)})
+    // 領先/落後比較(對存入進度)
+    const buildCmp = (curPct, expectedDiff) => {
+      if (timePct <= 0 || timePct >= 100) return '';
+      const cls = expectedDiff >= 0 ? 'gain' : 'loss';
+      const label = expectedDiff >= 0 ? '✅ 領先進度' : '⚠️ 落後進度';
+      return `<div class="cmp-line ${cls}">
+        ${label} ${fmt.moneySigned(expectedDiff)} (${fmt.pct(curPct - timePct)})
       </div>`;
-    }
+    };
+    const savingsCmpHtml = buildCmp(moneyPct, total - expectedSaved);
+    const expectedMv = marketGoal * (timePct / 100);
+    const marketCmpHtml = buildCmp(mvPct, totalMv - expectedMv);
+
+    const timeBarHtml = `
+      <div class="prog-block">
+        <div class="prog-head"><span class="prog-label">時間進度</span>
+          <span class="num">已過 ${monthsElapsed} / ${monthsTotal} 個月 (${timePct.toFixed(1)}%)</span>
+        </div>
+        <div class="bar">
+          <div class="seg time" style="width:${Math.min(100, timePct)}%"></div>
+        </div>
+        <div class="legend muted">
+          ${startStr} → ${endStr}
+        </div>
+      </div>
+    `;
 
     $('#savings-progress').innerHTML = `
       <div class="savings-shared">
@@ -861,6 +879,10 @@
             <span class="dot su"></span>蘇 ${fmt.money(suCur)}
           </div>
         </div>
+        ${timeBarHtml}
+        ${savingsCmpHtml}
+
+        <div class="prog-divider"></div>
 
         <div class="prog-block">
           <div class="prog-head"><span class="prog-label">總市值進度</span>
@@ -875,20 +897,8 @@
             <span class="dot su"></span>蘇 ${fmt.money(suMv)}
           </div>
         </div>
-
-        <div class="prog-block">
-          <div class="prog-head"><span class="prog-label">時間進度</span>
-            <span class="num">已過 ${monthsElapsed} / ${monthsTotal} 個月 (${timePct.toFixed(1)}%)</span>
-          </div>
-          <div class="bar">
-            <div class="seg time" style="width:${Math.min(100, timePct)}%"></div>
-          </div>
-          <div class="legend muted">
-            ${startStr} → ${endStr}
-          </div>
-        </div>
-
-        ${cmpHtml}
+        ${timeBarHtml}
+        ${marketCmpHtml}
       </div>
     `;
     const btn = $('#btn-edit-goal');
