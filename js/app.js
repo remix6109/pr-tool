@@ -790,6 +790,7 @@
     const titleEl = $('#savings-title');
     if (titleEl) titleEl.textContent = meta.savings_title || CONFIG.TITLE_DEFAULT;
     const goal = Number(meta.savings_goal) || CONFIG.GOAL_DEFAULT;
+    const marketGoal = Number(meta.market_goal) || CONFIG.MARKET_GOAL_DEFAULT;
     const startStr = meta.plan_start || CONFIG.PLAN_START_DEFAULT;
     const endStr   = meta.plan_end   || CONFIG.PLAN_END_DEFAULT;
     const huangCur = stats['黃'].savings;
@@ -798,6 +799,14 @@
     const moneyPct = goal > 0 ? Math.min(100, (total / goal) * 100) : 0;
     const huangPct = goal > 0 ? (huangCur / goal) * 100 : 0;
     const suPct    = goal > 0 ? (suCur    / goal) * 100 : 0;
+
+    // 總市值進度
+    const huangMv = stats['黃'].marketValue;
+    const suMv    = stats['蘇'].marketValue;
+    const totalMv = huangMv + suMv;
+    const mvPct      = marketGoal > 0 ? Math.min(100, (totalMv / marketGoal) * 100) : 0;
+    const mvHuangPct = marketGoal > 0 ? (huangMv / marketGoal) * 100 : 0;
+    const mvSuPct    = marketGoal > 0 ? (suMv    / marketGoal) * 100 : 0;
 
     // 時間進度
     const start = new Date(startStr + 'T00:00:00');
@@ -839,6 +848,20 @@
         </div>
 
         <div class="prog-block">
+          <div class="prog-head"><span class="prog-label">總市值進度</span>
+            <span class="num">${fmt.money(totalMv)} / ${fmt.money(marketGoal)} (${mvPct.toFixed(1)}%)</span>
+          </div>
+          <div class="bar stacked">
+            <div class="seg huang" style="width:${mvHuangPct}%" title="黃 ${fmt.money(huangMv)}"></div>
+            <div class="seg su"    style="width:${mvSuPct}%"    title="蘇 ${fmt.money(suMv)}"></div>
+          </div>
+          <div class="legend">
+            <span class="dot huang"></span>黃 ${fmt.money(huangMv)}
+            <span class="dot su"></span>蘇 ${fmt.money(suMv)}
+          </div>
+        </div>
+
+        <div class="prog-block">
           <div class="prog-head"><span class="prog-label">時間進度</span>
             <span class="num">已過 ${monthsElapsed} / ${monthsTotal} 個月 (${timePct.toFixed(1)}%)</span>
           </div>
@@ -861,6 +884,7 @@
     const meta = STATE.data.meta || {};
     $('#goal-title').value  = meta.savings_title || CONFIG.TITLE_DEFAULT;
     $('#goal-amount').value = Number(meta.savings_goal) || CONFIG.GOAL_DEFAULT;
+    $('#goal-market').value = Number(meta.market_goal) || CONFIG.MARKET_GOAL_DEFAULT;
     $('#goal-start').value  = meta.plan_start || CONFIG.PLAN_START_DEFAULT;
     $('#goal-end').value    = meta.plan_end   || CONFIG.PLAN_END_DEFAULT;
     openModal('modal-goal');
@@ -989,20 +1013,24 @@
   function bindGoalForm() {
     $('#goal-submit').onclick = async () => {
       const title = $('#goal-title').value.trim() || CONFIG.TITLE_DEFAULT;
-      const n = Number($('#goal-amount').value);
+      const n  = Number($('#goal-amount').value);
+      const mn = Number($('#goal-market').value);
       const start = $('#goal-start').value;
       const end   = $('#goal-end').value;
-      if (isNaN(n) || n <= 0) { alert('請輸入正確的目標金額'); return; }
+      if (isNaN(n)  || n  <= 0) { alert('請輸入正確的存入目標金額'); return; }
+      if (isNaN(mn) || mn <= 0) { alert('請輸入正確的總市值目標'); return; }
       if (!start || !end) { alert('請選擇起始與結束日'); return; }
       if (start >= end)   { alert('起始日必須早於結束日'); return; }
       try {
         await API.setMeta('savings_title', title);
         await API.setMeta('savings_goal', n);
+        await API.setMeta('market_goal',  mn);
         await API.setMeta('plan_start',  start);
         await API.setMeta('plan_end',    end);
         if (!STATE.data.meta) STATE.data.meta = {};
         STATE.data.meta.savings_title = title;
         STATE.data.meta.savings_goal  = n;
+        STATE.data.meta.market_goal   = mn;
         STATE.data.meta.plan_start    = start;
         STATE.data.meta.plan_end      = end;
         localStorage.setItem(KEY.cache, JSON.stringify(STATE.data));

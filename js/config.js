@@ -30,6 +30,7 @@ window.CONFIG = {
   PEOPLE: ['黃', '蘇'],
   YEARS: [2025, 2026, 2027, 2028, 2029],
   GOAL_DEFAULT: 3600000,                      // 預設 360 萬合計目標(可在前端編輯,存到 _meta)
+  MARKET_GOAL_DEFAULT: 5000000,               // 預設 500 萬總市值目標(可在前端編輯,存到 _meta)
   PLAN_START_DEFAULT: '2025-01-01',           // 5 年計劃起點 (可改)
   PLAN_END_DEFAULT: '2029-12-31'              // 5 年計劃終點 (可改)
 };
