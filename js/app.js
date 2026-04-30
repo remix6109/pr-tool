@@ -1168,7 +1168,7 @@
     const isSell = STATE.purchaseType === 'sell';
     const titleEl = $('#modal-purchase-title');
     const amtLabel = $('#purchase-amount-label');
-    if (titleEl)  titleEl.textContent  = isSell ? '新增 ETF 賣出' : '新增 ETF 購買';
+    if (titleEl)  titleEl.textContent  = isSell ? '新增 ETF 賣出' : '新增 ETF 買進';
     if (amtLabel) amtLabel.textContent = isSell ? '實收金額 (NT$)' : '花費金額 (NT$)';
   }
   function bindPurchaseTypeToggle() {
@@ -1217,7 +1217,7 @@
       closeAllModals();
       renderAll();
       if ($('#page-history').classList.contains('active')) renderHistory();
-      showToast(editing ? '已更新' : (isSell ? '已新增賣出' : '已新增購買'));
+      showToast(editing ? '已更新' : (isSell ? '已新增賣出' : '已新增買進'));
       (async () => {
         try {
           if (editing) {
@@ -1809,7 +1809,7 @@
       setPurchaseType(isSell ? 'sell' : 'buy');
       setPurchaseUnit('stocks');
       updateSharesHint();
-      $('#modal-purchase-title').textContent = isSell ? '編輯 ETF 賣出' : '編輯 ETF 購買';
+      $('#modal-purchase-title').textContent = isSell ? '編輯 ETF 賣出' : '編輯 ETF 買進';
       $('#purchase-submit').textContent = '儲存修改';
       openModal('modal-purchase');
     } else if (sheet === '_bank') {
@@ -1858,7 +1858,7 @@
   }
 
   function resetModalLabels() {
-    $('#modal-purchase-title').textContent = '新增 ETF 購買';
+    $('#modal-purchase-title').textContent = '新增 ETF 買進';
     $('#purchase-submit').textContent   = '儲存';
     $('#modal-bank h2').textContent     = '新增銀行收支';
     $('#bank-submit').textContent       = '儲存';
