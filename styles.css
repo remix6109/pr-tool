@@ -205,11 +205,13 @@ th { color: var(--muted); font-weight: 600; font-size: .8rem; }
 .seg-btn.active { background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
 
 /* === Filters === */
-.filters { display: flex; gap: 8px; margin-bottom: 12px; }
+.filters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
 .filters select, .filters input {
-  flex: 1; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface);
-  font-size: .95rem;
+  padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface);
+  font-size: .95rem; color: var(--text);
 }
+.filters select { flex: 1 1 120px; min-width: 100px; }
+.filters input  { flex: 1 1 100%; }
 
 /* === History summary === */
 .history-summary { border-top: 4px solid var(--border); }

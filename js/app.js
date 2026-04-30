@@ -1081,6 +1081,7 @@
         $$('#page-history .seg-btn').forEach(x => x.classList.toggle('active', x === b));
         STATE.currentTab = b.dataset.tab;
         $('#filter-category').value = '';  // 切 tab 時重置分類
+        $('#filter-year').value     = '';  // 與年度
         renderHistory();
       };
     });
@@ -1090,6 +1091,21 @@
       searchTimer = setTimeout(renderHistory, 200);
     };
     $('#filter-category').onchange = renderHistory;
+    $('#filter-year').onchange     = renderHistory;
+  }
+
+  function populateYearFilter(tab, raw) {
+    const sel = $('#filter-year');
+    if (tab !== 'purchases') {
+      sel.classList.add('hidden');
+      sel.value = '';
+      return;
+    }
+    sel.classList.remove('hidden');
+    const cur = sel.value;
+    const years = [...new Set(raw.map(r => String(r.date || '').slice(0, 4)).filter(Boolean))].sort();
+    sel.innerHTML = `<option value="">全部年份</option>` + years.map(y => `<option value="${y}">${y}</option>`).join('');
+    if (years.includes(cur)) sel.value = cur;
   }
 
   function populateCategoryFilter(tab, raw) {
@@ -1123,7 +1139,9 @@
     else if (tab === 'savings')raw = (STATE.data.savings || []).filter(r => !personFilter || r.person === personFilter);
 
     populateCategoryFilter(tab, raw);
+    populateYearFilter(tab, raw);
     const category = $('#filter-category').value;
+    const year     = $('#filter-year').value;
 
     // 統計與圖表用「未套用分類篩選」的資料(不變)
     renderHistorySummary(tab, raw, personFilter);
@@ -1134,6 +1152,9 @@
       if (tab === 'purchases')   raw = raw.filter(r => r.symbol === category);
       else if (tab === 'bank')   raw = raw.filter(r => r.type === category);
       else if (tab === 'savings')raw = raw.filter(r => String(r.year) === category);
+    }
+    if (year && tab === 'purchases') {
+      raw = raw.filter(r => String(r.date || '').slice(0, 4) === year);
     }
 
     // 列表(再套搜尋)
