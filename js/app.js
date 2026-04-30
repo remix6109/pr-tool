@@ -1074,12 +1074,7 @@
 
     // 在 modal 內的人員 segmented control
     $$('[data-pick]').forEach(b => {
-      b.onclick = () => {
-        const target = b.dataset.pick;
-        const val = b.dataset.val;
-        $('#' + target).value = val;
-        $$(`[data-pick="${target}"]`).forEach(x => x.classList.toggle('active', x === b));
-      };
+      b.onclick = () => pickPerson(b.dataset.pick, b.dataset.val);
     });
   }
 
@@ -1128,6 +1123,10 @@
   function pickPerson(targetId, val) {
     $('#' + targetId).value = val;
     $$(`[data-pick="${targetId}"]`).forEach(x => x.classList.toggle('active', x.dataset.val === val));
+    // 賣出模式時切換購買人 → 代號下拉只顯示該人員持有的
+    if (targetId === 'purchase-person' && STATE.purchaseType === 'sell') {
+      populatePurchaseSymbolDropdown();
+    }
   }
 
   function populateSymbolDropdown() {
@@ -1184,12 +1183,45 @@
     const amtLabel = $('#purchase-amount-label');
     if (titleEl)  titleEl.textContent  = isSell ? '新增 ETF 賣出' : '新增 ETF 買進';
     if (amtLabel) amtLabel.textContent = isSell ? '實收金額 (NT$)' : '花費金額 (NT$)';
+    populatePurchaseSymbolDropdown();
   }
   function bindPurchaseTypeToggle() {
     STATE.purchaseType = STATE.purchaseType || 'buy';
     $$('[data-ptype]').forEach(b => {
       b.onclick = () => setPurchaseType(b.dataset.ptype);
     });
+  }
+
+  // 計算指定人員目前淨持有 > 0 的代號
+  function getHeldSymbols(person) {
+    const agg = {};
+    (STATE.data && STATE.data.purchases || []).forEach(r => {
+      if (person && r.person !== person) return;
+      if (!r.symbol) return;
+      agg[r.symbol] = (agg[r.symbol] || 0) + (Number(r.shares) || 0);
+    });
+    return Object.keys(agg).filter(s => agg[s] > 0).sort();
+  }
+
+  // 依照當前的買 / 賣切換填入購買 modal 的代號下拉
+  function populatePurchaseSymbolDropdown() {
+    const sel = $('#purchase-symbol');
+    if (!sel) return;
+    const isSell = STATE.purchaseType === 'sell';
+    let symbols;
+    if (isSell) {
+      const person = $('#purchase-person').value || STATE.defaultPerson;
+      symbols = getHeldSymbols(person);
+    } else {
+      symbols = (STATE.data && STATE.data.symbols || []).map(s => s.symbol).filter(Boolean);
+    }
+    const cur = sel.value;
+    if (symbols.length === 0 && isSell) {
+      sel.innerHTML = `<option value="" disabled selected>(目前沒有持股可賣出)</option>`;
+    } else {
+      sel.innerHTML = symbols.map(s => `<option value="${s}">${s}</option>`).join('');
+      if (symbols.includes(cur)) sel.value = cur;
+    }
   }
 
   function bindForms() {
@@ -1806,23 +1838,23 @@
       const r = find(STATE.data.purchases);
       if (!r) return;
       STATE.editing = { sheet, id, type: 'purchase' };
-      pickPerson('purchase-person', r.person);
-      // 確保下拉選單有此代號
-      const sel = $('#purchase-symbol');
-      if (![...sel.options].some(o => o.value === r.symbol)) {
-        sel.add(new Option(r.symbol, r.symbol));
-      }
-      sel.value = r.symbol;
       const isSell = (Number(r.shares) < 0) || (Number(r.amount) < 0);
+      pickPerson('purchase-person', r.person);
       $('#purchase-amount').value = Math.abs(Number(r.amount) || 0);
       $('#purchase-price').value  = r.price;
       $('#purchase-shares').value = Math.abs(Number(r.shares) || 0);
       $('#purchase-fee').value    = r.fee || '';
       $('#purchase-date').value   = String(r.date || '').slice(0, 10);
       $('#purchase-note').value   = r.note || '';
-      setPurchaseType(isSell ? 'sell' : 'buy');
+      setPurchaseType(isSell ? 'sell' : 'buy');  // 先設定型別,會 populate 代號下拉
       setPurchaseUnit('stocks');
       updateSharesHint();
+      // 編輯既有紀錄時,即使該代號目前不在下拉中(例如已賣光),仍要能選回原值
+      const sel = $('#purchase-symbol');
+      if (r.symbol && ![...sel.options].some(o => o.value === r.symbol)) {
+        sel.add(new Option(r.symbol, r.symbol));
+      }
+      sel.value = r.symbol;
       $('#modal-purchase-title').textContent = isSell ? '編輯 ETF 賣出' : '編輯 ETF 買進';
       $('#purchase-submit').textContent = '儲存修改';
       openModal('modal-purchase');
