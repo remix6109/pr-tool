@@ -611,6 +611,7 @@
       const totalUnits = a.shares;
       const avgPrice = totalUnits > 0 ? a.amount / totalUnits : 0;
       const cur = Number((symMap[sym] || {}).current_price) || 0;
+      const marketValue = cur > 0 ? cur * totalUnits : 0;
       const gain = cur > 0 ? (cur - avgPrice) * totalUnits : 0;
       const gainCls = gain >= 0 ? 'gain' : 'loss';
       const gainTxt = cur > 0 ? `${fmt.moneySigned(gain)} <small>(${fmt.pct((cur - avgPrice) / avgPrice * 100)})</small>` : '—';
@@ -619,6 +620,8 @@
         <td>${fmt.money(a.shares)} 股</td>
         <td>${avgPrice.toFixed(2)}</td>
         <td class="price">${cur > 0 ? cur.toFixed(2) : '—'}</td>
+        <td>${fmt.money(a.amount)}</td>
+        <td>${cur > 0 ? fmt.money(marketValue) : '—'}</td>
         <td class="${gainCls}">${gainTxt}</td>
       </tr>`;
     }).join('');
