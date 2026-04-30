@@ -114,6 +114,9 @@
       <button class="big-btn purple" data-open="add-savings">
         <span class="emoji">💰</span><span>新增月存記錄</span>
       </button>
+      <button class="big-btn dividend" data-open="add-dividend">
+        <span class="emoji">💵</span><span>新增股利發放</span>
+      </button>
       <button class="big-btn slate" data-open="symbols">
         <span class="emoji">📋</span><span>代號管理</span>
       </button>
@@ -123,6 +126,7 @@
     <div class="page" id="page-history">
       <div class="seg">
         <button class="seg-btn active" data-tab="purchases">購買</button>
+        <button class="seg-btn" data-tab="dividends">股利</button>
         <button class="seg-btn" data-tab="bank">銀行</button>
         <button class="seg-btn" data-tab="savings">月存</button>
       </div>
@@ -230,6 +234,44 @@
     <div class="modal-actions">
       <button class="btn ghost" data-close>取消</button>
       <button class="btn primary" id="bank-submit">儲存</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: 新增股利發放 -->
+<div class="modal hidden" id="modal-dividend">
+  <div class="modal-box">
+    <h2>新增股利發放</h2>
+    <label>人
+      <div class="seg">
+        <button class="seg-btn" data-pick="dividend-person" data-val="黃">黃</button>
+        <button class="seg-btn" data-pick="dividend-person" data-val="蘇">蘇</button>
+      </div>
+      <input type="hidden" id="dividend-person" />
+    </label>
+    <label>代號
+      <select id="dividend-symbol"></select>
+    </label>
+    <label>實領金額 (NT$)
+      <input id="dividend-total" type="number" inputmode="decimal" step="any" />
+    </label>
+    <div class="row-2">
+      <label>每股配息 (選填)
+        <input id="dividend-per-share" type="number" inputmode="decimal" step="any" placeholder="例:0.5" />
+      </label>
+      <label>領息股數 (選填)
+        <input id="dividend-shares" type="number" inputmode="numeric" placeholder="例:5000" />
+      </label>
+    </div>
+    <label>入帳日期
+      <input id="dividend-date" type="date" />
+    </label>
+    <label>備註 (選填)
+      <input id="dividend-note" type="text" placeholder="例:Q2 股利" />
+    </label>
+    <div class="modal-actions">
+      <button class="btn ghost" data-close>取消</button>
+      <button class="btn primary" id="dividend-submit">儲存</button>
     </div>
   </div>
 </div>

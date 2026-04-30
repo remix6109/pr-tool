@@ -492,6 +492,24 @@
         data: { labels: months, datasets: [{ label: '本金', data: months.map(m => byMonth[m]), backgroundColor: getCssVar('--primary') }] },
         options: chartBarOptions()
       });
+    } else if (tab === 'dividends') {
+      // 月份股利金額
+      const byMonth = {};
+      raw.forEach(r => {
+        const m = String(r.date || '').slice(0, 7);
+        if (!m) return;
+        byMonth[m] = (byMonth[m] || 0) + (Number(r.total) || 0);
+      });
+      const months = Object.keys(byMonth).sort();
+      if (months.length === 0) { wrap.classList.add('hidden'); return; }
+      wrap.classList.remove('hidden');
+      $('#history-chart-title').textContent = '每月股利金額';
+      if (_charts.history) _charts.history.destroy();
+      _charts.history = new Chart(canvas, {
+        type: 'bar',
+        data: { labels: months, datasets: [{ label: '股利', data: months.map(m => byMonth[m]), backgroundColor: getCssVar('--green') }] },
+        options: chartBarOptions()
+      });
     } else if (tab === 'bank') {
       // 月份收入 vs 支出
       const byMonth = {};
@@ -1015,6 +1033,13 @@
       pickPerson('bank-person', STATE.defaultPerson);
       $('#bank-amount').value = '';
       $('#bank-note').value = '';
+    } else if (which === 'add-dividend') {
+      $('#dividend-date').value = today;
+      pickPerson('dividend-person', STATE.defaultPerson);
+      $('#dividend-total').value = '';
+      $('#dividend-per-share').value = '';
+      $('#dividend-shares').value = '';
+      $('#dividend-note').value = '';
     } else if (which === 'add-savings') {
       pickPerson('savings-person', STATE.defaultPerson);
       const now = new Date();
@@ -1031,9 +1056,12 @@
   }
 
   function populateSymbolDropdown() {
-    const sel = $('#purchase-symbol');
     const symbols = (STATE.data.symbols || []).map(s => s.symbol).filter(Boolean);
-    sel.innerHTML = symbols.map(s => `<option value="${s}">${s}</option>`).join('');
+    const html = symbols.map(s => `<option value="${s}">${s}</option>`).join('');
+    ['#purchase-symbol', '#dividend-symbol'].forEach(sel => {
+      const el = $(sel);
+      if (el) el.innerHTML = html;
+    });
   }
 
   function populateYearMonthDropdown() {
@@ -1246,6 +1274,66 @@
         }
       })();
     };
+
+    $('#dividend-submit').onclick = () => {
+      const data = {
+        person: $('#dividend-person').value,
+        symbol: $('#dividend-symbol').value,
+        total:  Number($('#dividend-total').value) || 0,
+        amount_per_share: Number($('#dividend-per-share').value) || 0,
+        shares: Number($('#dividend-shares').value) || 0,
+        date:   $('#dividend-date').value,
+        note:   $('#dividend-note').value
+      };
+      if (!data.person) return alert('請選人');
+      if (!data.symbol) return alert('請選代號');
+      if (!data.total)  return alert('請輸入實領金額');
+      if (!data.date)   return alert('請選日期');
+      const editing = STATE.editing && STATE.editing.type === 'dividend' ? { ...STATE.editing } : null;
+      const arr = STATE.data.dividends = STATE.data.dividends || [];
+      let prevSnapshot = null, tmpId = null;
+      if (editing) {
+        const idx = arr.findIndex(r => String(r.id) === String(editing.id));
+        if (idx >= 0) {
+          prevSnapshot = arr[idx];
+          arr[idx] = { ...prevSnapshot, ...data };
+        }
+      } else {
+        tmpId = '__tmp_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+        arr.push({
+          id: tmpId, ...data,
+          created_at: new Date().toISOString(), created_by: STATE.defaultPerson
+        });
+      }
+      closeAllModals();
+      renderAll();
+      if ($('#page-history').classList.contains('active')) renderHistory();
+      showToast(editing ? '已更新' : '已新增股利');
+      (async () => {
+        try {
+          if (editing) {
+            await API.updateRecord(editing.sheet, editing.id, data);
+          } else {
+            const res = await API.addDividend({ ...data, created_by: STATE.defaultPerson });
+            const i = arr.findIndex(r => r.id === tmpId);
+            if (i >= 0) arr[i] = { ...arr[i], id: res.id };
+          }
+          localStorage.setItem(KEY.cache, JSON.stringify(STATE.data));
+        } catch (e) {
+          if (editing) {
+            const i = arr.findIndex(r => String(r.id) === String(editing.id));
+            if (i >= 0 && prevSnapshot) arr[i] = prevSnapshot;
+          } else {
+            const i = arr.findIndex(r => r.id === tmpId);
+            if (i >= 0) arr.splice(i, 1);
+          }
+          localStorage.setItem(KEY.cache, JSON.stringify(STATE.data));
+          renderAll();
+          if ($('#page-history').classList.contains('active')) renderHistory();
+          alert('儲存失敗:' + e.message + '\n已還原此筆變更,建議按「重新載入」同步');
+        }
+      })();
+    };
   }
 
   // ============== History ==============
@@ -1286,6 +1374,7 @@
 
     const key = entry.sheet === '_purchases' ? 'purchases'
               : entry.sheet === '_bank'      ? 'bank'
+              : entry.sheet === '_dividends' ? 'dividends'
               : 'savings';
     const arr = STATE.data[key] = STATE.data[key] || [];
     const tmpId = '__tmp_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
@@ -1299,6 +1388,7 @@
       if      (entry.sheet === '_purchases') res = await API.addPurchase(cleaned);
       else if (entry.sheet === '_bank')      res = await API.addBank(cleaned);
       else if (entry.sheet === '_savings')   res = await API.addSavings(cleaned);
+      else if (entry.sheet === '_dividends') res = await API.addDividend(cleaned);
       const i = arr.findIndex(r => r.id === tmpId);
       if (i >= 0 && res && res.id) arr[i] = { ...arr[i], id: res.id };
       localStorage.setItem(KEY.cache, JSON.stringify(STATE.data));
@@ -1327,6 +1417,7 @@
       const r = entry.data || {};
       const tabType = entry.sheet === '_purchases' ? '購買'
                     : entry.sheet === '_bank'      ? '銀行'
+                    : entry.sheet === '_dividends' ? '股利'
                     : '月存';
       let title = '', sub = '', amount = 0;
       if (entry.sheet === '_purchases') {
@@ -1338,6 +1429,14 @@
         title = r.type || '';
         sub = `${fmt.date(r.date)}${r.note ? ' · ' + r.note : ''}`;
         amount = (String(r.type).startsWith('支出') ? -1 : 1) * Number(r.amount || 0);
+      } else if (entry.sheet === '_dividends') {
+        title = `${r.symbol || '?'} 股利`;
+        const aps = Number(r.amount_per_share) || 0;
+        const subParts = [fmt.date(r.date)];
+        if (aps > 0) subParts.push(`每股 ${aps.toFixed(2)}`);
+        if (r.note) subParts.push(r.note);
+        sub = subParts.join(' · ');
+        amount = Number(r.total || 0);
       } else if (entry.sheet === '_savings') {
         title = `${r.year} 年 ${r.month} 月`;
         sub = r.note || '月存';
@@ -1399,7 +1498,7 @@
 
   function populateYearFilter(tab, raw) {
     const sel = $('#filter-year');
-    if (tab !== 'purchases' && tab !== 'bank') {
+    if (tab !== 'purchases' && tab !== 'bank' && tab !== 'dividends') {
       sel.classList.add('hidden');
       sel.value = '';
       return;
@@ -1416,6 +1515,9 @@
     const cur = sel.value;
     let label = '全部', options = [];
     if (tab === 'purchases') {
+      label = '全部代號';
+      options = [...new Set(raw.map(r => r.symbol).filter(Boolean))].sort();
+    } else if (tab === 'dividends') {
       label = '全部代號';
       options = [...new Set(raw.map(r => r.symbol).filter(Boolean))].sort();
     } else if (tab === 'bank') {
@@ -1438,6 +1540,7 @@
     // 先抓「已套用人員篩選」的原始資料(供統計、圖表、分類下拉用)
     let raw = [];
     if (tab === 'purchases')   raw = (STATE.data.purchases || []).filter(r => !personFilter || r.person === personFilter);
+    else if (tab === 'dividends') raw = (STATE.data.dividends || []).filter(r => !personFilter || r.person === personFilter);
     else if (tab === 'bank')   raw = (STATE.data.bank || []).filter(r => !personFilter || r.person === personFilter);
     else if (tab === 'savings')raw = (STATE.data.savings || []).filter(r => !personFilter || r.person === personFilter);
 
@@ -1453,10 +1556,11 @@
     // 列表才套用分類篩選
     if (category) {
       if (tab === 'purchases')   raw = raw.filter(r => r.symbol === category);
+      else if (tab === 'dividends') raw = raw.filter(r => r.symbol === category);
       else if (tab === 'bank')   raw = raw.filter(r => r.type === category);
       else if (tab === 'savings')raw = raw.filter(r => String(r.year) === category);
     }
-    if (year && (tab === 'purchases' || tab === 'bank')) {
+    if (year && (tab === 'purchases' || tab === 'bank' || tab === 'dividends')) {
       raw = raw.filter(r => String(r.date || '').slice(0, 4) === year);
     }
 
@@ -1470,6 +1574,20 @@
           title: `${r.symbol} × ${fmt.money(r.shares)} 股`,
           sub: `${fmt.date(r.date)} · 均價 ${Number(r.price).toFixed(2)}${fee > 0 ? ' · 手續費 ' + fmt.money(fee) : ''}${r.note ? ' · ' + r.note : ''}`,
           amount: -(Number(r.amount) + fee),
+          searchText: `${r.symbol} ${r.note || ''}`.toLowerCase()
+        };
+      });
+    } else if (tab === 'dividends') {
+      rows = raw.slice().reverse().map(r => {
+        const aps = Number(r.amount_per_share) || 0;
+        const subParts = [fmt.date(r.date)];
+        if (aps > 0) subParts.push(`每股 ${aps.toFixed(2)}`);
+        if (r.note) subParts.push(r.note);
+        return {
+          id: r.id, sheet: '_dividends', person: r.person,
+          title: `${r.symbol} 股利`,
+          sub: subParts.join(' · '),
+          amount: Number(r.total),
           searchText: `${r.symbol} ${r.note || ''}`.toLowerCase()
         };
       });
@@ -1535,7 +1653,10 @@
       if (!confirm('確定要刪除這筆?')) return;
       const sheet = b.dataset.delSheet;
       const id = b.dataset.delId;
-      const key = sheet === '_purchases' ? 'purchases' : sheet === '_bank' ? 'bank' : 'savings';
+      const key = sheet === '_purchases' ? 'purchases'
+                : sheet === '_bank'      ? 'bank'
+                : sheet === '_dividends' ? 'dividends'
+                : 'savings';
       const arr = STATE.data[key] = STATE.data[key] || [];
       const idx = arr.findIndex(r => String(r.id) === String(id));
       if (idx < 0) return;
@@ -1605,6 +1726,24 @@
       $('#modal-bank h2').textContent = '編輯銀行收支';
       $('#bank-submit').textContent = '儲存修改';
       openModal('modal-bank');
+    } else if (sheet === '_dividends') {
+      const r = find(STATE.data.dividends);
+      if (!r) return;
+      STATE.editing = { sheet, id, type: 'dividend' };
+      pickPerson('dividend-person', r.person);
+      const sel = $('#dividend-symbol');
+      if (![...sel.options].some(o => o.value === r.symbol)) {
+        sel.add(new Option(r.symbol, r.symbol));
+      }
+      sel.value = r.symbol;
+      $('#dividend-total').value     = r.total;
+      $('#dividend-per-share').value = r.amount_per_share || '';
+      $('#dividend-shares').value    = r.shares || '';
+      $('#dividend-date').value      = String(r.date || '').slice(0, 10);
+      $('#dividend-note').value      = r.note || '';
+      $('#modal-dividend h2').textContent = '編輯股利發放';
+      $('#dividend-submit').textContent = '儲存修改';
+      openModal('modal-dividend');
     } else if (sheet === '_savings') {
       const r = find(STATE.data.savings);
       if (!r) return;
@@ -1627,6 +1766,8 @@
     $('#bank-submit').textContent       = '儲存';
     $('#modal-savings h2').textContent  = '新增月存記錄';
     $('#savings-submit').textContent    = '儲存';
+    $('#modal-dividend h2').textContent = '新增股利發放';
+    $('#dividend-submit').textContent   = '儲存';
   }
 
   function renderHistorySummary(tab, raw, person) {
@@ -1705,6 +1846,79 @@
           <tbody>${yearRows}</tbody>
         </table></div>
         <div class="breakdown-title">各代號 × 年度 本金</div>
+        <div class="table-wrap"><table>
+          <thead>${pivotHead}</thead>
+          <tbody>${pivotRows}</tbody>
+        </table></div>`;
+    }
+
+    else if (tab === 'dividends') {
+      const total = raw.reduce((s, r) => s + (Number(r.total) || 0), 0);
+      const avg   = raw.length > 0 ? total / raw.length : 0;
+      const max   = raw.reduce((m, r) => Math.max(m, Number(r.total) || 0), 0);
+      cards = `
+        <div class="stat-card"><div class="lbl">筆數</div><div class="val">${raw.length}</div></div>
+        <div class="stat-card"><div class="lbl">累計</div><div class="val gain">+${fmt.money(total)}</div></div>
+        <div class="stat-card"><div class="lbl">平均</div><div class="val">${fmt.money(avg)}</div></div>
+        <div class="stat-card"><div class="lbl">最高單筆</div><div class="val">${fmt.money(max)}</div></div>
+      `;
+      // 分代號統計
+      const bySym = {};
+      raw.forEach(r => {
+        const k = r.symbol || '?';
+        if (!bySym[k]) bySym[k] = { count: 0, total: 0 };
+        bySym[k].count += 1;
+        bySym[k].total += Number(r.total) || 0;
+      });
+      const symRows = Object.keys(bySym).sort().map(k => {
+        const a = bySym[k];
+        return `<tr><td>${k}</td><td>${a.count}</td><td class="gain">+${fmt.money(a.total)}</td></tr>`;
+      }).join('');
+      // 分年度統計
+      const byYear = {};
+      raw.forEach(r => {
+        const y = String(r.date || '').slice(0, 4) || '?';
+        if (!byYear[y]) byYear[y] = { count: 0, total: 0 };
+        byYear[y].count += 1;
+        byYear[y].total += Number(r.total) || 0;
+      });
+      const yearRows = Object.keys(byYear).sort().map(y => {
+        const a = byYear[y];
+        return `<tr><td>${y}</td><td>${a.count}</td><td class="gain">+${fmt.money(a.total)}</td></tr>`;
+      }).join('');
+      // 樞紐: 代號 × 年
+      const pivot = {}; const yearSet = new Set();
+      raw.forEach(r => {
+        const sym = r.symbol || '?';
+        const y = String(r.date || '').slice(0, 4) || '?';
+        yearSet.add(y);
+        if (!pivot[sym]) pivot[sym] = {};
+        if (!pivot[sym][y]) pivot[sym][y] = 0;
+        pivot[sym][y] += Number(r.total) || 0;
+      });
+      const yearList = Array.from(yearSet).sort();
+      const pivotHead = `<tr><th>代號</th>${yearList.map(y => `<th>${y}</th>`).join('')}<th>合計</th></tr>`;
+      const pivotRows = Object.keys(pivot).sort().map(sym => {
+        let symTot = 0;
+        const cells = yearList.map(y => {
+          const v = pivot[sym][y];
+          if (!v) return '<td>—</td>';
+          symTot += v;
+          return `<td class="gain">+${fmt.money(v)}</td>`;
+        }).join('');
+        return `<tr><td>${sym}</td>${cells}<td class="gain"><b>+${fmt.money(symTot)}</b></td></tr>`;
+      }).join('');
+      breakdown = `<div class="breakdown-title">分代號統計</div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>代號</th><th>筆數</th><th>金額</th></tr></thead>
+          <tbody>${symRows}</tbody>
+        </table></div>
+        <div class="breakdown-title">分年度統計</div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>年</th><th>筆數</th><th>金額</th></tr></thead>
+          <tbody>${yearRows}</tbody>
+        </table></div>
+        <div class="breakdown-title">各代號 × 年度</div>
         <div class="table-wrap"><table>
           <thead>${pivotHead}</thead>
           <tbody>${pivotRows}</tbody>

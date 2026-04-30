@@ -34,6 +34,7 @@ window.API = (function() {
     addPurchase:   (d) => post('add_purchase', d),
     addBank:       (d) => post('add_bank', d),
     addSavings:    (d) => post('add_savings', d),
+    addDividend:   (d) => post('add_dividend', d),
     updateSymbol:  (d) => post('update_symbol', d),
     updateRecord:  (sheet, id, patch) => post('update_record', { sheet, id, patch }),
     deleteRecord:  (sheet, id) => post('delete_record', { sheet, id }),

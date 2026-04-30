@@ -106,7 +106,8 @@ html, body {
 .big-btn.primary { background: var(--primary); color: white; }
 .big-btn.green   { background: var(--green); color: white; }
 .big-btn.purple  { background: var(--purple); color: white; }
-.big-btn.slate   { background: var(--slate); color: white; }
+.big-btn.slate    { background: var(--slate); color: white; }
+.big-btn.dividend { background: var(--huang); color: white; }
 
 /* === Top bar === */
 .topbar {
