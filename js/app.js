@@ -507,21 +507,35 @@
     const canvas = $('#chart-history');
     if (!canvas || !window.Chart) return;
     if (tab === 'purchases') {
-      // 月份累計購買金額
+      // 月份買進 vs 賣出
       const byMonth = {};
       raw.forEach(r => {
         const m = String(r.date || '').slice(0, 7);
         if (!m) return;
-        byMonth[m] = (byMonth[m] || 0) + (Number(r.amount) || 0);
+        if (!byMonth[m]) byMonth[m] = { buy: 0, sell: 0 };
+        const amt = Number(r.amount) || 0;
+        if (amt < 0) byMonth[m].sell += -amt;
+        else         byMonth[m].buy  += amt;
       });
       const months = Object.keys(byMonth).sort();
       if (months.length === 0) { wrap.classList.add('hidden'); return; }
       wrap.classList.remove('hidden');
-      $('#history-chart-title').textContent = '每月購買金額';
+      const hasSell = months.some(m => byMonth[m].sell > 0);
+      $('#history-chart-title').textContent = hasSell ? '每月買進 vs 賣出' : '每月買進金額';
       if (_charts.history) _charts.history.destroy();
       _charts.history = new Chart(canvas, {
         type: 'bar',
-        data: { labels: months, datasets: [{ label: '本金', data: months.map(m => byMonth[m]), backgroundColor: getCssVar('--primary') }] },
+        data: {
+          labels: months,
+          datasets: hasSell
+            ? [
+                { label: '買進', data: months.map(m => byMonth[m].buy),   backgroundColor: getCssVar('--primary') },
+                { label: '賣出', data: months.map(m => -byMonth[m].sell), backgroundColor: getCssVar('--green') }
+              ]
+            : [
+                { label: '買進', data: months.map(m => byMonth[m].buy), backgroundColor: getCssVar('--primary') }
+              ]
+        },
         options: chartBarOptions()
       });
     } else if (tab === 'dividends') {
