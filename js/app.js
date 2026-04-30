@@ -800,14 +800,26 @@
     $('#payout-calendar').innerHTML = html;
   }
 
+  // 計算時間進度(輸入起訖日字串)
+  function computeTimeProgress(startStr, endStr) {
+    const start = new Date(startStr + 'T00:00:00');
+    const end   = new Date(endStr   + 'T23:59:59');
+    const now   = new Date();
+    const totalMs   = end - start;
+    const elapsedMs = Math.max(0, Math.min(totalMs, now - start));
+    const pct = totalMs > 0 ? (elapsedMs / totalMs) * 100 : 0;
+    const monthsTotal = (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth()) + 1;
+    const monthsElapsed = Math.max(0, Math.min(monthsTotal,
+      (now.getFullYear() - start.getFullYear()) * 12 + (now.getMonth() - start.getMonth()) + 1));
+    return { pct, monthsTotal, monthsElapsed, startStr, endStr };
+  }
+
   function renderSavingsProgress(stats) {
     const meta = STATE.data.meta || {};
     const titleEl = $('#savings-title');
     if (titleEl) titleEl.textContent = meta.savings_title || CONFIG.TITLE_DEFAULT;
     const goal = Number(meta.savings_goal) || CONFIG.GOAL_DEFAULT;
     const marketGoal = Number(meta.market_goal) || CONFIG.MARKET_GOAL_DEFAULT;
-    const startStr = meta.plan_start || CONFIG.PLAN_START_DEFAULT;
-    const endStr   = meta.plan_end   || CONFIG.PLAN_END_DEFAULT;
     const huangCur = stats['黃'].savings;
     const suCur = stats['蘇'].savings;
     const total = huangCur + suCur;
@@ -823,43 +835,42 @@
     const mvHuangPct = marketGoal > 0 ? (huangMv / marketGoal) * 100 : 0;
     const mvSuPct    = marketGoal > 0 ? (suMv    / marketGoal) * 100 : 0;
 
-    // 時間進度
-    const start = new Date(startStr + 'T00:00:00');
-    const end   = new Date(endStr   + 'T23:59:59');
-    const now   = new Date();
-    const totalMs   = end - start;
-    const elapsedMs = Math.max(0, Math.min(totalMs, now - start));
-    const timePct   = totalMs > 0 ? (elapsedMs / totalMs) * 100 : 0;
-    const monthsTotal = (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth()) + 1;
-    const monthsElapsed = Math.max(0, Math.min(monthsTotal,
-      (now.getFullYear() - start.getFullYear()) * 12 + (now.getMonth() - start.getMonth()) + 1));
-    const expectedSaved = goal * (timePct / 100);
+    // 兩套獨立的時間進度
+    const savTime = computeTimeProgress(
+      meta.plan_start || CONFIG.PLAN_START_DEFAULT,
+      meta.plan_end   || CONFIG.PLAN_END_DEFAULT
+    );
+    const mvTime = computeTimeProgress(
+      meta.market_plan_start || meta.plan_start || CONFIG.PLAN_START_DEFAULT,
+      meta.market_plan_end   || meta.plan_end   || CONFIG.PLAN_END_DEFAULT
+    );
+    const expectedSaved = goal * (savTime.pct / 100);
     const diff = total - expectedSaved;
-    const diffPct = moneyPct - timePct;
+    const diffPct = moneyPct - savTime.pct;
 
-    // 領先/落後比較(對存入進度)
-    const buildCmp = (curPct, expectedDiff) => {
-      if (timePct <= 0 || timePct >= 100) return '';
+    // 領先/落後比較,使用對應的時間進度
+    const buildCmp = (curPct, expectedDiff, time) => {
+      if (time.pct <= 0 || time.pct >= 100) return '';
       const cls = expectedDiff >= 0 ? 'gain' : 'loss';
       const label = expectedDiff >= 0 ? '✅ 領先進度' : '⚠️ 落後進度';
       return `<div class="cmp-line ${cls}">
-        ${label} ${fmt.moneySigned(expectedDiff)} (${fmt.pct(curPct - timePct)})
+        ${label} ${fmt.moneySigned(expectedDiff)} (${fmt.pct(curPct - time.pct)})
       </div>`;
     };
-    const savingsCmpHtml = buildCmp(moneyPct, total - expectedSaved);
-    const expectedMv = marketGoal * (timePct / 100);
-    const marketCmpHtml = buildCmp(mvPct, totalMv - expectedMv);
+    const savingsCmpHtml = buildCmp(moneyPct, total - expectedSaved, savTime);
+    const expectedMv = marketGoal * (mvTime.pct / 100);
+    const marketCmpHtml  = buildCmp(mvPct, totalMv - expectedMv, mvTime);
 
-    const timeBarHtml = `
+    const buildTimeBar = (time) => `
       <div class="prog-block">
         <div class="prog-head"><span class="prog-label">時間進度</span>
-          <span class="num">已過 ${monthsElapsed} / ${monthsTotal} 個月 (${timePct.toFixed(1)}%)</span>
+          <span class="num">已過 ${time.monthsElapsed} / ${time.monthsTotal} 個月 (${time.pct.toFixed(1)}%)</span>
         </div>
         <div class="bar">
-          <div class="seg time" style="width:${Math.min(100, timePct)}%"></div>
+          <div class="seg time" style="width:${Math.min(100, time.pct)}%"></div>
         </div>
         <div class="legend muted">
-          ${startStr} → ${endStr}
+          ${time.startStr} → ${time.endStr}
         </div>
       </div>
     `;
@@ -879,7 +890,7 @@
             <span class="dot su"></span>蘇 ${fmt.money(suCur)}
           </div>
         </div>
-        ${timeBarHtml}
+        ${buildTimeBar(savTime)}
         ${savingsCmpHtml}
 
         <div class="prog-divider"></div>
@@ -897,7 +908,7 @@
             <span class="dot su"></span>蘇 ${fmt.money(suMv)}
           </div>
         </div>
-        ${timeBarHtml}
+        ${buildTimeBar(mvTime)}
         ${marketCmpHtml}
       </div>
     `;
@@ -907,11 +918,14 @@
 
   function editGoalFlow() {
     const meta = STATE.data.meta || {};
-    $('#goal-title').value  = meta.savings_title || CONFIG.TITLE_DEFAULT;
-    $('#goal-amount').value = Number(meta.savings_goal) || CONFIG.GOAL_DEFAULT;
-    $('#goal-market').value = Number(meta.market_goal) || CONFIG.MARKET_GOAL_DEFAULT;
-    $('#goal-start').value  = meta.plan_start || CONFIG.PLAN_START_DEFAULT;
-    $('#goal-end').value    = meta.plan_end   || CONFIG.PLAN_END_DEFAULT;
+    $('#goal-title').value         = meta.savings_title || CONFIG.TITLE_DEFAULT;
+    $('#goal-amount').value        = Number(meta.savings_goal) || CONFIG.GOAL_DEFAULT;
+    $('#goal-market').value        = Number(meta.market_goal)  || CONFIG.MARKET_GOAL_DEFAULT;
+    $('#goal-start').value         = meta.plan_start || CONFIG.PLAN_START_DEFAULT;
+    $('#goal-end').value           = meta.plan_end   || CONFIG.PLAN_END_DEFAULT;
+    // 總市值計劃預設沿用存入計劃的起訖日(可獨立調整)
+    $('#goal-market-start').value  = meta.market_plan_start || meta.plan_start || CONFIG.PLAN_START_DEFAULT;
+    $('#goal-market-end').value    = meta.market_plan_end   || meta.plan_end   || CONFIG.PLAN_END_DEFAULT;
     openModal('modal-goal');
     setTimeout(() => $('#goal-title').focus(), 100);
   }
@@ -1040,24 +1054,32 @@
       const title = $('#goal-title').value.trim() || CONFIG.TITLE_DEFAULT;
       const n  = Number($('#goal-amount').value);
       const mn = Number($('#goal-market').value);
-      const start = $('#goal-start').value;
-      const end   = $('#goal-end').value;
+      const start  = $('#goal-start').value;
+      const end    = $('#goal-end').value;
+      const mStart = $('#goal-market-start').value;
+      const mEnd   = $('#goal-market-end').value;
       if (isNaN(n)  || n  <= 0) { alert('請輸入正確的存入目標金額'); return; }
       if (isNaN(mn) || mn <= 0) { alert('請輸入正確的總市值目標'); return; }
-      if (!start || !end) { alert('請選擇起始與結束日'); return; }
-      if (start >= end)   { alert('起始日必須早於結束日'); return; }
+      if (!start  || !end)  { alert('請選擇存入計劃的起始與結束日'); return; }
+      if (!mStart || !mEnd) { alert('請選擇總市值計劃的起始與結束日'); return; }
+      if (start  >= end)    { alert('存入計劃起始日必須早於結束日'); return; }
+      if (mStart >= mEnd)   { alert('總市值計劃起始日必須早於結束日'); return; }
       try {
-        await API.setMeta('savings_title', title);
-        await API.setMeta('savings_goal', n);
-        await API.setMeta('market_goal',  mn);
-        await API.setMeta('plan_start',  start);
-        await API.setMeta('plan_end',    end);
+        await API.setMeta('savings_title',     title);
+        await API.setMeta('savings_goal',      n);
+        await API.setMeta('market_goal',       mn);
+        await API.setMeta('plan_start',        start);
+        await API.setMeta('plan_end',          end);
+        await API.setMeta('market_plan_start', mStart);
+        await API.setMeta('market_plan_end',   mEnd);
         if (!STATE.data.meta) STATE.data.meta = {};
-        STATE.data.meta.savings_title = title;
-        STATE.data.meta.savings_goal  = n;
-        STATE.data.meta.market_goal   = mn;
-        STATE.data.meta.plan_start    = start;
-        STATE.data.meta.plan_end      = end;
+        STATE.data.meta.savings_title     = title;
+        STATE.data.meta.savings_goal      = n;
+        STATE.data.meta.market_goal       = mn;
+        STATE.data.meta.plan_start        = start;
+        STATE.data.meta.plan_end          = end;
+        STATE.data.meta.market_plan_start = mStart;
+        STATE.data.meta.market_plan_end   = mEnd;
         localStorage.setItem(KEY.cache, JSON.stringify(STATE.data));
         closeAllModals();
         renderDashboard();

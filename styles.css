@@ -568,6 +568,18 @@ th { color: var(--muted); font-weight: 600; font-size: .8rem; }
 .bar .seg.time { background: var(--time); }
 
 .prog-block { margin-bottom: 14px; }
+/* === 改目標 modal 內的分區塊 === */
+.goal-section {
+  display: flex; flex-direction: column; gap: 12px;
+  padding: 14px;
+  background: var(--surface-2);
+  border-radius: 12px;
+  border-left: 3px solid var(--primary);
+}
+.goal-section-title {
+  font-weight: 700; font-size: .95rem; color: var(--text);
+}
+
 .prog-divider {
   height: 1px;
   background: var(--border);

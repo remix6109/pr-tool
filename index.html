@@ -384,25 +384,45 @@
 <!-- Modal: 改存入目標 -->
 <div class="modal hidden" id="modal-goal">
   <div class="modal-box">
-    <h2>改存入計劃</h2>
+    <h2>改計劃目標</h2>
     <label>標題
       <input id="goal-title" type="text" placeholder="5 年存入計劃 (合計目標)" />
     </label>
-    <label>存入目標金額 (NT$)
-      <input id="goal-amount" type="number" inputmode="numeric" />
-      <small class="hint">黃和蘇兩人共同的存入目標</small>
-    </label>
-    <label>總市值目標 (NT$)
-      <input id="goal-market" type="number" inputmode="numeric" />
-      <small class="hint">投入後預期累積到的總市值,進度條會即時顯示達成度</small>
-    </label>
-    <div class="row-2">
-      <label>計劃起始日
-        <input id="goal-start" type="date" />
+
+    <div class="goal-section">
+      <div class="goal-section-title">📊 存入計劃</div>
+      <label>目標金額 (NT$)
+        <input id="goal-amount" type="number" inputmode="numeric" />
+        <small class="hint">黃和蘇兩人共同的存入目標</small>
       </label>
-      <label>計劃結束日
-        <input id="goal-end" type="date" />
+      <div class="row-2">
+        <label>起始日
+          <input id="goal-start" type="date" />
+        </label>
+        <label>結束日
+          <input id="goal-end" type="date" />
+        </label>
+      </div>
+    </div>
+
+    <div class="goal-section">
+      <div class="goal-section-title">💰 總市值計劃</div>
+      <label>目標金額 (NT$)
+        <input id="goal-market" type="number" inputmode="numeric" />
+        <small class="hint">預期累積到的總市值</small>
       </label>
+      <div class="row-2">
+        <label>起始日
+          <input id="goal-market-start" type="date" />
+        </label>
+        <label>結束日
+          <input id="goal-market-end" type="date" />
+        </label>
+      </div>
+    </div>
+
+    <!-- 隱藏舊欄位區塊維持 modal-actions 結構 -->
+    <div class="row-2 hidden">
     </div>
     <div class="modal-actions">
       <button class="btn ghost" data-close>取消</button>
