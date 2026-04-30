@@ -1,0 +1,19 @@
+{
+  "name": "購買記錄",
+  "short_name": "購買記錄",
+  "description": "ETF 購買 / 銀行收支 / 月存記錄",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#3F7373",
+  "background_color": "#F2F1F0",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
