@@ -1096,7 +1096,7 @@
 
   function populateYearFilter(tab, raw) {
     const sel = $('#filter-year');
-    if (tab !== 'purchases') {
+    if (tab !== 'purchases' && tab !== 'bank') {
       sel.classList.add('hidden');
       sel.value = '';
       return;
@@ -1153,7 +1153,7 @@
       else if (tab === 'bank')   raw = raw.filter(r => r.type === category);
       else if (tab === 'savings')raw = raw.filter(r => String(r.year) === category);
     }
-    if (year && tab === 'purchases') {
+    if (year && (tab === 'purchases' || tab === 'bank')) {
       raw = raw.filter(r => String(r.date || '').slice(0, 4) === year);
     }
 
