@@ -285,6 +285,7 @@
     bindPersonSwitcher();
     bindAddButtons();
     bindForms();
+    bindPurchaseUnitToggle();
     bindUpdatePriceForm();
     bindGoalForm();
     bindSymbolManagement();
@@ -370,7 +371,7 @@
     elPeople.innerHTML = `
       <div class="person-card ${cls} solo">
         <div class="name">${escapeHtml(getPersonLabel(p))}</div>
-        <div class="stat"><span class="label">總張數</span><span class="val">${fmt.money(s.totalShares)}</span></div>
+        <div class="stat"><span class="label">總股數</span><span class="val">${fmt.money(s.totalShares)}</span></div>
         <div class="stat"><span class="label">總本金</span><span class="val">${fmt.money(s.totalCost)}</span></div>
         <div class="stat"><span class="label">總市值</span><span class="val">${fmt.money(s.marketValue)} <small class="${gainCls}">(${fmt.moneySigned(gain)} / ${fmt.pct(gainPct)})</small></span></div>
         <div class="stat"><span class="label">預估年配息</span><span class="val">${fmt.money(s.annualYield)}</span></div>
@@ -397,7 +398,7 @@
       if (personFilter && r.person !== personFilter) return;
       if (!r.symbol) return;
       if (!agg[r.symbol]) agg[r.symbol] = 0;
-      agg[r.symbol] += (Number(r.shares) || 0) * 1000 * (Number((symMap[r.symbol] || {}).current_price) || 0);
+      agg[r.symbol] += (Number(r.shares) || 0) * (Number((symMap[r.symbol] || {}).current_price) || 0);
     });
     const labels = Object.keys(agg).sort();
     const data   = labels.map(k => Math.round(agg[k]));
@@ -532,8 +533,8 @@
       if (sym) {
         const y = Number(sym.annual_yield_per_share) || 0;
         const cur = Number(sym.current_price) || 0;
-        out[p].annualYield  += y   * shares * 1000;  // 1 張 = 1000 股
-        out[p].marketValue  += cur * shares * 1000;
+        out[p].annualYield  += y   * shares;  // shares 即「股數」
+        out[p].marketValue  += cur * shares;
       }
     });
 
@@ -568,7 +569,7 @@
     const tbody = $('#holdings-table tbody');
     const rows = Object.keys(agg).sort().map(sym => {
       const a = agg[sym];
-      const totalUnits = a.shares * 1000;
+      const totalUnits = a.shares;
       const avgPrice = totalUnits > 0 ? a.amount / totalUnits : 0;
       const cur = Number((symMap[sym] || {}).current_price) || 0;
       const gain = cur > 0 ? (cur - avgPrice) * totalUnits : 0;
@@ -576,7 +577,7 @@
       const gainTxt = cur > 0 ? `${fmt.moneySigned(gain)} <small>(${fmt.pct((cur - avgPrice) / avgPrice * 100)})</small>` : '—';
       return `<tr data-sym="${sym}">
         <td>${sym}</td>
-        <td>${fmt.money(a.shares)}</td>
+        <td>${fmt.money(a.shares)} 股</td>
         <td>${avgPrice.toFixed(2)}</td>
         <td class="price">${cur > 0 ? cur.toFixed(2) : '—'}</td>
         <td class="${gainCls}">${gainTxt}</td>
@@ -674,7 +675,7 @@
           const shares = shareMap[sym] || 0;
           if (shares <= 0) return;
           const yPerShare = Number(s.annual_yield_per_share) || 0;
-          const perPay = ms.length > 0 ? (yPerShare / ms.length) * shares * 1000 : 0;
+          const perPay = ms.length > 0 ? (yPerShare / ms.length) * shares : 0;
           sum += perPay;
           list.push(sym);
         }
@@ -960,6 +961,8 @@
       $('#purchase-price').value = '';
       $('#purchase-shares').value = '';
       $('#purchase-note').value = '';
+      setPurchaseUnit('stocks');
+      updateSharesHint();
     } else if (which === 'add-bank') {
       $('#bank-date').value = today;
       pickPerson('bank-person', STATE.defaultPerson);
@@ -991,20 +994,52 @@
     $('#savings-month').innerHTML = Array.from({length: 12}, (_, i) => i + 1).map(m => `<option value="${m}">${m}</option>`).join('');
   }
 
+  // 購買 modal 的「股 / 張」單位切換
+  function setPurchaseUnit(unit) {
+    STATE.purchaseUnit = (unit === 'lots') ? 'lots' : 'stocks';
+    $$('#purchase-unit-seg .seg-btn').forEach(b =>
+      b.classList.toggle('active', b.dataset.unit === STATE.purchaseUnit));
+  }
+  function updateSharesHint() {
+    const input = $('#purchase-shares');
+    const hint  = $('#purchase-shares-hint');
+    if (!input || !hint) return;
+    const v = Number(input.value);
+    if (!v || isNaN(v)) { hint.textContent = ''; return; }
+    if (STATE.purchaseUnit === 'lots') {
+      hint.textContent = `= ${(v * 1000).toLocaleString('en-US')} 股`;
+    } else {
+      hint.textContent = `≈ ${(v / 1000).toLocaleString('en-US', { maximumFractionDigits: 3 })} 張`;
+    }
+  }
+  function bindPurchaseUnitToggle() {
+    STATE.purchaseUnit = STATE.purchaseUnit || 'stocks';
+    $$('#purchase-unit-seg .seg-btn').forEach(b => {
+      b.onclick = () => {
+        setPurchaseUnit(b.dataset.unit);
+        updateSharesHint();
+      };
+    });
+    const input = $('#purchase-shares');
+    if (input) input.addEventListener('input', updateSharesHint);
+  }
+
   function bindForms() {
     $('#purchase-submit').onclick = () => {
+      const sharesRaw = Number($('#purchase-shares').value) || 0;
+      const sharesAsStocks = (STATE.purchaseUnit === 'lots') ? sharesRaw * 1000 : sharesRaw;
       const data = {
         person: $('#purchase-person').value,
         symbol: $('#purchase-symbol').value,
         amount: Number($('#purchase-amount').value) || 0,
         price:  Number($('#purchase-price').value)  || 0,
-        shares: Number($('#purchase-shares').value) || 0,
+        shares: sharesAsStocks,
         date:   $('#purchase-date').value,
         note:   $('#purchase-note').value
       };
       if (!data.person) return alert('請選購買人');
       if (!data.symbol) return alert('請選代號');
-      if (!data.amount || !data.shares) return alert('請輸入金額和張數');
+      if (!data.amount || !data.shares) return alert('請輸入金額和股數');
       const editing = STATE.editing && STATE.editing.type === 'purchase' ? { ...STATE.editing } : null;
       const arr = STATE.data.purchases = STATE.data.purchases || [];
       let optimisticIdx = -1, prevSnapshot = null, tmpId = null;
@@ -1247,7 +1282,7 @@
                     : '月存';
       let title = '', sub = '', amount = 0;
       if (entry.sheet === '_purchases') {
-        title = `${r.symbol || '?'} × ${r.shares || 0} 張`;
+        title = `${r.symbol || '?'} × ${fmt.money(r.shares || 0)} 股`;
         sub = `${fmt.date(r.date)}${r.note ? ' · ' + r.note : ''}`;
         amount = -Number(r.amount || 0);
       } else if (entry.sheet === '_bank') {
@@ -1381,7 +1416,7 @@
     if (tab === 'purchases') {
       rows = raw.slice().reverse().map(r => ({
         id: r.id, sheet: '_purchases', person: r.person,
-        title: `${r.symbol} × ${r.shares} 張`,
+        title: `${r.symbol} × ${fmt.money(r.shares)} 股`,
         sub: `${fmt.date(r.date)} · 均價 ${Number(r.price).toFixed(2)}${r.note ? ' · ' + r.note : ''}`,
         amount: -Number(r.amount),
         searchText: `${r.symbol} ${r.note || ''}`.toLowerCase()
@@ -1500,6 +1535,8 @@
       $('#purchase-shares').value = r.shares;
       $('#purchase-date').value   = String(r.date || '').slice(0, 10);
       $('#purchase-note').value   = r.note || '';
+      setPurchaseUnit('stocks');
+      updateSharesHint();
       $('#modal-purchase h2').textContent = '編輯 ETF 購買';
       $('#purchase-submit').textContent = '儲存修改';
       openModal('modal-purchase');
@@ -1548,10 +1585,10 @@
     if (tab === 'purchases') {
       const totalShares = raw.reduce((s, r) => s + (Number(r.shares) || 0), 0);
       const totalCost   = raw.reduce((s, r) => s + (Number(r.amount) || 0), 0);
-      const avgPrice    = totalShares > 0 ? totalCost / (totalShares * 1000) : 0;
+      const avgPrice    = totalShares > 0 ? totalCost / totalShares : 0;
       cards = `
         <div class="stat-card"><div class="lbl">筆數</div><div class="val">${raw.length}</div></div>
-        <div class="stat-card"><div class="lbl">總張數</div><div class="val">${fmt.money(totalShares)}</div></div>
+        <div class="stat-card"><div class="lbl">總股數</div><div class="val">${fmt.money(totalShares)}</div></div>
         <div class="stat-card"><div class="lbl">總本金</div><div class="val">${fmt.money(totalCost)}</div></div>
         <div class="stat-card"><div class="lbl">均單價</div><div class="val">${avgPrice.toFixed(2)}</div></div>
       `;
@@ -1565,7 +1602,7 @@
       });
       const rows = Object.keys(bySym).sort().map(k => {
         const a = bySym[k];
-        const ap = a.shares > 0 ? a.cost / (a.shares * 1000) : 0;
+        const ap = a.shares > 0 ? a.cost / a.shares : 0;
         return `<tr><td>${k}</td><td>${a.count}</td><td>${fmt.money(a.shares)}</td><td>${fmt.money(a.cost)}</td><td>${ap.toFixed(2)}</td></tr>`;
       }).join('');
       const byYear = {};
@@ -1606,12 +1643,12 @@
 
       breakdown = `<div class="breakdown-title">分代號統計</div>
         <div class="table-wrap"><table>
-          <thead><tr><th>代號</th><th>筆數</th><th>張數</th><th>本金</th><th>均價</th></tr></thead>
+          <thead><tr><th>代號</th><th>筆數</th><th>股數</th><th>本金</th><th>均價</th></tr></thead>
           <tbody>${rows}</tbody>
         </table></div>
         <div class="breakdown-title">分年度統計</div>
         <div class="table-wrap"><table>
-          <thead><tr><th>年</th><th>筆數</th><th>張數</th><th>本金</th></tr></thead>
+          <thead><tr><th>年</th><th>筆數</th><th>股數</th><th>本金</th></tr></thead>
           <tbody>${yearRows}</tbody>
         </table></div>
         <div class="breakdown-title">各代號 × 年度 本金</div>

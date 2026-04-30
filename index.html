@@ -162,8 +162,16 @@
     <label>單股價格
       <input id="purchase-price" type="number" inputmode="decimal" step="0.01" />
     </label>
-    <label>張數
-      <input id="purchase-shares" type="number" inputmode="numeric" />
+    <label>
+      <span class="label-row">
+        <span>數量</span>
+        <span class="seg seg-mini" id="purchase-unit-seg">
+          <button type="button" class="seg-btn active" data-unit="stocks">股</button>
+          <button type="button" class="seg-btn"        data-unit="lots">張</button>
+        </span>
+      </span>
+      <input id="purchase-shares" type="number" inputmode="decimal" step="any" />
+      <span class="hint" id="purchase-shares-hint"></span>
     </label>
     <label>日期
       <input id="purchase-date" type="date" />
