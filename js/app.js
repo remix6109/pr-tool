@@ -356,6 +356,7 @@
     bindAddButtons();
     bindForms();
     bindPurchaseUnitToggle();
+    bindPurchaseTypeToggle();
     bindUpdatePriceForm();
     bindGoalForm();
     bindSymbolManagement();
@@ -1085,6 +1086,7 @@
       $('#purchase-shares').value = '';
       $('#purchase-fee').value = '';
       $('#purchase-note').value = '';
+      setPurchaseType('buy');
       setPurchaseUnit('stocks');
       updateSharesHint();
     } else if (which === 'add-bank') {
@@ -1158,21 +1160,41 @@
     if (input) input.addEventListener('input', updateSharesHint);
   }
 
+  // 購買 modal 的「買進 / 賣出」切換
+  function setPurchaseType(type) {
+    STATE.purchaseType = (type === 'sell') ? 'sell' : 'buy';
+    $$('[data-ptype]').forEach(b =>
+      b.classList.toggle('active', b.dataset.ptype === STATE.purchaseType));
+    const isSell = STATE.purchaseType === 'sell';
+    const titleEl = $('#modal-purchase-title');
+    const amtLabel = $('#purchase-amount-label');
+    if (titleEl)  titleEl.textContent  = isSell ? '新增 ETF 賣出' : '新增 ETF 購買';
+    if (amtLabel) amtLabel.textContent = isSell ? '實收金額 (NT$)' : '花費金額 (NT$)';
+  }
+  function bindPurchaseTypeToggle() {
+    STATE.purchaseType = STATE.purchaseType || 'buy';
+    $$('[data-ptype]').forEach(b => {
+      b.onclick = () => setPurchaseType(b.dataset.ptype);
+    });
+  }
+
   function bindForms() {
     $('#purchase-submit').onclick = () => {
       const sharesRaw = Number($('#purchase-shares').value) || 0;
       const sharesAsStocks = (STATE.purchaseUnit === 'lots') ? sharesRaw * 1000 : sharesRaw;
+      const isSell = STATE.purchaseType === 'sell';
+      const sign = isSell ? -1 : 1;
       const data = {
         person: $('#purchase-person').value,
         symbol: $('#purchase-symbol').value,
-        amount: Number($('#purchase-amount').value) || 0,
+        amount: sign * (Number($('#purchase-amount').value) || 0),
         price:  Number($('#purchase-price').value)  || 0,
-        shares: sharesAsStocks,
+        shares: sign * sharesAsStocks,
         fee:    Number($('#purchase-fee').value)    || 0,
         date:   $('#purchase-date').value,
         note:   $('#purchase-note').value
       };
-      if (!data.person) return alert('請選購買人');
+      if (!data.person) return alert(isSell ? '請選賣出人' : '請選購買人');
       if (!data.symbol) return alert('請選代號');
       if (!data.amount || !data.shares) return alert('請輸入金額和股數');
       const editing = STATE.editing && STATE.editing.type === 'purchase' ? { ...STATE.editing } : null;
@@ -1195,7 +1217,7 @@
       closeAllModals();
       renderAll();
       if ($('#page-history').classList.contains('active')) renderHistory();
-      showToast(editing ? '已更新' : '已新增購買');
+      showToast(editing ? '已更新' : (isSell ? '已新增賣出' : '已新增購買'));
       (async () => {
         try {
           if (editing) {
@@ -1481,9 +1503,16 @@
       let title = '', sub = '', amount = 0;
       if (entry.sheet === '_purchases') {
         const fee = Number(r.fee) || 0;
-        title = `${r.symbol || '?'} × ${fmt.money(r.shares || 0)} 股`;
+        const rawAmount = Number(r.amount) || 0;
+        const rawShares = Number(r.shares) || 0;
+        const isSell = rawAmount < 0 || rawShares < 0;
+        const sharesAbs = Math.abs(rawShares);
+        const amountAbs = Math.abs(rawAmount);
+        title = isSell
+          ? `<span class="tag-sell">賣</span> ${r.symbol || '?'} × ${fmt.money(sharesAbs)} 股`
+          : `${r.symbol || '?'} × ${fmt.money(sharesAbs)} 股`;
         sub = `${fmt.date(r.date)}${fee > 0 ? ' · 手續費 ' + fmt.money(fee) : ''}${r.note ? ' · ' + r.note : ''}`;
-        amount = -(Number(r.amount || 0) + fee);
+        amount = isSell ? (amountAbs - fee) : -(amountAbs + fee);
       } else if (entry.sheet === '_bank') {
         title = r.type || '';
         sub = `${fmt.date(r.date)}${r.note ? ' · ' + r.note : ''}`;
@@ -1509,7 +1538,7 @@
       return `<div class="list-item deleted-item">
         <div class="badge ${personCls}">${escapeHtml(getPersonLabel(r.person)) || '?'}</div>
         <div class="main">
-          <div class="row1"><span class="tag-type">${tabType}</span> ${escapeHtml(title)}</div>
+          <div class="row1"><span class="tag-type">${tabType}</span> ${title}</div>
           <div class="row2">${escapeHtml(sub)}</div>
           <div class="deleted-time">已刪除 · ${deletedTime}</div>
         </div>
@@ -1628,11 +1657,19 @@
     if (tab === 'purchases') {
       rows = raw.slice().reverse().map(r => {
         const fee = Number(r.fee) || 0;
+        const rawAmount = Number(r.amount) || 0;
+        const rawShares = Number(r.shares) || 0;
+        const isSell = rawAmount < 0 || rawShares < 0;
+        const sharesAbs = Math.abs(rawShares);
+        const amountAbs = Math.abs(rawAmount);
+        const title = isSell
+          ? `<span class="tag-sell">賣</span> ${r.symbol} × ${fmt.money(sharesAbs)} 股`
+          : `${r.symbol} × ${fmt.money(sharesAbs)} 股`;
         return {
           id: r.id, sheet: '_purchases', person: r.person,
-          title: `${r.symbol} × ${fmt.money(r.shares)} 股`,
+          title,
           sub: `${fmt.date(r.date)} · 均價 ${Number(r.price).toFixed(2)}${fee > 0 ? ' · 手續費 ' + fmt.money(fee) : ''}${r.note ? ' · ' + r.note : ''}`,
-          amount: -(Number(r.amount) + fee),
+          amount: isSell ? (amountAbs - fee) : -(amountAbs + fee),
           searchText: `${r.symbol} ${r.note || ''}`.toLowerCase()
         };
       });
@@ -1762,15 +1799,17 @@
         sel.add(new Option(r.symbol, r.symbol));
       }
       sel.value = r.symbol;
-      $('#purchase-amount').value = r.amount;
+      const isSell = (Number(r.shares) < 0) || (Number(r.amount) < 0);
+      $('#purchase-amount').value = Math.abs(Number(r.amount) || 0);
       $('#purchase-price').value  = r.price;
-      $('#purchase-shares').value = r.shares;
+      $('#purchase-shares').value = Math.abs(Number(r.shares) || 0);
       $('#purchase-fee').value    = r.fee || '';
       $('#purchase-date').value   = String(r.date || '').slice(0, 10);
       $('#purchase-note').value   = r.note || '';
+      setPurchaseType(isSell ? 'sell' : 'buy');
       setPurchaseUnit('stocks');
       updateSharesHint();
-      $('#modal-purchase h2').textContent = '編輯 ETF 購買';
+      $('#modal-purchase-title').textContent = isSell ? '編輯 ETF 賣出' : '編輯 ETF 購買';
       $('#purchase-submit').textContent = '儲存修改';
       openModal('modal-purchase');
     } else if (sheet === '_bank') {
@@ -1819,7 +1858,7 @@
   }
 
   function resetModalLabels() {
-    $('#modal-purchase h2').textContent = '新增 ETF 購買';
+    $('#modal-purchase-title').textContent = '新增 ETF 購買';
     $('#purchase-submit').textContent   = '儲存';
     $('#modal-bank h2').textContent     = '新增銀行收支';
     $('#bank-submit').textContent       = '儲存';

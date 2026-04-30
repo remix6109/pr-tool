@@ -152,10 +152,16 @@
   </nav>
 </section>
 
-<!-- Modal: 新增購買 -->
+<!-- Modal: 新增購買 / 賣出 -->
 <div class="modal hidden" id="modal-purchase">
   <div class="modal-box">
-    <h2>新增 ETF 購買</h2>
+    <h2 id="modal-purchase-title">新增 ETF 購買</h2>
+    <label>類型
+      <div class="seg">
+        <button class="seg-btn" data-ptype="buy">買進</button>
+        <button class="seg-btn" data-ptype="sell">賣出</button>
+      </div>
+    </label>
     <label>購買人
       <div class="seg">
         <button class="seg-btn" data-pick="purchase-person" data-val="黃">黃</button>
@@ -166,7 +172,8 @@
     <label>代號
       <select id="purchase-symbol"></select>
     </label>
-    <label>花費金額 (NT$)
+    <label>
+      <span id="purchase-amount-label">花費金額 (NT$)</span>
       <input id="purchase-amount" type="number" inputmode="decimal" />
     </label>
     <label>單股價格
