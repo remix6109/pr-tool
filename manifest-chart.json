@@ -10,7 +10,7 @@
   "background_color": "#F2F1F0",
   "icons": [
     {
-      "src": "icons/gold.svg",
+      "src": "icons/chart.svg",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any maskable"

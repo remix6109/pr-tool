@@ -439,6 +439,34 @@ th { color: var(--muted); font-weight: 600; font-size: .8rem; }
 }
 .palette-swatch.active .swatch-name { color: var(--primary); }
 
+/* === Icon picker === */
+.icon-picker {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
+  gap: 8px;
+}
+.icon-swatch {
+  display: flex; flex-direction: column; align-items: center;
+  gap: 4px; padding: 6px;
+  cursor: pointer;
+  border: 2px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  transition: border-color .15s, transform .05s;
+}
+.icon-swatch:active { transform: scale(.95); }
+.icon-swatch.active { border-color: var(--primary); }
+.icon-swatch img {
+  width: 100%; aspect-ratio: 1;
+  border-radius: 12px;
+  display: block;
+}
+.icon-swatch .swatch-name {
+  font-size: .75rem; font-weight: 600;
+  color: var(--text);
+}
+.icon-swatch.active .swatch-name { color: var(--primary); }
+
 /* === Person label editor === */
 .person-labels {
   display: flex; flex-direction: column; gap: 8px;

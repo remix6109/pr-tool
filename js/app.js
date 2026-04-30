@@ -191,6 +191,44 @@
     };
   }
 
+  // ============== Icon choice ==============
+
+  function getCurrentIconId() {
+    const id = localStorage.getItem(KEY.iconChoice) || CONFIG.ICON_DEFAULT;
+    return CONFIG.ICON_CHOICES.some(i => i.id === id) ? id : CONFIG.ICON_DEFAULT;
+  }
+
+  function applyIconChoice(id) {
+    if (!CONFIG.ICON_CHOICES.some(i => i.id === id)) id = CONFIG.ICON_DEFAULT;
+    const iconUrl     = `icons/${id}.svg`;
+    const manifestUrl = `manifest-${id}.json`;
+    const setHref = (sel, href) => {
+      document.querySelectorAll(sel).forEach(el => { el.href = href; });
+    };
+    setHref('link[rel="icon"]', iconUrl);
+    setHref('link[rel="apple-touch-icon"]', iconUrl);
+    setHref('link[rel="manifest"]', manifestUrl);
+    localStorage.setItem(KEY.iconChoice, id);
+  }
+
+  function renderIconPicker() {
+    const wrap = $('#icon-picker');
+    if (!wrap) return;
+    const cur = getCurrentIconId();
+    wrap.innerHTML = CONFIG.ICON_CHOICES.map(c => `
+      <button class="icon-swatch ${c.id === cur ? 'active' : ''}" data-icon="${c.id}" title="${escapeHtml(c.name)}">
+        <img src="icons/${c.id}.svg" alt="${escapeHtml(c.name)}" />
+        <div class="swatch-name">${escapeHtml(c.name)}</div>
+      </button>
+    `).join('');
+    $$('#icon-picker .icon-swatch').forEach(b => {
+      b.onclick = () => {
+        applyIconChoice(b.dataset.icon);
+        renderIconPicker();
+      };
+    });
+  }
+
   function renderPalettePicker() {
     const wrap = $('#palette-picker');
     if (!wrap) return;
@@ -215,6 +253,7 @@
 
   async function bootAuth() {
     applyPalette(localStorage.getItem(KEY.palette) || window.THEMES_DEFAULT_ID, { rerender: false });
+    applyIconChoice(getCurrentIconId());
     applyTheme(getInitialTheme());
     const apiUrl = localStorage.getItem(KEY.apiUrl);
     const pinHash = localStorage.getItem(KEY.pinHash);
@@ -1802,6 +1841,7 @@
   function bindSettings() {
     $('#btn-settings').onclick = () => {
       renderPalettePicker();
+      renderIconPicker();
       renderPersonLabelEditor();
       updateDeletedCountBadge();
       openModal('modal-settings');

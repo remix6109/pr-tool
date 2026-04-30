@@ -10,9 +10,19 @@ window.CONFIG = {
     palette: 'pr.palette',
     personLabels: 'pr.personLabels',
     historyDetailsOpen: 'pr.historyDetailsOpen',
-    deletedHistory: 'pr.deletedHistory'
+    deletedHistory: 'pr.deletedHistory',
+    iconChoice: 'pr.iconChoice'
   },
   DELETED_HISTORY_MAX: 50,
+  ICON_CHOICES: [
+    { id: 'gold',  name: '金塊堆' },
+    { id: 'robot', name: '機器人' },
+    { id: 'bag',   name: '錢袋' },
+    { id: 'chart', name: '上漲圖' },
+    { id: 'book',  name: '記帳本' },
+    { id: 'bank',  name: '銀行' }
+  ],
+  ICON_DEFAULT: 'gold',
   TITLE_DEFAULT: '5 年存入計劃 (合計目標)',
   SESSION_HOURS: 24 * 30,                     // PIN 解鎖後保持登入 30 天
   PEOPLE: ['黃', '蘇'],
