@@ -2,9 +2,10 @@
 (function() {
   const $  = (sel, root = document) => root.querySelector(sel);
   const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
+  const HISTORY_PAGE_SIZE = 20;
 
   const KEY = CONFIG.STORAGE_KEYS;
-  let STATE = { data: null, currentTab: 'purchases', defaultPerson: '黃', editing: null, historyDetailsOpen: false };
+  let STATE = { data: null, currentTab: 'purchases', defaultPerson: '黃', editing: null, historyDetailsOpen: false, historyLimit: HISTORY_PAGE_SIZE };
 
   // ============== Utils ==============
 
@@ -1144,6 +1145,7 @@
       b.onclick = () => {
         $$('#page-history .seg-btn').forEach(x => x.classList.toggle('active', x === b));
         STATE.currentTab = b.dataset.tab;
+        STATE.historyLimit = HISTORY_PAGE_SIZE;  // 切 tab 時重置分頁
         $('#filter-category').value = '';  // 切 tab 時重置分類
         $('#filter-year').value     = '';  // 與年度
         renderHistory();
@@ -1251,10 +1253,14 @@
     if (search) rows = rows.filter(r => r.searchText.includes(search));
 
     const list = $('#history-list');
-    if (rows.length === 0) {
+    const totalRows = rows.length;
+    const limit = STATE.historyLimit || HISTORY_PAGE_SIZE;
+    const truncated = totalRows > limit;
+    const visibleRows = truncated ? rows.slice(0, limit) : rows;
+    if (totalRows === 0) {
       list.innerHTML = `<div class="empty">沒有資料</div>`;
     } else {
-      list.innerHTML = rows.map(r => {
+      const itemsHtml = visibleRows.map(r => {
         const cls = r.amount >= 0 ? 'pos' : 'neg';
         const personCls = r.person === '黃' ? 'huang' : 'su';
         return `<div class="list-item">
@@ -1272,6 +1278,17 @@
           </div>
         </div>`;
       }).join('');
+      const moreHtml = truncated
+        ? `<button class="btn ghost wide load-more-btn" id="load-more-history">顯示更多(還有 ${totalRows - limit} 筆)</button>`
+        : '';
+      list.innerHTML = itemsHtml + moreHtml;
+    }
+    const moreBtn = $('#load-more-history');
+    if (moreBtn) {
+      moreBtn.onclick = () => {
+        STATE.historyLimit = Infinity;
+        renderHistory();
+      };
     }
 
     $$('.delete-btn').forEach(b => b.onclick = () => {

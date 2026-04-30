@@ -280,6 +280,15 @@ th { color: var(--muted); font-weight: 600; font-size: .8rem; }
 .list-item .edit-btn:hover { color: var(--primary); }
 .list-item .delete-btn:hover { color: var(--red); }
 
+/* === Load more button (history list) === */
+.load-more-btn {
+  margin-top: 8px;
+  text-align: center !important;
+  color: var(--muted);
+  font-weight: 600;
+}
+.load-more-btn:hover { color: var(--primary); }
+
 /* === Modal === */
 .modal {
   position: fixed; inset: 0;
