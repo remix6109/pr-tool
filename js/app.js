@@ -41,7 +41,40 @@
     $('#' + id).classList.remove('hidden');
   }
 
-  // ============== Theme ==============
+  // ============== Theme + Palette ==============
+
+  function getCurrentPalette() {
+    const id = localStorage.getItem(KEY.palette) || window.THEMES_DEFAULT_ID;
+    return (window.THEMES || []).find(p => p.id === id) || window.THEMES[0];
+  }
+
+  function applyPalette(id, opts) {
+    opts = opts || {};
+    const palette = (window.THEMES || []).find(p => p.id === id) || window.THEMES[0];
+    if (!palette) return;
+    const lightVars = Object.entries(palette.light).map(([k, v]) => `${k}:${v};`).join('');
+    const darkVars  = Object.entries(palette.dark ).map(([k, v]) => `${k}:${v};`).join('');
+    let style = document.getElementById('theme-vars');
+    if (!style) {
+      style = document.createElement('style');
+      style.id = 'theme-vars';
+      document.head.appendChild(style);
+    }
+    style.textContent = `:root{${lightVars}} [data-theme="dark"]{${darkVars}}`;
+    STATE.chartColors = palette.chart;
+    STATE.paletteId   = palette.id;
+    localStorage.setItem(KEY.palette, palette.id);
+    // 同步 PWA 標題列顏色
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) {
+      const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+      meta.setAttribute('content', isDark ? palette.metaDark : palette.metaLight);
+    }
+    if (opts.rerender !== false && STATE.data) {
+      renderAll();
+      if ($('#page-history') && $('#page-history').classList.contains('active')) renderHistory();
+    }
+  }
 
   function applyTheme(t) {
     if (t === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
@@ -49,7 +82,8 @@
     const btn = $('#btn-theme');
     if (btn) btn.textContent = t === 'dark' ? '☀️' : '🌙';
     const meta = document.querySelector('meta[name="theme-color"]');
-    if (meta) meta.setAttribute('content', t === 'dark' ? '#1A2424' : '#3F7373');
+    const palette = getCurrentPalette();
+    if (meta) meta.setAttribute('content', t === 'dark' ? palette.metaDark : palette.metaLight);
   }
 
   function getInitialTheme() {
@@ -67,9 +101,30 @@
     };
   }
 
+  function renderPalettePicker() {
+    const wrap = $('#palette-picker');
+    if (!wrap) return;
+    const cur = STATE.paletteId || getCurrentPalette().id;
+    wrap.innerHTML = (window.THEMES || []).map(p => `
+      <button class="palette-swatch ${p.id === cur ? 'active' : ''}" data-palette="${p.id}">
+        <div class="swatch-row">
+          ${p.swatch.map(c => `<span style="background:${c}"></span>`).join('')}
+        </div>
+        <div class="swatch-name">${p.name}</div>
+      </button>
+    `).join('');
+    $$('#palette-picker .palette-swatch').forEach(b => {
+      b.onclick = () => {
+        applyPalette(b.dataset.palette);
+        renderPalettePicker();
+      };
+    });
+  }
+
   // ============== Auth flow ==============
 
   async function bootAuth() {
+    applyPalette(localStorage.getItem(KEY.palette) || window.THEMES_DEFAULT_ID, { rerender: false });
     applyTheme(getInitialTheme());
     const apiUrl = localStorage.getItem(KEY.apiUrl);
     const pinHash = localStorage.getItem(KEY.pinHash);
@@ -259,7 +314,7 @@
       return;
     }
     canvas.parentElement.parentElement.classList.remove('hidden');
-    const colors = ['#3F7373', '#768C45', '#A8BDBF', '#B85042', '#5C8C7D', '#8FA068', '#B8945E', '#6B5947', '#A88C5A', '#4A6B5C', '#C5D7D9'];
+    const colors = STATE.chartColors || getCurrentPalette().chart;
     if (_charts.holdings) _charts.holdings.destroy();
     _charts.holdings = new Chart(canvas, {
       type: 'doughnut',
@@ -302,7 +357,7 @@
       if (_charts.history) _charts.history.destroy();
       _charts.history = new Chart(canvas, {
         type: 'bar',
-        data: { labels: months, datasets: [{ label: '本金', data: months.map(m => byMonth[m]), backgroundColor: '#3F7373' }] },
+        data: { labels: months, datasets: [{ label: '本金', data: months.map(m => byMonth[m]), backgroundColor: getCssVar('--primary') }] },
         options: chartBarOptions()
       });
     } else if (tab === 'bank') {
@@ -326,8 +381,8 @@
         data: {
           labels: months,
           datasets: [
-            { label: '收入', data: months.map(m => byMonth[m].income),  backgroundColor: '#768C45' },
-            { label: '支出', data: months.map(m => -byMonth[m].expense), backgroundColor: '#B85042' }
+            { label: '收入', data: months.map(m => byMonth[m].income),  backgroundColor: getCssVar('--green') },
+            { label: '支出', data: months.map(m => -byMonth[m].expense), backgroundColor: getCssVar('--red') }
           ]
         },
         options: chartBarOptions()
@@ -345,7 +400,7 @@
       if (_charts.history) _charts.history.destroy();
       _charts.history = new Chart(canvas, {
         type: 'bar',
-        data: { labels: months, datasets: [{ label: '存入', data: months.map(m => byMonth[m]), backgroundColor: '#5C8C7D' }] },
+        data: { labels: months, datasets: [{ label: '存入', data: months.map(m => byMonth[m]), backgroundColor: getCssVar('--purple') }] },
         options: chartBarOptions()
       });
     }
@@ -1434,7 +1489,10 @@
   // ============== Settings ==============
 
   function bindSettings() {
-    $('#btn-settings').onclick = () => openModal('modal-settings');
+    $('#btn-settings').onclick = () => {
+      renderPalettePicker();
+      openModal('modal-settings');
+    };
 
     $('#btn-refresh').onclick = async () => {
       closeAllModals();

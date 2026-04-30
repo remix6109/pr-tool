@@ -330,6 +330,43 @@ th { color: var(--muted); font-weight: 600; font-size: .8rem; }
 .modal-actions { display: flex; gap: 10px; margin-top: 4px; }
 .modal-actions .btn { flex: 1; }
 
+/* === Palette picker === */
+.palette-section {
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 4px 2px 8px;
+}
+.palette-section-label {
+  font-size: .85rem; color: var(--muted); font-weight: 600;
+}
+.palette-picker {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+  gap: 8px;
+}
+.palette-swatch {
+  display: flex; flex-direction: column; gap: 0;
+  padding: 0; cursor: pointer;
+  border: 2px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  overflow: hidden;
+  transition: border-color .15s, transform .05s;
+}
+.palette-swatch:active { transform: scale(.97); }
+.palette-swatch.active { border-color: var(--primary); }
+.palette-swatch .swatch-row {
+  display: flex; height: 28px;
+}
+.palette-swatch .swatch-row span {
+  flex: 1; height: 100%;
+}
+.palette-swatch .swatch-name {
+  padding: 6px 4px; font-size: .8rem; font-weight: 600;
+  color: var(--text); text-align: center;
+  border-top: 1px solid var(--border);
+}
+.palette-swatch.active .swatch-name { color: var(--primary); }
+
 /* === Loading + empty === */
 .loading { padding: 40px; text-align: center; color: var(--muted); }
 .empty { padding: 32px; text-align: center; color: var(--muted); font-size: .9rem; }
