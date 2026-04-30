@@ -845,7 +845,7 @@
   }
 
   function bindForms() {
-    $('#purchase-submit').onclick = async () => {
+    $('#purchase-submit').onclick = () => {
       const data = {
         person: $('#purchase-person').value,
         symbol: $('#purchase-symbol').value,
@@ -858,21 +858,54 @@
       if (!data.person) return alert('請選購買人');
       if (!data.symbol) return alert('請選代號');
       if (!data.amount || !data.shares) return alert('請輸入金額和張數');
-      try {
-        if (STATE.editing && STATE.editing.type === 'purchase') {
-          await API.updateRecord(STATE.editing.sheet, STATE.editing.id, data);
-          showToast('已更新');
-        } else {
-          await API.addPurchase({ ...data, created_by: STATE.defaultPerson });
-          showToast('已新增購買');
+      const editing = STATE.editing && STATE.editing.type === 'purchase' ? { ...STATE.editing } : null;
+      const arr = STATE.data.purchases = STATE.data.purchases || [];
+      let optimisticIdx = -1, prevSnapshot = null, tmpId = null;
+      if (editing) {
+        optimisticIdx = arr.findIndex(r => String(r.id) === String(editing.id));
+        if (optimisticIdx >= 0) {
+          prevSnapshot = arr[optimisticIdx];
+          arr[optimisticIdx] = { ...prevSnapshot, ...data };
         }
-        closeAllModals();
-        await loadAndRender();
-        if ($('#page-history').classList.contains('active')) renderHistory();
-      } catch (e) { alert('儲存失敗:' + e.message); }
+      } else {
+        tmpId = '__tmp_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+        arr.push({
+          id: tmpId, ...data,
+          created_at: new Date().toISOString(), created_by: STATE.defaultPerson
+        });
+        optimisticIdx = arr.length - 1;
+      }
+      closeAllModals();
+      renderAll();
+      if ($('#page-history').classList.contains('active')) renderHistory();
+      showToast(editing ? '已更新' : '已新增購買');
+      (async () => {
+        try {
+          if (editing) {
+            await API.updateRecord(editing.sheet, editing.id, data);
+          } else {
+            const res = await API.addPurchase({ ...data, created_by: STATE.defaultPerson });
+            const i = arr.findIndex(r => r.id === tmpId);
+            if (i >= 0) arr[i] = { ...arr[i], id: res.id };
+          }
+          localStorage.setItem(KEY.cache, JSON.stringify(STATE.data));
+        } catch (e) {
+          if (editing) {
+            const i = arr.findIndex(r => String(r.id) === String(editing.id));
+            if (i >= 0 && prevSnapshot) arr[i] = prevSnapshot;
+          } else {
+            const i = arr.findIndex(r => r.id === tmpId);
+            if (i >= 0) arr.splice(i, 1);
+          }
+          localStorage.setItem(KEY.cache, JSON.stringify(STATE.data));
+          renderAll();
+          if ($('#page-history').classList.contains('active')) renderHistory();
+          alert('儲存失敗:' + e.message + '\n已還原此筆變更,建議按「重新載入」同步');
+        }
+      })();
     };
 
-    $('#bank-submit').onclick = async () => {
+    $('#bank-submit').onclick = () => {
       const data = {
         person: $('#bank-person').value,
         type:   $('#bank-type').value,
@@ -882,21 +915,53 @@
       };
       if (!data.person) return alert('請選人');
       if (!data.amount) return alert('請輸入金額');
-      try {
-        if (STATE.editing && STATE.editing.type === 'bank') {
-          await API.updateRecord(STATE.editing.sheet, STATE.editing.id, data);
-          showToast('已更新');
-        } else {
-          await API.addBank({ ...data, created_by: STATE.defaultPerson });
-          showToast('已新增收支');
+      const editing = STATE.editing && STATE.editing.type === 'bank' ? { ...STATE.editing } : null;
+      const arr = STATE.data.bank = STATE.data.bank || [];
+      let prevSnapshot = null, tmpId = null;
+      if (editing) {
+        const idx = arr.findIndex(r => String(r.id) === String(editing.id));
+        if (idx >= 0) {
+          prevSnapshot = arr[idx];
+          arr[idx] = { ...prevSnapshot, ...data };
         }
-        closeAllModals();
-        await loadAndRender();
-        if ($('#page-history').classList.contains('active')) renderHistory();
-      } catch (e) { alert('儲存失敗:' + e.message); }
+      } else {
+        tmpId = '__tmp_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+        arr.push({
+          id: tmpId, ...data,
+          created_at: new Date().toISOString(), created_by: STATE.defaultPerson
+        });
+      }
+      closeAllModals();
+      renderAll();
+      if ($('#page-history').classList.contains('active')) renderHistory();
+      showToast(editing ? '已更新' : '已新增收支');
+      (async () => {
+        try {
+          if (editing) {
+            await API.updateRecord(editing.sheet, editing.id, data);
+          } else {
+            const res = await API.addBank({ ...data, created_by: STATE.defaultPerson });
+            const i = arr.findIndex(r => r.id === tmpId);
+            if (i >= 0) arr[i] = { ...arr[i], id: res.id };
+          }
+          localStorage.setItem(KEY.cache, JSON.stringify(STATE.data));
+        } catch (e) {
+          if (editing) {
+            const i = arr.findIndex(r => String(r.id) === String(editing.id));
+            if (i >= 0 && prevSnapshot) arr[i] = prevSnapshot;
+          } else {
+            const i = arr.findIndex(r => r.id === tmpId);
+            if (i >= 0) arr.splice(i, 1);
+          }
+          localStorage.setItem(KEY.cache, JSON.stringify(STATE.data));
+          renderAll();
+          if ($('#page-history').classList.contains('active')) renderHistory();
+          alert('儲存失敗:' + e.message + '\n已還原此筆變更,建議按「重新載入」同步');
+        }
+      })();
     };
 
-    $('#savings-submit').onclick = async () => {
+    $('#savings-submit').onclick = () => {
       const data = {
         person: $('#savings-person').value,
         year:   Number($('#savings-year').value),
@@ -906,18 +971,50 @@
       };
       if (!data.person) return alert('請選人');
       if (!data.amount) return alert('請輸入金額');
-      try {
-        if (STATE.editing && STATE.editing.type === 'savings') {
-          await API.updateRecord(STATE.editing.sheet, STATE.editing.id, data);
-          showToast('已更新');
-        } else {
-          await API.addSavings({ ...data, created_by: STATE.defaultPerson });
-          showToast('已新增月存');
+      const editing = STATE.editing && STATE.editing.type === 'savings' ? { ...STATE.editing } : null;
+      const arr = STATE.data.savings = STATE.data.savings || [];
+      let prevSnapshot = null, tmpId = null;
+      if (editing) {
+        const idx = arr.findIndex(r => String(r.id) === String(editing.id));
+        if (idx >= 0) {
+          prevSnapshot = arr[idx];
+          arr[idx] = { ...prevSnapshot, ...data };
         }
-        closeAllModals();
-        await loadAndRender();
-        if ($('#page-history').classList.contains('active')) renderHistory();
-      } catch (e) { alert('儲存失敗:' + e.message); }
+      } else {
+        tmpId = '__tmp_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+        arr.push({
+          id: tmpId, ...data,
+          created_at: new Date().toISOString(), created_by: STATE.defaultPerson
+        });
+      }
+      closeAllModals();
+      renderAll();
+      if ($('#page-history').classList.contains('active')) renderHistory();
+      showToast(editing ? '已更新' : '已新增月存');
+      (async () => {
+        try {
+          if (editing) {
+            await API.updateRecord(editing.sheet, editing.id, data);
+          } else {
+            const res = await API.addSavings({ ...data, created_by: STATE.defaultPerson });
+            const i = arr.findIndex(r => r.id === tmpId);
+            if (i >= 0) arr[i] = { ...arr[i], id: res.id };
+          }
+          localStorage.setItem(KEY.cache, JSON.stringify(STATE.data));
+        } catch (e) {
+          if (editing) {
+            const i = arr.findIndex(r => String(r.id) === String(editing.id));
+            if (i >= 0 && prevSnapshot) arr[i] = prevSnapshot;
+          } else {
+            const i = arr.findIndex(r => r.id === tmpId);
+            if (i >= 0) arr.splice(i, 1);
+          }
+          localStorage.setItem(KEY.cache, JSON.stringify(STATE.data));
+          renderAll();
+          if ($('#page-history').classList.contains('active')) renderHistory();
+          alert('儲存失敗:' + e.message + '\n已還原此筆變更,建議按「重新載入」同步');
+        }
+      })();
     };
   }
 
@@ -932,7 +1029,11 @@
         renderHistory();
       };
     });
-    $('#filter-search').oninput = renderHistory;
+    let searchTimer = null;
+    $('#filter-search').oninput = () => {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(renderHistory, 200);
+    };
     $('#filter-category').onchange = renderHistory;
   }
 
@@ -1033,14 +1134,31 @@
       }).join('');
     }
 
-    $$('.delete-btn').forEach(b => b.onclick = async () => {
+    $$('.delete-btn').forEach(b => b.onclick = () => {
       if (!confirm('確定要刪除這筆?')) return;
-      try {
-        await API.deleteRecord(b.dataset.delSheet, b.dataset.delId);
-        showToast('已刪除');
-        await loadAndRender();
-        renderHistory();
-      } catch (e) { alert('刪除失敗:' + e.message); }
+      const sheet = b.dataset.delSheet;
+      const id = b.dataset.delId;
+      const key = sheet === '_purchases' ? 'purchases' : sheet === '_bank' ? 'bank' : 'savings';
+      const arr = STATE.data[key] = STATE.data[key] || [];
+      const idx = arr.findIndex(r => String(r.id) === String(id));
+      if (idx < 0) return;
+      const removed = arr[idx];
+      arr.splice(idx, 1);
+      renderAll();
+      renderHistory();
+      showToast('已刪除');
+      (async () => {
+        try {
+          await API.deleteRecord(sheet, id);
+          localStorage.setItem(KEY.cache, JSON.stringify(STATE.data));
+        } catch (e) {
+          arr.splice(idx, 0, removed);
+          localStorage.setItem(KEY.cache, JSON.stringify(STATE.data));
+          renderAll();
+          renderHistory();
+          alert('刪除失敗:' + e.message + '\n已還原此筆,建議按「重新載入」同步');
+        }
+      })();
     });
 
     $$('.edit-btn').forEach(b => b.onclick = () => {
