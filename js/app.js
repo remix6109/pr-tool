@@ -37,6 +37,33 @@
     el._t = setTimeout(() => el.classList.add('hidden'), 1800);
   }
 
+  function showActionToast(msg, actionLabel, actionFn, durationMs) {
+    const el = $('#toast');
+    el.textContent = '';  // 清掉舊內容(包括之前可能殘留的按鈕)
+    const span = document.createElement('span');
+    span.textContent = msg;
+    const btn = document.createElement('button');
+    btn.className = 'toast-action';
+    btn.type = 'button';
+    btn.textContent = actionLabel;
+    el.appendChild(span);
+    el.appendChild(btn);
+    el.classList.remove('hidden');
+    clearTimeout(el._t);
+    let used = false;
+    btn.onclick = () => {
+      if (used) return;
+      used = true;
+      el.classList.add('hidden');
+      el.textContent = '';
+      try { actionFn(); } catch (_) {}
+    };
+    el._t = setTimeout(() => {
+      el.classList.add('hidden');
+      el.textContent = '';
+    }, durationMs || 6000);
+  }
+
   function showScreen(id) {
     $$('.screen').forEach(s => s.classList.add('hidden'));
     $('#' + id).classList.remove('hidden');
@@ -1140,6 +1167,39 @@
 
   // ============== History ==============
 
+  async function undoDelete(sheet, removed) {
+    if (!confirm('確認要復原此筆嗎?')) return;
+    const key = sheet === '_purchases' ? 'purchases' : sheet === '_bank' ? 'bank' : 'savings';
+    // 拿掉舊 id / created_at,讓後端產生新的
+    const cleaned = { ...removed };
+    delete cleaned.id;
+    delete cleaned.created_at;
+
+    const arr = STATE.data[key] = STATE.data[key] || [];
+    const tmpId = '__tmp_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+    arr.push({ id: tmpId, ...cleaned, created_at: new Date().toISOString() });
+    renderAll();
+    if ($('#page-history').classList.contains('active')) renderHistory();
+    showToast('已復原');
+
+    try {
+      let res;
+      if      (sheet === '_purchases') res = await API.addPurchase(cleaned);
+      else if (sheet === '_bank')      res = await API.addBank(cleaned);
+      else if (sheet === '_savings')   res = await API.addSavings(cleaned);
+      const i = arr.findIndex(r => r.id === tmpId);
+      if (i >= 0 && res && res.id) arr[i] = { ...arr[i], id: res.id };
+      localStorage.setItem(KEY.cache, JSON.stringify(STATE.data));
+    } catch (e) {
+      const i = arr.findIndex(r => r.id === tmpId);
+      if (i >= 0) arr.splice(i, 1);
+      localStorage.setItem(KEY.cache, JSON.stringify(STATE.data));
+      renderAll();
+      if ($('#page-history').classList.contains('active')) renderHistory();
+      alert('復原失敗:' + e.message + '\n建議按「重新載入」同步');
+    }
+  }
+
   function bindHistory() {
     $$('#page-history .seg-btn').forEach(b => {
       b.onclick = () => {
@@ -1303,12 +1363,16 @@
       arr.splice(idx, 1);
       renderAll();
       renderHistory();
-      showToast('已刪除');
+      showActionToast('已刪除', '復原', () => undoDelete(sheet, removed), 6000);
       (async () => {
         try {
           await API.deleteRecord(sheet, id);
           localStorage.setItem(KEY.cache, JSON.stringify(STATE.data));
         } catch (e) {
+          // 雲端刪除失敗:還原本地、收掉 undo toast(已沒意義)
+          const t = $('#toast');
+          t.classList.add('hidden');
+          t.textContent = '';
           arr.splice(idx, 0, removed);
           localStorage.setItem(KEY.cache, JSON.stringify(STATE.data));
           renderAll();
