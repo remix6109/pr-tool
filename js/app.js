@@ -542,31 +542,43 @@
         ? (hasSell ? '每月買賣金額(堆疊,分代號)' : '每月買進金額(堆疊,分代號)')
         : (hasSell ? '每月買賣金額(並排,分代號)' : '每月買進金額(並排,分代號)');
 
-      // 一個代號 → 一個買 dataset(必有),如有賣再加一個賣 dataset
-      // stack 屬性只在堆疊模式才加,並排模式要拿掉(否則 Chart.js 會強制堆疊)
       const datasets = [];
-      symbols.forEach((sym, i) => {
-        const color = palette[i % palette.length];
-        const ds = {
-          label: sym,
-          data: months.map(m => (byMonth[m][sym] && byMonth[m][sym].buy) || 0),
-          backgroundColor: color
-        };
-        if (mode === 'stacked') ds.stack = 'buy';
-        datasets.push(ds);
-      });
-      if (hasSell) {
+      if (mode === 'stacked') {
+        // 堆疊模式:每代號的買、賣分開為獨立 dataset
+        // 買的全部 stack 到 'buy'(向上堆),賣的全部 stack 到 'sell'(向下堆)
+        // 「(賣)」dataset 只對真的賣過的代號才生成,避免雜訊
         symbols.forEach((sym, i) => {
-          const color = palette[i % palette.length];
-          const ds = {
+          datasets.push({
+            label: sym,
+            stack: 'buy',
+            data: months.map(m => (byMonth[m][sym] && byMonth[m][sym].buy) || 0),
+            backgroundColor: palette[i % palette.length]
+          });
+        });
+        symbols.forEach((sym, i) => {
+          const symHasSell = months.some(m => byMonth[m][sym] && byMonth[m][sym].sell > 0);
+          if (!symHasSell) return;
+          datasets.push({
             label: sym + ' (賣)',
+            stack: 'sell',
             data: months.map(m => -((byMonth[m][sym] && byMonth[m][sym].sell) || 0)),
-            backgroundColor: color,
+            backgroundColor: palette[i % palette.length],
             borderColor: '#FFFFFF',
             borderWidth: 1
-          };
-          if (mode === 'stacked') ds.stack = 'sell';
-          datasets.push(ds);
+          });
+        });
+      } else {
+        // 並排模式:每代號 1 個 dataset,值 = 該月買金額 − 賣金額(淨值)
+        // 月份只有買 → 正值;有賣多於買 → 負值;只有賣 → 負值
+        symbols.forEach((sym, i) => {
+          datasets.push({
+            label: sym,
+            data: months.map(m => {
+              const v = byMonth[m][sym];
+              return v ? (v.buy - v.sell) : 0;
+            }),
+            backgroundColor: palette[i % palette.length]
+          });
         });
       }
       const opts = chartBarOptions();
