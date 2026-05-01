@@ -539,22 +539,36 @@
         options: chartBarOptions()
       });
     } else if (tab === 'dividends') {
-      // 月份股利金額
-      const byMonth = {};
+      // 月份 × 代號 累計(每代號一個顏色 → stacked bar)
+      const byMonthSymbol = {};
+      const symbolSet = new Set();
       raw.forEach(r => {
         const m = String(r.date || '').slice(0, 7);
         if (!m) return;
-        byMonth[m] = (byMonth[m] || 0) + (Number(r.total) || 0);
+        const sym = r.symbol || '?';
+        symbolSet.add(sym);
+        if (!byMonthSymbol[m]) byMonthSymbol[m] = {};
+        byMonthSymbol[m][sym] = (byMonthSymbol[m][sym] || 0) + (Number(r.total) || 0);
       });
-      const months = Object.keys(byMonth).sort();
+      const months = Object.keys(byMonthSymbol).sort();
       if (months.length === 0) { wrap.classList.add('hidden'); return; }
       wrap.classList.remove('hidden');
-      $('#history-chart-title').textContent = '每月股利金額';
+      $('#history-chart-title').textContent = '每月股利金額(分代號)';
+      const symbols = Array.from(symbolSet).sort();
+      const palette = STATE.chartColors || getCurrentPalette().chart;
+      const datasets = symbols.map((sym, i) => ({
+        label: sym,
+        data: months.map(m => byMonthSymbol[m][sym] || 0),
+        backgroundColor: palette[i % palette.length]
+      }));
+      const opts = chartBarOptions();
+      opts.scales.x.stacked = true;
+      opts.scales.y.stacked = true;
       if (_charts.history) _charts.history.destroy();
       _charts.history = new Chart(canvas, {
         type: 'bar',
-        data: { labels: months, datasets: [{ label: '股利', data: months.map(m => byMonth[m]), backgroundColor: getCssVar('--green') }] },
-        options: chartBarOptions()
+        data: { labels: months, datasets },
+        options: opts
       });
     } else if (tab === 'bank') {
       // 月份收入 vs 支出
