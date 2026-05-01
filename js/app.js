@@ -1841,11 +1841,7 @@
     const category = $('#filter-category').value;
     const year     = $('#filter-year').value;
 
-    // 統計與圖表用「未套用分類篩選」的資料(不變)
-    renderHistorySummary(tab, raw, personFilter);
-    renderHistoryChart(tab, raw);
-
-    // 列表才套用分類篩選
+    // 套用代號 / 類型 / 年份篩選 — 統計 + 圖表 + 列表全部一致
     if (category) {
       if (tab === 'purchases')   raw = raw.filter(r => r.symbol === category);
       else if (tab === 'dividends') raw = raw.filter(r => r.symbol === category);
@@ -1855,6 +1851,9 @@
     if (year && (tab === 'purchases' || tab === 'bank' || tab === 'dividends')) {
       raw = raw.filter(r => String(r.date || '').slice(0, 4) === year);
     }
+
+    renderHistorySummary(tab, raw, personFilter);
+    renderHistoryChart(tab, raw);
 
     // 列表(再套搜尋)
     let rows = [];
