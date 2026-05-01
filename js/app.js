@@ -506,6 +506,9 @@
     const wrap = $('#history-chart-wrap');
     const canvas = $('#chart-history');
     if (!canvas || !window.Chart) return;
+    // 只在股利分頁才顯示堆疊/並排切換鈕
+    const toggle = $('#dividend-chart-toggle');
+    if (toggle && tab !== 'dividends') toggle.classList.add('hidden');
     if (tab === 'purchases') {
       // 月份買進 vs 賣出
       const byMonth = {};
@@ -539,7 +542,7 @@
         options: chartBarOptions()
       });
     } else if (tab === 'dividends') {
-      // 月份 × 代號 累計(每代號一個顏色 → stacked bar)
+      // 月份 × 代號 累計(每代號一個顏色 → 可切換 stacked / grouped)
       const byMonthSymbol = {};
       const symbolSet = new Set();
       raw.forEach(r => {
@@ -553,7 +556,17 @@
       const months = Object.keys(byMonthSymbol).sort();
       if (months.length === 0) { wrap.classList.add('hidden'); return; }
       wrap.classList.remove('hidden');
-      $('#history-chart-title').textContent = '每月股利金額(分代號)';
+      const mode = localStorage.getItem(KEY.dividendChartMode) === 'grouped' ? 'grouped' : 'stacked';
+      // 顯示切換鈕並反映目前 mode
+      const toggle = $('#dividend-chart-toggle');
+      if (toggle) {
+        toggle.classList.remove('hidden');
+        $$('#dividend-chart-toggle .seg-btn').forEach(b =>
+          b.classList.toggle('active', b.dataset.cmode === mode));
+      }
+      $('#history-chart-title').textContent = mode === 'stacked'
+        ? '每月股利金額(堆疊)'
+        : '每月股利金額(並排)';
       const symbols = Array.from(symbolSet).sort();
       const palette = STATE.chartColors || getCurrentPalette().chart;
       const datasets = symbols.map((sym, i) => ({
@@ -562,8 +575,10 @@
         backgroundColor: palette[i % palette.length]
       }));
       const opts = chartBarOptions();
-      opts.scales.x.stacked = true;
-      opts.scales.y.stacked = true;
+      if (mode === 'stacked') {
+        opts.scales.x.stacked = true;
+        opts.scales.y.stacked = true;
+      }
       if (_charts.history) _charts.history.destroy();
       _charts.history = new Chart(canvas, {
         type: 'bar',
@@ -1709,6 +1724,13 @@
     };
     $('#filter-category').onchange = renderHistory;
     $('#filter-year').onchange     = renderHistory;
+    // 股利圖表切換(堆疊 / 並排)
+    $$('#dividend-chart-toggle .seg-btn').forEach(b => {
+      b.onclick = () => {
+        localStorage.setItem(KEY.dividendChartMode, b.dataset.cmode);
+        renderHistory();
+      };
+    });
   }
 
   function populateYearFilter(tab, raw) {

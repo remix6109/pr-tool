@@ -164,7 +164,13 @@
       </div>
       <div id="history-summary"></div>
       <div id="history-chart-wrap" class="card hidden">
-        <div class="card-title" id="history-chart-title">月份分佈</div>
+        <div class="chart-head">
+          <div class="card-title" id="history-chart-title">月份分佈</div>
+          <span class="seg seg-mini hidden" id="dividend-chart-toggle">
+            <button type="button" class="seg-btn active" data-cmode="stacked">堆疊</button>
+            <button type="button" class="seg-btn"        data-cmode="grouped">並排</button>
+          </span>
+        </div>
         <div class="chart-wrap"><canvas id="chart-history"></canvas></div>
       </div>
       <div class="list" id="history-list"></div>
