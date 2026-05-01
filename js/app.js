@@ -506,40 +506,76 @@
     const wrap = $('#history-chart-wrap');
     const canvas = $('#chart-history');
     if (!canvas || !window.Chart) return;
-    // 只在股利分頁才顯示堆疊/並排切換鈕
+    // 只在「買賣」與「股利」分頁顯示堆疊/並排切換鈕(銀行 / 月存沒這需求)
     const toggle = $('#dividend-chart-toggle');
-    if (toggle && tab !== 'dividends') toggle.classList.add('hidden');
+    if (toggle && tab !== 'dividends' && tab !== 'purchases') toggle.classList.add('hidden');
     if (tab === 'purchases') {
-      // 月份買進 vs 賣出
+      // 月份 × 代號(買進向上、賣出向下)
       const byMonth = {};
+      const symbolSet = new Set();
       raw.forEach(r => {
         const m = String(r.date || '').slice(0, 7);
         if (!m) return;
-        if (!byMonth[m]) byMonth[m] = { buy: 0, sell: 0 };
+        const sym = r.symbol || '?';
+        symbolSet.add(sym);
+        if (!byMonth[m]) byMonth[m] = {};
+        if (!byMonth[m][sym]) byMonth[m][sym] = { buy: 0, sell: 0 };
         const amt = Number(r.amount) || 0;
-        if (amt < 0) byMonth[m].sell += -amt;
-        else         byMonth[m].buy  += amt;
+        if (amt < 0) byMonth[m][sym].sell += -amt;
+        else         byMonth[m][sym].buy  += amt;
       });
       const months = Object.keys(byMonth).sort();
       if (months.length === 0) { wrap.classList.add('hidden'); return; }
       wrap.classList.remove('hidden');
-      const hasSell = months.some(m => byMonth[m].sell > 0);
-      $('#history-chart-title').textContent = hasSell ? '每月買進 vs 賣出' : '每月買進金額';
+      const symbols = Array.from(symbolSet).sort();
+      const palette = STATE.chartColors || getCurrentPalette().chart;
+      const hasSell = months.some(m => symbols.some(s => byMonth[m][s] && byMonth[m][s].sell > 0));
+      const mode = localStorage.getItem(KEY.purchaseChartMode) === 'grouped' ? 'grouped' : 'stacked';
+      // 顯示切換鈕
+      const toggle = $('#dividend-chart-toggle');
+      if (toggle) {
+        toggle.classList.remove('hidden');
+        $$('#dividend-chart-toggle .seg-btn').forEach(b =>
+          b.classList.toggle('active', b.dataset.cmode === mode));
+      }
+      $('#history-chart-title').textContent = mode === 'stacked'
+        ? (hasSell ? '每月買賣金額(堆疊,分代號)' : '每月買進金額(堆疊,分代號)')
+        : (hasSell ? '每月買賣金額(並排,分代號)' : '每月買進金額(並排,分代號)');
+
+      // 一個代號 → 一個買 dataset(必有),如有賣再加一個賣 dataset
+      const datasets = [];
+      symbols.forEach((sym, i) => {
+        const color = palette[i % palette.length];
+        datasets.push({
+          label: sym,
+          stack: 'buy',
+          data: months.map(m => (byMonth[m][sym] && byMonth[m][sym].buy) || 0),
+          backgroundColor: color
+        });
+      });
+      if (hasSell) {
+        symbols.forEach((sym, i) => {
+          const color = palette[i % palette.length];
+          datasets.push({
+            label: sym + ' (賣)',
+            stack: 'sell',
+            data: months.map(m => -((byMonth[m][sym] && byMonth[m][sym].sell) || 0)),
+            backgroundColor: color,
+            borderColor: '#FFFFFF',
+            borderWidth: 1
+          });
+        });
+      }
+      const opts = chartBarOptions();
+      if (mode === 'stacked') {
+        opts.scales.x.stacked = true;
+        opts.scales.y.stacked = true;
+      }
       if (_charts.history) _charts.history.destroy();
       _charts.history = new Chart(canvas, {
         type: 'bar',
-        data: {
-          labels: months,
-          datasets: hasSell
-            ? [
-                { label: '買進', data: months.map(m => byMonth[m].buy),   backgroundColor: getCssVar('--primary') },
-                { label: '賣出', data: months.map(m => -byMonth[m].sell), backgroundColor: getCssVar('--green') }
-              ]
-            : [
-                { label: '買進', data: months.map(m => byMonth[m].buy), backgroundColor: getCssVar('--primary') }
-              ]
-        },
-        options: chartBarOptions()
+        data: { labels: months, datasets },
+        options: opts
       });
     } else if (tab === 'dividends') {
       // 月份 × 代號 累計(每代號一個顏色 → 可切換 stacked / grouped)
@@ -1724,10 +1760,14 @@
     };
     $('#filter-category').onchange = renderHistory;
     $('#filter-year').onchange     = renderHistory;
-    // 股利圖表切換(堆疊 / 並排)
+    // 圖表切換(堆疊 / 並排)— 買賣 / 股利各自記憶
     $$('#dividend-chart-toggle .seg-btn').forEach(b => {
       b.onclick = () => {
-        localStorage.setItem(KEY.dividendChartMode, b.dataset.cmode);
+        const k = STATE.currentTab === 'purchases' ? KEY.purchaseChartMode
+                : STATE.currentTab === 'dividends' ? KEY.dividendChartMode
+                : null;
+        if (!k) return;
+        localStorage.setItem(k, b.dataset.cmode);
         renderHistory();
       };
     });

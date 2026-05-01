@@ -13,7 +13,8 @@ window.CONFIG = {
     deletedHistory: 'pr.deletedHistory',
     iconChoice: 'pr.iconChoice',
     appTitle: 'pr.appTitle',
-    dividendChartMode: 'pr.dividendChartMode'
+    dividendChartMode: 'pr.dividendChartMode',
+    purchaseChartMode: 'pr.purchaseChartMode'
   },
   APP_TITLE_DEFAULT: '購買記錄',
   DELETED_HISTORY_MAX: 50,
