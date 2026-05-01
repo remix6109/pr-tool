@@ -9,9 +9,35 @@
   <meta name="apple-mobile-web-app-title" content="購買記錄" />
   <title>購買記錄</title>
   <link rel="stylesheet" href="styles.css" />
-  <link rel="icon"             href="icon.svg" type="image/svg+xml" />
-  <link rel="apple-touch-icon" href="icon.svg" />
-  <link rel="manifest"         href="manifest.json" />
+  <script>
+  // 在 <link> 被瀏覽器解析「之前」就動態插入正確的圖示連結
+  // (iOS Safari 在頁面載入瞬間就會鎖定 apple-touch-icon 的 URL,之後 JS 改 href 沒用)
+  (function () {
+    try {
+      var valid = ['gold', 'robot', 'bag', 'chart', 'book', 'bank'];
+      var id = localStorage.getItem('pr.iconChoice') || 'gold';
+      if (valid.indexOf(id) < 0) id = 'gold';
+      var iconUrl = 'icons/' + id + '.svg';
+      var manifestUrl = 'manifest-' + id + '.json';
+      function add(rel, href, type) {
+        var l = document.createElement('link');
+        l.rel = rel; l.href = href;
+        if (type) l.type = type;
+        document.head.appendChild(l);
+      }
+      add('icon', iconUrl, 'image/svg+xml');
+      add('apple-touch-icon', iconUrl);
+      add('manifest', manifestUrl);
+    } catch (e) {
+      // localStorage 不可用時退回預設
+      var head = document.head;
+      head.insertAdjacentHTML('beforeend',
+        '<link rel="icon" type="image/svg+xml" href="icons/gold.svg">' +
+        '<link rel="apple-touch-icon" href="icons/gold.svg">' +
+        '<link rel="manifest" href="manifest.json">');
+    }
+  })();
+  </script>
 </head>
 <body>
 
