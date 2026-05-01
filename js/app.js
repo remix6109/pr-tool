@@ -705,7 +705,7 @@
     const orig = btn.textContent;
     btn.disabled = true;
     btn.textContent = '⏳ 抓取中…';
-    showToast('正在從 Google 抓現價(約 5 秒)…');
+    showToast('正在從證交所抓最新現價…');
     try {
       await API.refreshPrices();
       await loadAndRender();
