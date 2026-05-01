@@ -224,6 +224,10 @@ th { color: var(--muted); font-weight: 600; font-size: .8rem; }
   background: var(--surface); color: var(--text);
   box-shadow: var(--shadow);
 }
+.seg.seg-mini .seg-btn:disabled {
+  opacity: .35; cursor: not-allowed;
+}
+.seg.seg-mini .seg-btn:disabled:hover { color: var(--muted); }
 
 /* === Segmented control === */
 .seg { display: flex; gap: 4px; background: var(--bar-bg); padding: 4px; border-radius: 10px; margin-bottom: 12px; }

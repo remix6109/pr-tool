@@ -530,13 +530,24 @@
       const symbols = Array.from(symbolSet).sort();
       const palette = STATE.chartColors || getCurrentPalette().chart;
       const hasSell = months.some(m => symbols.some(s => byMonth[m][s] && byMonth[m][s].sell > 0));
-      const mode = localStorage.getItem(KEY.purchaseChartMode) === 'grouped' ? 'grouped' : 'stacked';
-      // 顯示切換鈕
+      // 5 個以上代號時,並排不適用 → 強制堆疊
+      const SYM_THRESHOLD = 5;
+      const tooManySym = symbols.length >= SYM_THRESHOLD;
+      const userMode = localStorage.getItem(KEY.purchaseChartMode) === 'grouped' ? 'grouped' : 'stacked';
+      const mode = tooManySym ? 'stacked' : userMode;
+      // 顯示切換鈕(代號太多時並排按鈕變灰)
       const toggle = $('#dividend-chart-toggle');
       if (toggle) {
         toggle.classList.remove('hidden');
-        $$('#dividend-chart-toggle .seg-btn').forEach(b =>
-          b.classList.toggle('active', b.dataset.cmode === mode));
+        $$('#dividend-chart-toggle .seg-btn').forEach(b => {
+          b.classList.toggle('active', b.dataset.cmode === mode);
+          if (b.dataset.cmode === 'grouped') {
+            b.disabled = tooManySym;
+            b.title = tooManySym
+              ? `代號 ${symbols.length} 種,並排不易讀,請用代號篩選縮小範圍`
+              : '';
+          }
+        });
       }
       $('#history-chart-title').textContent = mode === 'stacked'
         ? (hasSell ? '每月買賣金額(堆疊,分代號)' : '每月買進金額(堆疊,分代號)')
@@ -607,13 +618,24 @@
       const months = Object.keys(byMonthSymbol).sort();
       if (months.length === 0) { wrap.classList.add('hidden'); return; }
       wrap.classList.remove('hidden');
-      const mode = localStorage.getItem(KEY.dividendChartMode) === 'grouped' ? 'grouped' : 'stacked';
-      // 顯示切換鈕並反映目前 mode
+      // 5 個以上代號時,並排不適用 → 強制堆疊
+      const SYM_THRESHOLD = 5;
+      const tooManySym = symbols.length >= SYM_THRESHOLD;
+      const userMode = localStorage.getItem(KEY.dividendChartMode) === 'grouped' ? 'grouped' : 'stacked';
+      const mode = tooManySym ? 'stacked' : userMode;
+      // 顯示切換鈕(代號太多時並排按鈕變灰)
       const toggle = $('#dividend-chart-toggle');
       if (toggle) {
         toggle.classList.remove('hidden');
-        $$('#dividend-chart-toggle .seg-btn').forEach(b =>
-          b.classList.toggle('active', b.dataset.cmode === mode));
+        $$('#dividend-chart-toggle .seg-btn').forEach(b => {
+          b.classList.toggle('active', b.dataset.cmode === mode);
+          if (b.dataset.cmode === 'grouped') {
+            b.disabled = tooManySym;
+            b.title = tooManySym
+              ? `代號 ${symbols.length} 種,並排不易讀,請用代號篩選縮小範圍`
+              : '';
+          }
+        });
       }
       $('#history-chart-title').textContent = mode === 'stacked'
         ? '每月股利金額(堆疊)'
