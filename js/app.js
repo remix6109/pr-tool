@@ -543,27 +543,30 @@
         : (hasSell ? '每月買賣金額(並排,分代號)' : '每月買進金額(並排,分代號)');
 
       // 一個代號 → 一個買 dataset(必有),如有賣再加一個賣 dataset
+      // stack 屬性只在堆疊模式才加,並排模式要拿掉(否則 Chart.js 會強制堆疊)
       const datasets = [];
       symbols.forEach((sym, i) => {
         const color = palette[i % palette.length];
-        datasets.push({
+        const ds = {
           label: sym,
-          stack: 'buy',
           data: months.map(m => (byMonth[m][sym] && byMonth[m][sym].buy) || 0),
           backgroundColor: color
-        });
+        };
+        if (mode === 'stacked') ds.stack = 'buy';
+        datasets.push(ds);
       });
       if (hasSell) {
         symbols.forEach((sym, i) => {
           const color = palette[i % palette.length];
-          datasets.push({
+          const ds = {
             label: sym + ' (賣)',
-            stack: 'sell',
             data: months.map(m => -((byMonth[m][sym] && byMonth[m][sym].sell) || 0)),
             backgroundColor: color,
             borderColor: '#FFFFFF',
             borderWidth: 1
-          });
+          };
+          if (mode === 'stacked') ds.stack = 'sell';
+          datasets.push(ds);
         });
       }
       const opts = chartBarOptions();
