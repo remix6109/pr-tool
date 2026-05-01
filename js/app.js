@@ -5,7 +5,7 @@
   const HISTORY_PAGE_SIZE = 15;
 
   const KEY = CONFIG.STORAGE_KEYS;
-  let STATE = { data: null, currentTab: 'purchases', defaultPerson: '黃', editing: null, historyDetailsOpen: false, historyLimit: HISTORY_PAGE_SIZE };
+  let STATE = { data: null, currentTab: 'purchases', defaultPerson: '黃', editing: null, historyDetailsOpen: false, historyLimit: HISTORY_PAGE_SIZE, filterCategories: [] };
 
   // ============== Utils ==============
 
@@ -1785,8 +1785,9 @@
         $$('#page-history .seg-btn').forEach(x => x.classList.toggle('active', x === b));
         STATE.currentTab = b.dataset.tab;
         STATE.historyLimit = HISTORY_PAGE_SIZE;  // 切 tab 時重置分頁
-        $('#filter-category').value = '';  // 切 tab 時重置分類
-        $('#filter-year').value     = '';  // 與年度
+        STATE.filterCategories = [];             // 切 tab 重置代號 / 類型篩選
+        $('#filter-year').value     = '';        // 與年度
+        $('#filter-category-popover').classList.add('hidden');
         renderHistory();
       };
     });
@@ -1795,8 +1796,25 @@
       clearTimeout(searchTimer);
       searchTimer = setTimeout(renderHistory, 200);
     };
-    $('#filter-category').onchange = renderHistory;
-    $('#filter-year').onchange     = renderHistory;
+    $('#filter-year').onchange = renderHistory;
+
+    // 多選 popover 開關
+    const popover = $('#filter-category-popover');
+    $('#filter-category-btn').onclick = (e) => {
+      e.stopPropagation();
+      popover.classList.toggle('hidden');
+    };
+    // 點外面關閉
+    document.addEventListener('click', (e) => {
+      const wrap = $('#filter-category-wrap');
+      if (!wrap || wrap.contains(e.target)) return;
+      popover.classList.add('hidden');
+    });
+    // 全部清除
+    $('#filter-category-clear').onclick = () => {
+      STATE.filterCategories = [];
+      renderHistory();
+    };
     // 圖表切換(堆疊 / 並排)— 買賣 / 股利各自記憶
     $$('#dividend-chart-toggle .seg-btn').forEach(b => {
       b.onclick = () => {
@@ -1825,24 +1843,57 @@
   }
 
   function populateCategoryFilter(tab, raw) {
-    const sel = $('#filter-category');
-    const cur = sel.value;
-    let label = '全部', options = [];
+    const list = $('#filter-category-list');
+    const btn  = $('#filter-category-btn');
+    if (!list || !btn) return;
+    let allLabel = '全部', options = [];
     if (tab === 'purchases') {
-      label = '全部代號';
+      allLabel = '全部代號';
       options = [...new Set(raw.map(r => r.symbol).filter(Boolean))].sort();
     } else if (tab === 'dividends') {
-      label = '全部代號';
+      allLabel = '全部代號';
       options = [...new Set(raw.map(r => r.symbol).filter(Boolean))].sort();
     } else if (tab === 'bank') {
-      label = '全部類型';
+      allLabel = '全部類型';
       options = [...new Set(raw.map(r => r.type).filter(Boolean))].sort();
     } else if (tab === 'savings') {
-      label = '全部年份';
+      allLabel = '全部年份';
       options = [...new Set(raw.map(r => String(r.year)).filter(Boolean))].sort();
     }
-    sel.innerHTML = `<option value="">${label}</option>` + options.map(o => `<option value="${o}">${o}</option>`).join('');
-    if (options.includes(cur)) sel.value = cur;
+    // 清掉已不在 options 中的舊選擇(換 tab、換人員等情境)
+    STATE.filterCategories = STATE.filterCategories.filter(c => options.includes(c));
+    // 渲染勾選列表
+    list.innerHTML = options.length === 0
+      ? `<div class="ms-item empty">無資料</div>`
+      : options.map(o => `<label class="ms-item">
+          <input type="checkbox" data-cat="${escapeHtml(o)}" ${STATE.filterCategories.includes(o) ? 'checked' : ''} />
+          <span>${escapeHtml(o)}</span>
+        </label>`).join('');
+    $$('#filter-category-list input[type="checkbox"]').forEach(cb => {
+      cb.onchange = () => {
+        const cat = cb.dataset.cat;
+        if (cb.checked) {
+          if (!STATE.filterCategories.includes(cat)) STATE.filterCategories.push(cat);
+        } else {
+          STATE.filterCategories = STATE.filterCategories.filter(c => c !== cat);
+        }
+        updateCategoryButtonLabel(allLabel);
+        renderHistory();
+      };
+    });
+    updateCategoryButtonLabel(allLabel);
+    // 紀錄當前 label 給其他地方用
+    btn.dataset.allLabel = allLabel;
+  }
+
+  function updateCategoryButtonLabel(allLabel) {
+    const btn = $('#filter-category-btn');
+    if (!btn) return;
+    const fallback = allLabel || btn.dataset.allLabel || '全部';
+    const n = STATE.filterCategories.length;
+    if (n === 0)      btn.textContent = fallback;
+    else if (n === 1) btn.textContent = STATE.filterCategories[0];
+    else              btn.textContent = `已選 ${n} 個`;
   }
 
   function renderHistory() {
@@ -1860,15 +1911,15 @@
 
     populateCategoryFilter(tab, raw);
     populateYearFilter(tab, raw);
-    const category = $('#filter-category').value;
-    const year     = $('#filter-year').value;
+    const cats = STATE.filterCategories || [];
+    const year = $('#filter-year').value;
 
     // 套用代號 / 類型 / 年份篩選 — 統計 + 圖表 + 列表全部一致
-    if (category) {
-      if (tab === 'purchases')   raw = raw.filter(r => r.symbol === category);
-      else if (tab === 'dividends') raw = raw.filter(r => r.symbol === category);
-      else if (tab === 'bank')   raw = raw.filter(r => r.type === category);
-      else if (tab === 'savings')raw = raw.filter(r => String(r.year) === category);
+    if (cats.length > 0) {
+      if (tab === 'purchases')   raw = raw.filter(r => cats.includes(r.symbol));
+      else if (tab === 'dividends') raw = raw.filter(r => cats.includes(r.symbol));
+      else if (tab === 'bank')   raw = raw.filter(r => cats.includes(r.type));
+      else if (tab === 'savings')raw = raw.filter(r => cats.includes(String(r.year)));
     }
     if (year && (tab === 'purchases' || tab === 'bank' || tab === 'dividends')) {
       raw = raw.filter(r => String(r.date || '').slice(0, 4) === year);

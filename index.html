@@ -158,7 +158,15 @@
         <button class="seg-btn" data-tab="savings">月存</button>
       </div>
       <div class="filters">
-        <select id="filter-category"></select>
+        <div class="multi-select" id="filter-category-wrap">
+          <button type="button" class="ms-btn" id="filter-category-btn">全部</button>
+          <div class="ms-popover hidden" id="filter-category-popover">
+            <div class="ms-actions">
+              <button type="button" class="ms-link" id="filter-category-clear">全部清除</button>
+            </div>
+            <div class="ms-list" id="filter-category-list"></div>
+          </div>
+        </div>
         <select id="filter-year" class="hidden"></select>
         <input type="text" id="filter-search" placeholder="搜尋代號 / 備註…" />
       </div>
