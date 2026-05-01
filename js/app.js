@@ -800,10 +800,34 @@
     $('#payout-calendar').innerHTML = html;
   }
 
-  // 計算時間進度(輸入起訖日字串)
+  // 把 meta 裡的日期值轉成 Date(吃 YYYY-MM-DD 與 ISO 兩種格式)
+  function parsePlanDate(v, isEnd) {
+    if (!v) return null;
+    const s = String(v);
+    let d;
+    if (s.indexOf('T') >= 0 || s.indexOf('Z') >= 0) {
+      d = new Date(s);
+    } else {
+      d = new Date(s + (isEnd ? 'T23:59:59' : 'T00:00:00'));
+    }
+    return isNaN(d.getTime()) ? null : d;
+  }
+  // 把 Date 格式化成 YYYY-MM-DD(本地時區)
+  function formatYMD(d) {
+    if (!d) return '';
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }
+
+  // 計算時間進度(輸入起訖日字串,可為 YYYY-MM-DD 或 ISO)
   function computeTimeProgress(startStr, endStr) {
-    const start = new Date(startStr + 'T00:00:00');
-    const end   = new Date(endStr   + 'T23:59:59');
+    const start = parsePlanDate(startStr, false);
+    const end   = parsePlanDate(endStr,   true);
+    if (!start || !end) {
+      return { pct: 0, monthsTotal: 0, monthsElapsed: 0, startStr: '', endStr: '' };
+    }
     const now   = new Date();
     const totalMs   = end - start;
     const elapsedMs = Math.max(0, Math.min(totalMs, now - start));
@@ -811,7 +835,13 @@
     const monthsTotal = (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth()) + 1;
     const monthsElapsed = Math.max(0, Math.min(monthsTotal,
       (now.getFullYear() - start.getFullYear()) * 12 + (now.getMonth() - start.getMonth()) + 1));
-    return { pct, monthsTotal, monthsElapsed, startStr, endStr };
+    return {
+      pct,
+      monthsTotal,
+      monthsElapsed,
+      startStr: formatYMD(start),
+      endStr:   formatYMD(end)
+    };
   }
 
   function renderSavingsProgress(stats) {
@@ -918,14 +948,19 @@
 
   function editGoalFlow() {
     const meta = STATE.data.meta || {};
+    // 把 meta 裡可能是 ISO 的日期值轉成 YYYY-MM-DD 給 <input type="date"> 用
+    const toYMD = (v, fallback) => {
+      const d = parsePlanDate(v, false);
+      return d ? formatYMD(d) : fallback;
+    };
     $('#goal-title').value         = meta.savings_title || CONFIG.TITLE_DEFAULT;
     $('#goal-amount').value        = Number(meta.savings_goal) || CONFIG.GOAL_DEFAULT;
     $('#goal-market').value        = Number(meta.market_goal)  || CONFIG.MARKET_GOAL_DEFAULT;
-    $('#goal-start').value         = meta.plan_start || CONFIG.PLAN_START_DEFAULT;
-    $('#goal-end').value           = meta.plan_end   || CONFIG.PLAN_END_DEFAULT;
+    $('#goal-start').value         = toYMD(meta.plan_start, CONFIG.PLAN_START_DEFAULT);
+    $('#goal-end').value           = toYMD(meta.plan_end,   CONFIG.PLAN_END_DEFAULT);
     // 總市值計劃預設沿用存入計劃的起訖日(可獨立調整)
-    $('#goal-market-start').value  = meta.market_plan_start || meta.plan_start || CONFIG.PLAN_START_DEFAULT;
-    $('#goal-market-end').value    = meta.market_plan_end   || meta.plan_end   || CONFIG.PLAN_END_DEFAULT;
+    $('#goal-market-start').value  = toYMD(meta.market_plan_start || meta.plan_start, CONFIG.PLAN_START_DEFAULT);
+    $('#goal-market-end').value    = toYMD(meta.market_plan_end   || meta.plan_end,   CONFIG.PLAN_END_DEFAULT);
     openModal('modal-goal');
     setTimeout(() => $('#goal-title').focus(), 100);
   }
