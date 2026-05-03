@@ -362,6 +362,7 @@
     bindSymbolManagement();
     bindSettings();
     bindHistory();
+    bindPullToRefresh();
     await loadAndRender();
   }
 
@@ -391,6 +392,71 @@
       renderDashboard();
       if ($('#page-history').classList.contains('active')) renderHistory();
     });
+  }
+
+  // ============== 下拉刷新 ==============
+
+  function bindPullToRefresh() {
+    const indicator = $('#ptr-indicator');
+    if (!indicator) return;
+    const text = indicator.querySelector('.ptr-text');
+    const THRESHOLD = 70;          // 拉超過這個 px 才觸發
+    const MAX_VISUAL_OFFSET = 90;  // 視覺上指示器最多下移到這個 px
+    let startY = 0, pulling = false, refreshing = false;
+
+    function reset() {
+      pulling = false;
+      indicator.classList.remove('visible', 'ready');
+      indicator.style.transform = '';
+      if (text) text.textContent = '下拉刷新';
+    }
+
+    document.addEventListener('touchstart', (e) => {
+      if (refreshing) return;
+      // 任何 modal 開著就不觸發
+      if (document.querySelector('.modal:not(.hidden)')) return;
+      // 只在頁面捲到最頂時開始追蹤
+      if (window.scrollY > 0) return;
+      startY = e.touches[0].clientY;
+      pulling = true;
+    }, { passive: true });
+
+    document.addEventListener('touchmove', (e) => {
+      if (!pulling || refreshing) return;
+      const dy = e.touches[0].clientY - startY;
+      if (dy <= 0) { reset(); return; }
+      // 阻尼:拉越長越「重」
+      const offset = Math.min(MAX_VISUAL_OFFSET, dy * 0.5);
+      indicator.classList.add('visible');
+      indicator.style.transform = `translate(-50%, ${offset}px)`;
+      const ready = dy >= THRESHOLD;
+      indicator.classList.toggle('ready', ready);
+      if (text) text.textContent = ready ? '放開即可刷新' : '下拉刷新';
+    }, { passive: true });
+
+    document.addEventListener('touchend', async () => {
+      if (!pulling || refreshing) return;
+      const wasReady = indicator.classList.contains('ready');
+      pulling = false;
+      if (!wasReady) { reset(); return; }
+      refreshing = true;
+      indicator.classList.remove('ready');
+      indicator.classList.add('loading');
+      indicator.style.transform = '';
+      if (text) text.textContent = '刷新中…';
+      try {
+        await loadAndRender();
+        if (text) text.textContent = '已更新';
+      } catch (e) {
+        if (text) text.textContent = '刷新失敗';
+      } finally {
+        setTimeout(() => {
+          indicator.classList.remove('loading');
+          reset();
+          refreshing = false;
+        }, 400);
+      }
+    }, { passive: true });
   }
 
   // ============== 載入資料 ==============
@@ -1215,8 +1281,12 @@
         const which = b.dataset.open;
         openModal('modal-' + which.replace('add-', ''));
         prefillForm(which);
+        updateRepeatLastButtons();
         if (which === 'symbols') renderSymbolList();
       };
+    });
+    $$('.repeat-last').forEach(b => {
+      b.onclick = () => repeatLastEntry(b.dataset.repeat);
     });
     $$('[data-close]').forEach(b => b.onclick = () => closeAllModals());
     $$('.modal').forEach(m => m.addEventListener('click', e => {
@@ -1229,7 +1299,10 @@
     });
   }
 
-  function openModal(id) { $('#' + id).classList.remove('hidden'); }
+  function openModal(id) {
+    $('#' + id).classList.remove('hidden');
+    updateRepeatLastButtons();
+  }
   function closeAllModals() {
     $$('.modal').forEach(m => m.classList.add('hidden'));
     STATE.editing = null;
@@ -1269,6 +1342,78 @@
       $('#savings-amount').value = '';
       $('#savings-note').value = '';
     }
+  }
+
+  // 找出當前 defaultPerson 在某張表的最近一筆(以 created_at desc,fallback date desc)
+  function findLastEntry(type) {
+    if (!STATE.data) return null;
+    const person = STATE.defaultPerson;
+    const arr =
+      type === 'purchase' ? (STATE.data.purchases || []).filter(r => Number(r.amount) > 0)  // 只取買進
+      : type === 'bank'    ? (STATE.data.bank || [])
+      : type === 'savings' ? (STATE.data.savings || [])
+      : type === 'dividend'? (STATE.data.dividends || [])
+      : [];
+    const mine = arr.filter(r => r.person === person);
+    if (mine.length === 0) return null;
+    const ts = (r) => {
+      const t1 = r.created_at ? new Date(r.created_at).getTime() : 0;
+      const t2 = r.date        ? new Date(String(r.date).slice(0, 10)).getTime() : 0;
+      return Math.max(t1 || 0, t2 || 0);
+    };
+    return mine.slice().sort((a, b) => ts(b) - ts(a))[0];
+  }
+
+  function updateRepeatLastButtons() {
+    const editing = !!STATE.editing;
+    $$('.repeat-last').forEach(b => {
+      if (editing) {
+        b.style.display = 'none';
+      } else {
+        b.style.display = '';
+        const has = !!findLastEntry(b.dataset.repeat);
+        b.disabled = !has;
+        b.title = has ? '從你最近一筆紀錄帶入欄位' : '還沒有可重複的紀錄';
+      }
+    });
+  }
+
+  function repeatLastEntry(type) {
+    const r = findLastEntry(type);
+    if (!r) { showToast('沒有可重複的紀錄'); return; }
+    if (type === 'purchase') {
+      pickPerson('purchase-person', r.person);
+      setPurchaseType('buy');
+      setPurchaseUnit('stocks');
+      const sel = $('#purchase-symbol');
+      if (r.symbol && ![...sel.options].some(o => o.value === r.symbol)) {
+        sel.add(new Option(r.symbol, r.symbol));
+      }
+      sel.value = r.symbol || '';
+      $('#purchase-amount').value = Math.abs(Number(r.amount) || 0);
+      $('#purchase-price').value  = r.price || '';
+      $('#purchase-shares').value = Math.abs(Number(r.shares) || 0);
+      $('#purchase-fee').value    = r.fee || '';
+      updateSharesHint();
+    } else if (type === 'bank') {
+      pickPerson('bank-person', r.person);
+      $('#bank-type').value   = r.type || '';
+      $('#bank-amount').value = r.amount || '';
+    } else if (type === 'savings') {
+      pickPerson('savings-person', r.person);
+      $('#savings-amount').value = r.amount || '';
+    } else if (type === 'dividend') {
+      pickPerson('dividend-person', r.person);
+      const sel = $('#dividend-symbol');
+      if (r.symbol && ![...sel.options].some(o => o.value === r.symbol)) {
+        sel.add(new Option(r.symbol, r.symbol));
+      }
+      sel.value = r.symbol || '';
+      $('#dividend-total').value     = r.total || '';
+      $('#dividend-per-share').value = r.amount_per_share || '';
+      $('#dividend-shares').value    = r.shares || '';
+    }
+    showToast('已帶入上一筆');
   }
 
   function pickPerson(targetId, val) {

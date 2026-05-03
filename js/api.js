@@ -39,6 +39,7 @@ window.API = (function() {
     updateRecord:  (sheet, id, patch) => post('update_record', { sheet, id, patch }),
     deleteRecord:  (sheet, id) => post('delete_record', { sheet, id }),
     setMeta:       (key, value) => post('set_meta', { key, value }),
-    refreshPrices: () => post('refresh_prices', {})
+    refreshPrices: () => post('refresh_prices', {}),
+    takeSnapshot:  () => post('take_snapshot', {})
   };
 })();
