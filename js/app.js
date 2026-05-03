@@ -364,6 +364,7 @@
     bindHistory();
     bindPullToRefresh();
     bindCardCollapse();
+    bindInfoButtons();
     await loadAndRender();
   }
 
@@ -416,6 +417,58 @@
       const next = !card.classList.contains('collapsed');
       card.classList.toggle('collapsed', next);
       localStorage.setItem('pr.collapse.' + card.dataset.collapse, next ? '1' : '0');
+    });
+  }
+
+  // ============== 通用說明 modal ==============
+
+  const INFO_TEXTS = {
+    irr: {
+      title: '真實年化 IRR (含股利)',
+      body: `
+        <p><b>IRR</b>(內部報酬率)回答這個問題:</p>
+        <blockquote>「如果把錢放在某個固定利率的銀行,要多少利率,才能完整重現你過去這些投入和收回?」</blockquote>
+        <p>那個利率就是 IRR,所以叫「真實年化」。</p>
+
+        <p><b>為什麼比「(現價 − 均價) / 均價」公允?</b></p>
+        <ul>
+          <li><b>把時間算進去</b> — 5 年漲 50% vs 1 年漲 50% 是兩回事,IRR 會分開</li>
+          <li><b>把分批進出算進去</b> — 你不是一次梭哈,每筆錢待在市場時間不同</li>
+          <li><b>把股利算進去</b> — 高息股拿到的現金是真實收益,不能漏算</li>
+        </ul>
+
+        <p><b>怎麼讀這個數字</b></p>
+        <ul>
+          <li>持有 <b>&lt; 1 年</b>:數學對,但 1 個月運氣會被放大成全年趨勢,參考性低</li>
+          <li>持有 <b>1–3 年</b>:開始有意義,但仍受市場景氣影響</li>
+          <li>持有 <b>3–5 年</b>:相對穩定,反映該標的真實表現</li>
+          <li>持有 <b>5 年以上</b>:通常涵蓋一輪牛熊,最可信</li>
+        </ul>
+
+        <p><b>⚠️ 注意</b></p>
+        <ul>
+          <li>IRR 含「假設今天全部賣掉」的市值 — 大盤一波動,IRR 立刻變</li>
+          <li>這是<b>過去</b>的數字,不能保證未來會繼續這個速度</li>
+          <li>顯示「—」代表資料不足以解出有效解</li>
+        </ul>
+      `
+    }
+  };
+
+  function showInfoModal(key) {
+    const def = INFO_TEXTS[key];
+    if (!def) return;
+    $('#modal-info-title').textContent = def.title;
+    $('#modal-info-body').innerHTML = def.body;
+    openModal('modal-info');
+  }
+
+  function bindInfoButtons() {
+    document.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-info]');
+      if (!btn) return;
+      e.stopPropagation();
+      showInfoModal(btn.dataset.info);
     });
   }
 
@@ -625,7 +678,7 @@
         <div class="stat"><span class="label">總本金</span><span class="val">${fmt.money(s.totalCost)}</span></div>
         <div class="stat"><span class="label">總市值</span><span class="val">${fmt.money(s.marketValue)} <small class="${gainCls}">(${fmt.moneySigned(gain)} / ${fmt.pct(gainPct)})</small></span></div>
         <div class="stat"><span class="label">預估年配息</span><span class="val">${fmt.money(s.annualYield)}</span></div>
-        <div class="stat"><span class="label">真實年化 IRR <small class="muted">(含股利)</small></span><span class="val">${irrHtml}</span></div>
+        <div class="stat"><span class="label">真實年化 IRR <small class="muted">(含股利)</small> <button type="button" class="info-btn" data-info="irr" title="什麼是 IRR?">ⓘ</button></span><span class="val">${irrHtml}</span></div>
         <div class="stat"><span class="label">銀行餘額</span><span class="val">${fmt.money(s.bankBalance)}</span></div>
       </div>
     `;

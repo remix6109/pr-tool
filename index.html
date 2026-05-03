@@ -103,7 +103,7 @@
           <div class="table-wrap">
             <table id="holdings-table">
               <thead><tr>
-                <th>代號</th><th>持有</th><th>均價</th><th>現價</th><th>金額</th><th>現值</th><th>損益</th><th>年化<br><small>(含息)</small></th>
+                <th>代號</th><th>持有</th><th>均價</th><th>現價</th><th>金額</th><th>現值</th><th>損益</th><th>年化<br><small>(含息)</small> <button type="button" class="info-btn" data-info="irr" title="什麼是年化?">ⓘ</button></th>
               </tr></thead>
               <tbody></tbody>
             </table>
@@ -538,6 +538,17 @@
 
 <!-- Pull to refresh 指示器 -->
 <div id="ptr-indicator"><span class="ptr-arrow">↓</span><span class="ptr-text">下拉刷新</span></div>
+
+<!-- Modal: 通用說明 -->
+<div class="modal hidden" id="modal-info">
+  <div class="modal-box">
+    <h2 id="modal-info-title">說明</h2>
+    <div id="modal-info-body" class="info-body"></div>
+    <div class="modal-actions">
+      <button class="btn primary" data-close>了解</button>
+    </div>
+  </div>
+</div>
 
 <!-- Toast -->
 <div id="toast" class="toast hidden"></div>

@@ -666,6 +666,34 @@ th { color: var(--muted); font-weight: 600; font-size: .8rem; }
 .eta-line.gain { color: var(--green); }
 .eta-line.loss { color: var(--red); }
 
+/* === Info button === */
+.info-btn {
+  display: inline-flex;
+  align-items: center; justify-content: center;
+  width: 18px; height: 18px;
+  margin-left: 4px;
+  padding: 0;
+  border: none; background: transparent;
+  color: var(--muted);
+  font-size: .9em;
+  cursor: pointer;
+  vertical-align: middle;
+  border-radius: 50%;
+}
+.info-btn:hover, .info-btn:focus { color: var(--text); background: var(--neutral-bg); }
+
+/* 說明 modal 內文 */
+.info-body { font-size: .9rem; line-height: 1.6; }
+.info-body p { margin: 8px 0; }
+.info-body ul { padding-left: 20px; margin: 6px 0 12px; }
+.info-body li { margin: 3px 0; }
+.info-body blockquote {
+  margin: 8px 0; padding: 8px 12px;
+  background: var(--neutral-bg); border-radius: 6px;
+  border-left: 3px solid var(--muted);
+  color: var(--text); font-style: italic;
+}
+
 /* === Card collapse === */
 [data-collapse] > .card-title,
 .person-card[data-collapse] > .name {
