@@ -92,13 +92,13 @@
 
         <div class="cards-row" id="cards-people"></div>
 
-        <div class="card">
+        <div class="card" data-collapse="payout">
           <div class="card-title">12 個月配息預估 <small class="muted" style="font-weight:500;font-size:.75em;">(估)</small></div>
           <div id="payout-calendar"></div>
           <div class="muted small" style="margin-top:8px;">依年股利平均推算的預估值,實際金額以「歷史 → 股利」紀錄為準。</div>
         </div>
 
-        <div class="card">
+        <div class="card" data-collapse="holdings">
           <div class="card-title">持股明細</div>
           <div class="table-wrap">
             <table id="holdings-table">
@@ -114,12 +114,12 @@
           </div>
         </div>
 
-        <div class="card">
+        <div class="card" data-collapse="composition">
           <div class="card-title">持股組成(以市值)</div>
           <div class="chart-wrap"><canvas id="chart-holdings"></canvas></div>
         </div>
 
-        <div class="card" id="card-networth">
+        <div class="card" id="card-networth" data-collapse="networth">
           <div class="card-title">資產淨值走勢</div>
           <div id="networth-empty" class="muted small hidden">尚未有購買紀錄,無法畫資產走勢。</div>
           <div class="chart-wrap"><canvas id="chart-networth"></canvas></div>
@@ -129,7 +129,7 @@
           </div>
         </div>
 
-        <div class="card">
+        <div class="card" data-collapse="savings">
           <div class="card-title row-flex">
             <span id="savings-title">5 年存入計劃 (合計目標)</span>
             <button class="btn ghost small" id="btn-edit-goal">✏️ 改目標</button>

@@ -363,6 +363,7 @@
     bindSettings();
     bindHistory();
     bindPullToRefresh();
+    bindCardCollapse();
     await loadAndRender();
   }
 
@@ -391,6 +392,30 @@
       if (!STATE.data) return;
       renderDashboard();
       if ($('#page-history').classList.contains('active')) renderHistory();
+    });
+  }
+
+  // ============== 卡片收合 ==============
+
+  function applyCollapseStates() {
+    $$('[data-collapse]').forEach(el => {
+      const key = 'pr.collapse.' + el.dataset.collapse;
+      el.classList.toggle('collapsed', localStorage.getItem(key) === '1');
+    });
+  }
+
+  function bindCardCollapse() {
+    document.addEventListener('click', (e) => {
+      // 點到 modal 內、按鈕、或可互動元素時不觸發
+      if (e.target.closest('.modal')) return;
+      if (e.target.closest('button, a, input, select, summary')) return;
+      const title = e.target.closest('.card > .card-title, .person-card > .name');
+      if (!title) return;
+      const card = title.closest('[data-collapse]');
+      if (!card) return;
+      const next = !card.classList.contains('collapsed');
+      card.classList.toggle('collapsed', next);
+      localStorage.setItem('pr.collapse.' + card.dataset.collapse, next ? '1' : '0');
     });
   }
 
@@ -565,7 +590,7 @@
       ? `<small class="${irr >= 0 ? 'gain' : 'loss'}">${(irr * 100).toFixed(2)}%</small>`
       : `<small class="muted">資料不足</small>`;
     elPeople.innerHTML = `
-      <div class="person-card ${cls} solo">
+      <div class="person-card ${cls} solo" data-collapse="person">
         <div class="name">${escapeHtml(getPersonLabel(p))}</div>
         <div class="stat"><span class="label">總股數</span><span class="val">${fmt.money(s.totalShares)}</span></div>
         <div class="stat"><span class="label">總本金</span><span class="val">${fmt.money(s.totalCost)}</span></div>
@@ -581,6 +606,7 @@
     renderHoldingsChart(p);
     renderNetWorthChart(p);
     renderSavingsProgress(stats);
+    applyCollapseStates();
   }
 
   // 三條線:

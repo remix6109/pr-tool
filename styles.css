@@ -675,6 +675,35 @@ th { color: var(--muted); font-weight: 600; font-size: .8rem; }
 .eta-line.gain { color: var(--green); }
 .eta-line.loss { color: var(--red); }
 
+/* === Card collapse === */
+[data-collapse] > .card-title,
+.person-card[data-collapse] > .name {
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  position: relative;
+  padding-right: 26px;
+}
+[data-collapse] > .card-title::after,
+.person-card[data-collapse] > .name::after {
+  content: '▾';
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  transition: transform .2s ease;
+  color: var(--muted);
+  font-size: .9em;
+  pointer-events: none;
+}
+.card[data-collapse].collapsed > .card-title::after,
+.person-card[data-collapse].collapsed > .name::after {
+  transform: translateY(-50%) rotate(-90deg);
+}
+.card[data-collapse].collapsed > .card-title { margin-bottom: 0; }
+.card[data-collapse].collapsed > *:not(.card-title) { display: none !important; }
+.person-card[data-collapse].collapsed > *:not(.name) { display: none !important; }
+
 /* === Repeat last entry button === */
 .btn.repeat-last {
   display: block;
