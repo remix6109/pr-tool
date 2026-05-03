@@ -548,6 +548,35 @@
     return null;
   }
 
+  // 算單支股票的 XIRR(含股利、含今日市值)
+  function computeSymbolIrr(symbol, personFilter, marketValue) {
+    const flows = [];
+    (STATE.data.purchases || []).forEach(r => {
+      if (r.symbol !== symbol) return;
+      if (personFilter && r.person !== personFilter) return;
+      const dStr = String(r.date || '').slice(0, 10);
+      if (!dStr) return;
+      const date = new Date(dStr);
+      if (isNaN(date)) return;
+      const amount = Number(r.amount) || 0;
+      const fee    = Number(r.fee)    || 0;
+      if (amount > 0) flows.push({ date, amount: -(amount + fee) });
+      else if (amount < 0) flows.push({ date, amount: Math.abs(amount) - fee });
+    });
+    (STATE.data.dividends || []).forEach(r => {
+      if (r.symbol !== symbol) return;
+      if (personFilter && r.person !== personFilter) return;
+      const dStr = String(r.date || '').slice(0, 10);
+      if (!dStr) return;
+      const date = new Date(dStr);
+      if (isNaN(date)) return;
+      const t = Number(r.total) || 0;
+      if (t > 0) flows.push({ date, amount: t });
+    });
+    if (marketValue > 0) flows.push({ date: new Date(), amount: marketValue });
+    return xirr(flows);
+  }
+
   function computeIrr(person, currentMarketValue) {
     const flows = [];
     (STATE.data.purchases || []).forEach(r => {
@@ -1075,6 +1104,9 @@
       const gainCls = gain >= 0 ? 'gain' : 'loss';
       const gainPct = (cur > 0 && avgPrice > 0) ? (cur - avgPrice) / avgPrice * 100 : 0;
       const gainTxt = cur > 0 ? `${fmt.moneySigned(gain)} <small>(${fmt.pct(gainPct)})</small>` : '—';
+      const irr = computeSymbolIrr(sym, personFilter, marketValue);
+      const irrCls = irr === null ? 'muted' : (irr >= 0 ? 'gain' : 'loss');
+      const irrTxt = irr === null ? '—' : `${(irr * 100).toFixed(1)}%`;
       return `<tr data-sym="${sym}">
         <td>${sym}</td>
         <td>${fmt.money(a.shares)} 股</td>
@@ -1083,9 +1115,10 @@
         <td>${fmt.money(totalCost)}</td>
         <td>${cur > 0 ? fmt.money(marketValue) : '—'}</td>
         <td class="${gainCls}">${gainTxt}</td>
+        <td class="${irrCls}">${irrTxt}</td>
       </tr>`;
     }).join('');
-    tbody.innerHTML = rows || `<tr><td colspan="5" class="muted">尚無持股資料</td></tr>`;
+    tbody.innerHTML = rows || `<tr><td colspan="8" class="muted">尚無持股資料</td></tr>`;
 
     $('#btn-update-prices').onclick = updatePricesFlow;
     const refreshBtn = $('#btn-refresh-prices');
