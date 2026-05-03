@@ -666,6 +666,18 @@ th { color: var(--muted); font-weight: 600; font-size: .8rem; }
 .eta-line.gain { color: var(--green); }
 .eta-line.loss { color: var(--red); }
 
+/* === Sortable table headers === */
+#holdings-table thead th[data-sort] {
+  position: relative;
+  user-select: none;
+  -webkit-user-select: none;
+}
+#holdings-table thead th[data-sort]:hover {
+  background: var(--neutral-bg);
+}
+#holdings-table thead th.sort-asc::after  { content: ' ▲'; font-size: .7em; color: var(--green); }
+#holdings-table thead th.sort-desc::after { content: ' ▼'; font-size: .7em; color: var(--green); }
+
 /* === Info button === */
 .info-btn {
   display: inline-flex;

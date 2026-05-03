@@ -5,7 +5,7 @@
   const HISTORY_PAGE_SIZE = 15;
 
   const KEY = CONFIG.STORAGE_KEYS;
-  let STATE = { data: null, currentTab: 'purchases', defaultPerson: '黃', editing: null, historyDetailsOpen: false, historyLimit: HISTORY_PAGE_SIZE, filterCategories: [] };
+  let STATE = { data: null, currentTab: 'purchases', defaultPerson: '黃', editing: null, historyDetailsOpen: false, historyLimit: HISTORY_PAGE_SIZE, filterCategories: [], holdingsSort: null };
 
   // ============== Utils ==============
 
@@ -365,6 +365,7 @@
     bindPullToRefresh();
     bindCardCollapse();
     bindInfoButtons();
+    bindHoldingsSort();
     await loadAndRender();
   }
 
@@ -1145,37 +1146,87 @@
       agg[k].amount += Number(r.amount) || 0;
       agg[k].fee    += Number(r.fee)    || 0;
     });
-    const tbody = $('#holdings-table tbody');
-    const rows = Object.keys(agg).sort().map(sym => {
+    // 先把所有列的數值算好,再排序
+    const items = Object.keys(agg).map(sym => {
       const a = agg[sym];
       const totalUnits = a.shares;
-      const totalCost  = a.amount + a.fee;        // 成本基礎(含手續費)
+      const totalCost  = a.amount + a.fee;
       const avgPrice   = totalUnits > 0 ? totalCost / totalUnits : 0;
       const cur = Number((symMap[sym] || {}).current_price) || 0;
       const marketValue = cur > 0 ? cur * totalUnits : 0;
       const gain    = cur > 0 ? marketValue - totalCost : 0;
-      const gainCls = gain >= 0 ? 'gain' : 'loss';
       const gainPct = (cur > 0 && avgPrice > 0) ? (cur - avgPrice) / avgPrice * 100 : 0;
-      const gainTxt = cur > 0 ? `${fmt.moneySigned(gain)} <small>(${fmt.pct(gainPct)})</small>` : '—';
       const irr = computeSymbolIrr(sym, personFilter, marketValue);
-      const irrCls = irr === null ? 'muted' : (irr >= 0 ? 'gain' : 'loss');
-      const irrTxt = irr === null ? '—' : `${(irr * 100).toFixed(1)}%`;
-      return `<tr data-sym="${sym}">
-        <td>${sym}</td>
-        <td>${fmt.money(a.shares)} 股</td>
-        <td>${avgPrice.toFixed(2)}</td>
-        <td class="price">${cur > 0 ? cur.toFixed(2) : '—'}</td>
-        <td>${fmt.money(totalCost)}</td>
-        <td>${cur > 0 ? fmt.money(marketValue) : '—'}</td>
+      return { sym, shares: a.shares, avgPrice, cur, totalCost, marketValue, gain, gainPct, irr };
+    });
+    const sort = STATE.holdingsSort;
+    if (sort && sort.key) {
+      const dir = sort.dir === 'desc' ? -1 : 1;
+      items.sort((a, b) => {
+        let va = a[sort.key], vb = b[sort.key];
+        // null IRR / 沒現價的列固定排在最後
+        const aNull = (va === null || va === undefined || (sort.key !== 'sym' && !isFinite(va)));
+        const bNull = (vb === null || vb === undefined || (sort.key !== 'sym' && !isFinite(vb)));
+        if (aNull && bNull) return 0;
+        if (aNull) return 1;
+        if (bNull) return -1;
+        if (sort.key === 'sym') return String(va).localeCompare(String(vb)) * dir;
+        return (va - vb) * dir;
+      });
+    } else {
+      items.sort((a, b) => String(a.sym).localeCompare(String(b.sym)));
+    }
+    const tbody = $('#holdings-table tbody');
+    const rows = items.map(it => {
+      const gainCls = it.gain >= 0 ? 'gain' : 'loss';
+      const gainTxt = it.cur > 0 ? `${fmt.moneySigned(it.gain)} <small>(${fmt.pct(it.gainPct)})</small>` : '—';
+      const irrCls = it.irr === null ? 'muted' : (it.irr >= 0 ? 'gain' : 'loss');
+      const irrTxt = it.irr === null ? '—' : `${(it.irr * 100).toFixed(1)}%`;
+      return `<tr data-sym="${it.sym}">
+        <td>${it.sym}</td>
+        <td>${fmt.money(it.shares)} 股</td>
+        <td>${it.avgPrice.toFixed(2)}</td>
+        <td class="price">${it.cur > 0 ? it.cur.toFixed(2) : '—'}</td>
+        <td>${fmt.money(it.totalCost)}</td>
+        <td>${it.cur > 0 ? fmt.money(it.marketValue) : '—'}</td>
         <td class="${gainCls}">${gainTxt}</td>
         <td class="${irrCls}">${irrTxt}</td>
       </tr>`;
     }).join('');
     tbody.innerHTML = rows || `<tr><td colspan="8" class="muted">尚無持股資料</td></tr>`;
 
+    // 表頭排序指示
+    $$('#holdings-table thead th[data-sort]').forEach(th => {
+      const k = th.dataset.sort;
+      th.classList.toggle('sort-asc',  sort && sort.key === k && sort.dir === 'asc');
+      th.classList.toggle('sort-desc', sort && sort.key === k && sort.dir === 'desc');
+    });
+
     $('#btn-update-prices').onclick = updatePricesFlow;
     const refreshBtn = $('#btn-refresh-prices');
     if (refreshBtn) refreshBtn.onclick = refreshPricesFlow;
+  }
+
+  function bindHoldingsSort() {
+    const saved = localStorage.getItem('pr.holdingsSort');
+    if (saved) {
+      try { STATE.holdingsSort = JSON.parse(saved); } catch (_) {}
+    }
+    $$('#holdings-table thead th[data-sort]').forEach(th => {
+      th.style.cursor = 'pointer';
+      th.addEventListener('click', () => {
+        const k = th.dataset.sort;
+        const cur = STATE.holdingsSort;
+        let next;
+        if (!cur || cur.key !== k) next = { key: k, dir: 'desc' };
+        else if (cur.dir === 'desc') next = { key: k, dir: 'asc' };
+        else next = null;  // 第三次點 → 還原預設(代號 a-z)
+        STATE.holdingsSort = next;
+        if (next) localStorage.setItem('pr.holdingsSort', JSON.stringify(next));
+        else localStorage.removeItem('pr.holdingsSort');
+        renderHoldings(STATE.defaultPerson);
+      });
+    });
   }
 
   async function refreshPricesFlow() {

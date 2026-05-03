@@ -103,7 +103,14 @@
           <div class="table-wrap">
             <table id="holdings-table">
               <thead><tr>
-                <th>代號</th><th>持有</th><th>均價</th><th>現價</th><th>金額</th><th>現值</th><th>損益</th><th>年化<br><small>(含息)</small> <button type="button" class="info-btn" data-info="irr" title="什麼是年化?">ⓘ</button></th>
+                <th data-sort="sym">代號</th>
+                <th data-sort="shares">持有</th>
+                <th data-sort="avgPrice">均價</th>
+                <th data-sort="cur">現價</th>
+                <th data-sort="totalCost">金額</th>
+                <th data-sort="marketValue">現值</th>
+                <th data-sort="gain">損益</th>
+                <th data-sort="irr">年化<br><small>(含息)</small> <button type="button" class="info-btn" data-info="irr" title="什麼是年化?">ⓘ</button></th>
               </tr></thead>
               <tbody></tbody>
             </table>
