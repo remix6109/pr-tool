@@ -495,6 +495,61 @@
 
   // ============== Dashboard ==============
 
+  // XIRR (牛頓法) — 解出年化內部報酬率
+  // flows: [{ date: Date, amount: number }];負 = 投入,正 = 收回
+  function xirr(flows) {
+    if (!flows || flows.length < 2) return null;
+    const sorted = flows.slice().sort((a, b) => a.date - b.date);
+    const t0 = sorted[0].date.getTime();
+    const days = sorted.map(f => (f.date.getTime() - t0) / 86400000);
+    const amts = sorted.map(f => f.amount);
+    if (!amts.some(a => a > 0) || !amts.some(a => a < 0)) return null;
+    let r = 0.1;
+    for (let i = 0; i < 100; i++) {
+      let f = 0, df = 0;
+      for (let j = 0; j < amts.length; j++) {
+        const t = days[j] / 365;
+        const d = Math.pow(1 + r, t);
+        f  += amts[j] / d;
+        df -= amts[j] * t / Math.pow(1 + r, t + 1);
+      }
+      if (Math.abs(f) < 1e-6) return r;
+      if (df === 0) return null;
+      const next = r - f / df;
+      if (!isFinite(next) || next <= -0.999) return null;
+      if (Math.abs(next - r) < 1e-7) return next;
+      r = next;
+    }
+    return null;
+  }
+
+  function computeIrr(person, currentMarketValue) {
+    const flows = [];
+    (STATE.data.purchases || []).forEach(r => {
+      if (r.person !== person) return;
+      const dStr = String(r.date || '').slice(0, 10);
+      if (!dStr) return;
+      const date = new Date(dStr);
+      if (isNaN(date)) return;
+      const amount = Number(r.amount) || 0;
+      const fee    = Number(r.fee)    || 0;
+      if (amount > 0) flows.push({ date, amount: -(amount + fee) });        // 買進 = 投入
+      else if (amount < 0) flows.push({ date, amount: Math.abs(amount) - fee }); // 賣出 = 收回
+    });
+    (STATE.data.dividends || []).forEach(r => {
+      if (r.person !== person) return;
+      const dStr = String(r.date || '').slice(0, 10);
+      if (!dStr) return;
+      const date = new Date(dStr);
+      if (isNaN(date)) return;
+      const t = Number(r.total) || 0;
+      if (t > 0) flows.push({ date, amount: t });
+    });
+    // 加上「今天的當前市值」當作期末若全部賣出可拿回多少
+    if (currentMarketValue > 0) flows.push({ date: new Date(), amount: currentMarketValue });
+    return xirr(flows);
+  }
+
   function renderDashboard() {
     if (!STATE.data) return;
     const stats = computePersonStats();
@@ -505,6 +560,10 @@
     const gain = s.marketValue - s.totalCost;
     const gainCls = gain >= 0 ? 'gain' : 'loss';
     const gainPct = s.totalCost > 0 ? (gain / s.totalCost * 100) : 0;
+    const irr = computeIrr(p, s.marketValue);
+    const irrHtml = (irr !== null)
+      ? `<small class="${irr >= 0 ? 'gain' : 'loss'}">${(irr * 100).toFixed(2)}%</small>`
+      : `<small class="muted">資料不足</small>`;
     elPeople.innerHTML = `
       <div class="person-card ${cls} solo">
         <div class="name">${escapeHtml(getPersonLabel(p))}</div>
@@ -512,6 +571,7 @@
         <div class="stat"><span class="label">總本金</span><span class="val">${fmt.money(s.totalCost)}</span></div>
         <div class="stat"><span class="label">總市值</span><span class="val">${fmt.money(s.marketValue)} <small class="${gainCls}">(${fmt.moneySigned(gain)} / ${fmt.pct(gainPct)})</small></span></div>
         <div class="stat"><span class="label">預估年配息</span><span class="val">${fmt.money(s.annualYield)}</span></div>
+        <div class="stat"><span class="label">真實年化 IRR <small class="muted">(含股利)</small></span><span class="val">${irrHtml}</span></div>
         <div class="stat"><span class="label">銀行餘額</span><span class="val">${fmt.money(s.bankBalance)}</span></div>
       </div>
     `;
@@ -519,7 +579,52 @@
     renderHoldings(p);
     renderPayoutCalendar(p);
     renderHoldingsChart(p);
+    renderNetWorthChart(p);
     renderSavingsProgress(stats);
+  }
+
+  // 從 _snapshots 讀「每月底市值快照」並畫折線
+  function renderNetWorthChart(personFilter) {
+    const canvas = $('#chart-networth');
+    const empty  = $('#networth-empty');
+    if (!canvas || !window.Chart) return;
+    const snaps = (STATE.data && STATE.data.snapshots) || [];
+    // 依日期 group → 加總 market_value(可選人員篩選)
+    const byDate = {};
+    snaps.forEach(r => {
+      if (personFilter && r.person !== personFilter) return;
+      const d = String(r.date || '').slice(0, 10);
+      if (!d) return;
+      byDate[d] = (byDate[d] || 0) + (Number(r.market_value) || 0);
+    });
+    const dates = Object.keys(byDate).sort();
+    if (dates.length < 2) {
+      if (empty) empty.classList.remove('hidden');
+      canvas.style.display = 'none';
+      if (_charts.networth) { _charts.networth.destroy(); _charts.networth = null; }
+      return;
+    }
+    if (empty) empty.classList.add('hidden');
+    canvas.style.display = '';
+    const data = dates.map(d => Math.round(byDate[d]));
+    const palette = STATE.chartColors || getCurrentPalette().chart;
+    if (_charts.networth) _charts.networth.destroy();
+    _charts.networth = new Chart(canvas, {
+      type: 'line',
+      data: {
+        labels: dates,
+        datasets: [{
+          label: '總市值',
+          data,
+          borderColor: palette[0],
+          backgroundColor: palette[0] + '33',
+          fill: true,
+          tension: 0.25,
+          pointRadius: 3
+        }]
+      },
+      options: chartBarOptions()
+    });
   }
 
   // 圖表實例(用以重複渲染時銷毀舊的)
