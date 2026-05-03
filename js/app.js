@@ -583,45 +583,108 @@
     renderSavingsProgress(stats);
   }
 
-  // 從 _snapshots 讀「每月底市值快照」並畫折線
+  // 三條線:
+  //   A. 累計投入   — 每月底投入成本(100% 準確,純歷史 purchase)
+  //   B. 估算市值   — 每月底持股 × 今日價格(以今日價回推,估算)
+  //   C. 真實 snap  — _snapshots 寫入點(從今天開始累積)
   function renderNetWorthChart(personFilter) {
     const canvas = $('#chart-networth');
     const empty  = $('#networth-empty');
     if (!canvas || !window.Chart) return;
-    const snaps = (STATE.data && STATE.data.snapshots) || [];
-    // 依日期 group → 加總 market_value(可選人員篩選)
-    const byDate = {};
-    snaps.forEach(r => {
-      if (personFilter && r.person !== personFilter) return;
-      const d = String(r.date || '').slice(0, 10);
-      if (!d) return;
-      byDate[d] = (byDate[d] || 0) + (Number(r.market_value) || 0);
-    });
-    const dates = Object.keys(byDate).sort();
-    if (dates.length < 2) {
-      if (empty) empty.classList.remove('hidden');
+    const purchases = (STATE.data.purchases || []).filter(r => !personFilter || r.person === personFilter);
+    const snaps = ((STATE.data && STATE.data.snapshots) || []).filter(r => !personFilter || r.person === personFilter);
+    if (purchases.length === 0) {
+      if (empty) { empty.classList.remove('hidden'); empty.textContent = '尚未有購買紀錄,無法畫資產走勢。'; }
       canvas.style.display = 'none';
       if (_charts.networth) { _charts.networth.destroy(); _charts.networth = null; }
       return;
     }
+    const purchaseDates = purchases.map(r => String(r.date || '').slice(0, 10)).filter(Boolean).sort();
+    if (purchaseDates.length === 0) return;
     if (empty) empty.classList.add('hidden');
     canvas.style.display = '';
-    const data = dates.map(d => Math.round(byDate[d]));
+
+    const earliest = new Date(purchaseDates[0]);
+    const today = new Date();
+    const todayStr = today.toISOString().slice(0, 10);
+
+    // 生成月底日期序列(每月最後一天,直到今天)+ 今天 + snapshot 日期
+    const dateSet = new Set();
+    let y = earliest.getFullYear(), m = earliest.getMonth();
+    while (true) {
+      const monthEnd = new Date(y, m + 1, 0);  // 該月最後一天
+      if (monthEnd > today) break;
+      dateSet.add(monthEnd.toISOString().slice(0, 10));
+      m++; if (m > 11) { m = 0; y++; }
+    }
+    dateSet.add(todayStr);
+    snaps.forEach(r => {
+      const d = String(r.date || '').slice(0, 10);
+      if (d) dateSet.add(d);
+    });
+    const dates = [...dateSet].sort();
+
+    const priceMap = {};
+    (STATE.data.symbols || []).forEach(s => priceMap[s.symbol] = Number(s.current_price) || 0);
+
+    const snapByDate = {};
+    snaps.forEach(r => {
+      const d = String(r.date || '').slice(0, 10);
+      if (!d) return;
+      snapByDate[d] = (snapByDate[d] || 0) + (Number(r.market_value) || 0);
+    });
+
+    // 從最早日期開始累計
+    const sortedP = purchases.slice().sort((a, b) => {
+      const da = String(a.date || '').slice(0, 10);
+      const db = String(b.date || '').slice(0, 10);
+      return da < db ? -1 : (da > db ? 1 : 0);
+    });
+    let runCost = 0;
+    const runShares = {};
+    let pIdx = 0;
+    const investedSeries = [], estimatedSeries = [], snapshotSeries = [];
+    dates.forEach(d => {
+      while (pIdx < sortedP.length) {
+        const pd = String(sortedP[pIdx].date || '').slice(0, 10);
+        if (pd > d) break;
+        const r = sortedP[pIdx];
+        runCost += (Number(r.amount) || 0) + (Number(r.fee) || 0);
+        runShares[r.symbol] = (runShares[r.symbol] || 0) + (Number(r.shares) || 0);
+        pIdx++;
+      }
+      investedSeries.push(Math.round(runCost));
+      let est = 0;
+      Object.keys(runShares).forEach(sym => {
+        est += runShares[sym] * (priceMap[sym] || 0);
+      });
+      estimatedSeries.push(Math.round(est));
+      snapshotSeries.push(snapByDate[d] !== undefined ? Math.round(snapByDate[d]) : null);
+    });
+
     const palette = STATE.chartColors || getCurrentPalette().chart;
+    const colInvested  = palette[1] || '#94a3b8';
+    const colEstimated = palette[0] || '#3b82f6';
+    const colSnap      = palette[2] || '#22c55e';
     if (_charts.networth) _charts.networth.destroy();
     _charts.networth = new Chart(canvas, {
       type: 'line',
       data: {
         labels: dates,
-        datasets: [{
-          label: '總市值',
-          data,
-          borderColor: palette[0],
-          backgroundColor: palette[0] + '33',
-          fill: true,
-          tension: 0.25,
-          pointRadius: 3
-        }]
+        datasets: [
+          { label: '累計投入',
+            data: investedSeries,
+            borderColor: colInvested, backgroundColor: 'transparent',
+            tension: 0.2, pointRadius: 2, borderWidth: 2, borderDash: [5, 5] },
+          { label: '估算市值 (以今日價回推)',
+            data: estimatedSeries,
+            borderColor: colEstimated, backgroundColor: colEstimated + '22',
+            tension: 0.2, pointRadius: 2, borderWidth: 2, fill: true },
+          { label: '真實快照',
+            data: snapshotSeries,
+            borderColor: colSnap, backgroundColor: colSnap,
+            tension: 0.2, pointRadius: 5, borderWidth: 3, spanGaps: false }
+        ]
       },
       options: chartBarOptions()
     });

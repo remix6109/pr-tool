@@ -120,9 +120,13 @@
         </div>
 
         <div class="card" id="card-networth">
-          <div class="card-title">資產淨值走勢 <small class="muted" style="font-weight:500;font-size:.75em;">(每月快照)</small></div>
-          <div id="networth-empty" class="muted small hidden">資料還在累積中,需要至少 2 筆月度快照才能畫線。每月 1 號自動寫入。</div>
+          <div class="card-title">資產淨值走勢</div>
+          <div id="networth-empty" class="muted small hidden">尚未有購買紀錄,無法畫資產走勢。</div>
           <div class="chart-wrap"><canvas id="chart-networth"></canvas></div>
+          <div class="muted small" style="margin-top:8px;">
+            「估算市值」用<b>今日價格</b>回推歷史持股(非當時真實價格);
+            「真實快照」每月 1 號自動寫一筆,日後愈來愈準。
+          </div>
         </div>
 
         <div class="card">
