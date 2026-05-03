@@ -1162,9 +1162,7 @@
       if (!shareMap[r.symbol]) shareMap[r.symbol] = 0;
       shareMap[r.symbol] += Number(r.shares) || 0;
     });
-    // 從本月起連續 12 個月
-    const months = Array.from({ length: 12 }, (_, off) => ((curMonth - 1 + off) % 12) + 1);
-    let yearTotal = 0;
+    const months = [0, 1, 2].map(off => ((curMonth - 1 + off) % 12) + 1);
     const html = months.map(m => {
       const list = [];
       let sum = 0;
@@ -1184,20 +1182,14 @@
           list.push(sym);
         }
       });
-      yearTotal += sum;
       const isThis = m === curMonth ? ' (本月)' : '';
-      const cls = list.length === 0 ? ' payout-month-empty' : '';
-      return `<div class="payout-month${cls}">
+      return `<div class="payout-month">
         <div class="month-label">${m} 月${isThis}</div>
         <div class="symbols">${list.length ? list.join(', ') : '—'}</div>
         <div class="amount">${list.length ? fmt.money(sum) : ''}</div>
       </div>`;
     }).join('');
-    const totalHtml = `<div class="payout-total">
-      <div class="month-label">12 個月合計</div>
-      <div class="amount">${fmt.money(yearTotal)}</div>
-    </div>`;
-    $('#payout-calendar').innerHTML = html + totalHtml;
+    $('#payout-calendar').innerHTML = html;
   }
 
   // 把 meta 裡的日期值轉成 Date(吃 YYYY-MM-DD 與 ISO 兩種格式)
