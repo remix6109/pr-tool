@@ -2394,7 +2394,10 @@
     const truncated = totalRows > limit;
     const visibleRows = truncated ? rows.slice(0, limit) : rows;
     if (totalRows === 0) {
-      list.innerHTML = `<div class="empty">沒有資料</div>`;
+      const emptyMsg = tab === 'realized'
+        ? '尚未有任何賣出紀錄,所以沒有已實現損益。<br><small>實際賣出後,系統會自動算出每筆賣出的成本基礎與獲利。</small>'
+        : '沒有資料';
+      list.innerHTML = `<div class="empty">${emptyMsg}</div>`;
     } else {
       const itemsHtml = visibleRows.map(r => {
         const cls = r.amount >= 0 ? 'pos' : 'neg';
