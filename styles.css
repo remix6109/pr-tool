@@ -602,6 +602,15 @@ th { color: var(--muted); font-weight: 600; font-size: .8rem; }
 .payout-month .month-label { font-weight: 700; min-width: 50px; }
 .payout-month .symbols { color: var(--muted); flex: 1; }
 .payout-month .amount { font-weight: 600; font-variant-numeric: tabular-nums; }
+.payout-month-empty { opacity: .45; }
+.payout-total {
+  display: flex; align-items: center; gap: 12px;
+  margin-top: 10px; padding: 10px 12px;
+  background: var(--neutral-bg); border-radius: 8px;
+  font-weight: 700;
+}
+.payout-total .month-label { flex: 1; }
+.payout-total .amount { font-variant-numeric: tabular-nums; color: var(--green); }
 
 /* === Savings progress bar === */
 .row-flex { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
@@ -657,6 +666,14 @@ th { color: var(--muted); font-weight: 600; font-size: .8rem; }
 }
 .cmp-line.gain { background: var(--gain-bg); color: var(--green); }
 .cmp-line.loss { background: var(--loss-bg); color: var(--red); }
+
+.eta-line {
+  margin-top: 6px; padding: 8px 12px;
+  background: var(--neutral-bg); border-radius: 8px;
+  font-size: .85rem; text-align: center; color: var(--muted);
+}
+.eta-line.gain { color: var(--green); }
+.eta-line.loss { color: var(--red); }
 
 /* === Repeat last entry button === */
 .btn.repeat-last {

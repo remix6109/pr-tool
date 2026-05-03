@@ -575,6 +575,8 @@
     // 只在「買賣」與「股利」分頁顯示堆疊/並排切換鈕(銀行 / 月存沒這需求)
     const toggle = $('#dividend-chart-toggle');
     if (toggle && tab !== 'dividends' && tab !== 'purchases') toggle.classList.add('hidden');
+    // 已實現損益分頁:不畫圖(以摘要卡呈現)
+    if (tab === 'realized') { wrap.classList.add('hidden'); return; }
     if (tab === 'purchases') {
       // 月份 × 代號(買進向上、賣出向下)
       const byMonth = {};
@@ -808,6 +810,52 @@
     return out;
   }
 
+  // 計算每筆「賣出」的已實現損益(用加權平均成本)
+  // 回傳 [{ id, person, symbol, date, sold_shares, sell_price, cost_basis, proceeds, fee, realized_pl }, ...]
+  function computeRealizedPL() {
+    const sells = [];
+    const tally = {};  // key = "person|symbol" → { shares, cost }
+    const sorted = (STATE.data.purchases || []).slice().sort((a, b) => {
+      const da = String(a.date || '').slice(0, 10);
+      const db = String(b.date || '').slice(0, 10);
+      if (da !== db) return da < db ? -1 : 1;
+      const ca = a.created_at ? new Date(a.created_at).getTime() : 0;
+      const cb = b.created_at ? new Date(b.created_at).getTime() : 0;
+      return ca - cb;
+    });
+    sorted.forEach(r => {
+      const key = (r.person || '') + '|' + (r.symbol || '');
+      if (!tally[key]) tally[key] = { shares: 0, cost: 0 };
+      const t = tally[key];
+      const shares = Number(r.shares) || 0;
+      const amount = Number(r.amount) || 0;
+      const fee    = Number(r.fee)    || 0;
+      const isSell = amount < 0 || shares < 0;
+      if (!isSell) {
+        t.shares += shares;
+        t.cost   += amount + fee;
+      } else {
+        const soldShares = Math.abs(shares);
+        const proceeds  = Math.abs(amount) - fee;
+        const prevAvg   = t.shares > 0 ? t.cost / t.shares : 0;
+        const costBasis = prevAvg * soldShares;
+        sells.push({
+          id: r.id, person: r.person, symbol: r.symbol, date: r.date,
+          sold_shares: soldShares,
+          sell_price:  Number(r.price) || 0,
+          cost_basis:  costBasis,
+          proceeds,
+          fee,
+          realized_pl: proceeds - costBasis
+        });
+        t.shares -= soldShares;
+        t.cost   -= costBasis;
+        if (t.shares < 0.0001) { t.shares = 0; t.cost = 0; }
+      }
+    });
+    return sells;
+  }
+
   function renderHoldings(personFilter) {
     const symMap = {};
     (STATE.data.symbols || []).forEach(s => symMap[s.symbol] = s);
@@ -920,7 +968,9 @@
       if (!shareMap[r.symbol]) shareMap[r.symbol] = 0;
       shareMap[r.symbol] += Number(r.shares) || 0;
     });
-    const months = [0, 1, 2].map(off => ((curMonth - 1 + off) % 12) + 1);
+    // 從本月起連續 12 個月
+    const months = Array.from({ length: 12 }, (_, off) => ((curMonth - 1 + off) % 12) + 1);
+    let yearTotal = 0;
     const html = months.map(m => {
       const list = [];
       let sum = 0;
@@ -940,14 +990,20 @@
           list.push(sym);
         }
       });
+      yearTotal += sum;
       const isThis = m === curMonth ? ' (本月)' : '';
-      return `<div class="payout-month">
+      const cls = list.length === 0 ? ' payout-month-empty' : '';
+      return `<div class="payout-month${cls}">
         <div class="month-label">${m} 月${isThis}</div>
         <div class="symbols">${list.length ? list.join(', ') : '—'}</div>
         <div class="amount">${list.length ? fmt.money(sum) : ''}</div>
       </div>`;
     }).join('');
-    $('#payout-calendar').innerHTML = html;
+    const totalHtml = `<div class="payout-total">
+      <div class="month-label">12 個月合計</div>
+      <div class="amount">${fmt.money(yearTotal)}</div>
+    </div>`;
+    $('#payout-calendar').innerHTML = html + totalHtml;
   }
 
   // 把 meta 裡的日期值轉成 Date(吃 YYYY-MM-DD 與 ISO 兩種格式)
@@ -1037,9 +1093,30 @@
         ${label} ${fmt.moneySigned(expectedDiff)} (${fmt.pct(curPct - time.pct)})
       </div>`;
     };
+    // 達成預測:依當前每月增量速度線性外推
+    const buildEta = (current, target, time) => {
+      if (target <= 0 || time.monthsElapsed <= 0 || time.monthsTotal <= 0) return '';
+      if (current >= target) {
+        return `<div class="eta-line">🎯 已達標</div>`;
+      }
+      const pace = current / time.monthsElapsed;       // 平均每月增量(NT$)
+      if (pace <= 0) return '';
+      const monthsNeeded = (target - current) / pace;  // 達標還需多少個月
+      const totalMonths  = time.monthsElapsed + monthsNeeded;
+      const diff = time.monthsTotal - totalMonths;     // > 0 = 提前;< 0 = 落後
+      const cls = diff >= 0 ? 'gain' : 'loss';
+      const tag = diff >= 0
+        ? `提前 ${diff.toFixed(1)} 個月達標`
+        : `落後 ${Math.abs(diff).toFixed(1)} 個月`;
+      return `<div class="eta-line ${cls}">
+        🔮 依目前速度推算 ${monthsNeeded.toFixed(1)} 個月後達標 · ${tag}
+      </div>`;
+    };
     const savingsCmpHtml = buildCmp(moneyPct, total - expectedSaved, savTime);
+    const savingsEtaHtml = buildEta(total,   goal,       savTime);
     const expectedMv = marketGoal * (mvTime.pct / 100);
     const marketCmpHtml  = buildCmp(mvPct, totalMv - expectedMv, mvTime);
+    const marketEtaHtml  = buildEta(totalMv, marketGoal, mvTime);
 
     const buildTimeBar = (time) => `
       <div class="prog-block">
@@ -1072,6 +1149,7 @@
         </div>
         ${buildTimeBar(savTime)}
         ${savingsCmpHtml}
+        ${savingsEtaHtml}
 
         <div class="prog-divider"></div>
 
@@ -1090,6 +1168,7 @@
         </div>
         ${buildTimeBar(mvTime)}
         ${marketCmpHtml}
+        ${marketEtaHtml}
       </div>
     `;
     const btn = $('#btn-edit-goal');
@@ -1957,7 +2036,7 @@
 
   function populateYearFilter(tab, raw) {
     const sel = $('#filter-year');
-    if (tab !== 'purchases' && tab !== 'bank' && tab !== 'dividends') {
+    if (tab !== 'purchases' && tab !== 'bank' && tab !== 'dividends' && tab !== 'realized') {
       sel.classList.add('hidden');
       sel.value = '';
       return;
@@ -1975,6 +2054,9 @@
     if (!list || !btn) return;
     let allLabel = '全部', options = [];
     if (tab === 'purchases') {
+      allLabel = '全部代號';
+      options = [...new Set(raw.map(r => r.symbol).filter(Boolean))].sort();
+    } else if (tab === 'realized') {
       allLabel = '全部代號';
       options = [...new Set(raw.map(r => r.symbol).filter(Boolean))].sort();
     } else if (tab === 'dividends') {
@@ -2032,6 +2114,7 @@
     // 先抓「已套用人員篩選」的原始資料(供統計、圖表、分類下拉用)
     let raw = [];
     if (tab === 'purchases')   raw = (STATE.data.purchases || []).filter(r => !personFilter || r.person === personFilter);
+    else if (tab === 'realized') raw = computeRealizedPL().filter(r => !personFilter || r.person === personFilter);
     else if (tab === 'dividends') raw = (STATE.data.dividends || []).filter(r => !personFilter || r.person === personFilter);
     else if (tab === 'bank')   raw = (STATE.data.bank || []).filter(r => !personFilter || r.person === personFilter);
     else if (tab === 'savings')raw = (STATE.data.savings || []).filter(r => !personFilter || r.person === personFilter);
@@ -2044,11 +2127,12 @@
     // 套用代號 / 類型 / 年份篩選 — 統計 + 圖表 + 列表全部一致
     if (cats.length > 0) {
       if (tab === 'purchases')   raw = raw.filter(r => cats.includes(r.symbol));
+      else if (tab === 'realized') raw = raw.filter(r => cats.includes(r.symbol));
       else if (tab === 'dividends') raw = raw.filter(r => cats.includes(r.symbol));
       else if (tab === 'bank')   raw = raw.filter(r => cats.includes(r.type));
       else if (tab === 'savings')raw = raw.filter(r => cats.includes(String(r.year)));
     }
-    if (year && (tab === 'purchases' || tab === 'bank' || tab === 'dividends')) {
+    if (year && (tab === 'purchases' || tab === 'bank' || tab === 'dividends' || tab === 'realized')) {
       raw = raw.filter(r => String(r.date || '').slice(0, 4) === year);
     }
 
@@ -2106,6 +2190,15 @@
         amount: Number(r.amount),
         searchText: `${r.year}/${r.month} ${r.note || ''}`.toLowerCase()
       }));
+    } else if (tab === 'realized') {
+      rows = raw.slice().reverse().map(r => ({
+        id: r.id, sheet: '_purchases', person: r.person,
+        title: `${r.symbol} × ${fmt.money(r.sold_shares)} 股`,
+        sub: `${fmt.date(r.date)} · 售出 ${fmt.money(r.proceeds)} − 成本 ${fmt.money(r.cost_basis)}`,
+        amount: r.realized_pl,
+        readonly: true,
+        searchText: String(r.symbol || '').toLowerCase()
+      }));
     }
     if (search) rows = rows.filter(r => r.searchText.includes(search));
 
@@ -2120,6 +2213,11 @@
       const itemsHtml = visibleRows.map(r => {
         const cls = r.amount >= 0 ? 'pos' : 'neg';
         const personCls = r.person === '黃' ? 'huang' : 'su';
+        const actionsHtml = r.readonly ? '' : `
+            <div class="row-actions">
+              <button class="edit-btn"   data-edit-sheet="${r.sheet}" data-edit-id="${r.id}" title="編輯">✏️</button>
+              <button class="delete-btn" data-del-sheet="${r.sheet}"  data-del-id="${r.id}"  title="刪除">🗑</button>
+            </div>`;
         return `<div class="list-item">
           <div class="badge ${personCls}">${escapeHtml(getPersonLabel(r.person)) || '?'}</div>
           <div class="main">
@@ -2127,11 +2225,7 @@
             <div class="row2">${r.sub}</div>
           </div>
           <div class="right">
-            <div class="amount ${cls}">${fmt.moneySigned(r.amount)}</div>
-            <div class="row-actions">
-              <button class="edit-btn"   data-edit-sheet="${r.sheet}" data-edit-id="${r.id}" title="編輯">✏️</button>
-              <button class="delete-btn" data-del-sheet="${r.sheet}"  data-del-id="${r.id}"  title="刪除">🗑</button>
-            </div>
+            <div class="amount ${cls}">${fmt.moneySigned(r.amount)}</div>${actionsHtml}
           </div>
         </div>`;
       }).join('');
@@ -2541,6 +2635,61 @@
         <div class="table-wrap"><table>
           <thead><tr><th>年</th><th>筆數</th><th>金額</th></tr></thead>
           <tbody>${rows}</tbody>
+        </table></div>`;
+    }
+
+    else if (tab === 'realized') {
+      const totalPL = raw.reduce((s, r) => s + r.realized_pl, 0);
+      const totalProceeds = raw.reduce((s, r) => s + r.proceeds, 0);
+      const totalBasis    = raw.reduce((s, r) => s + r.cost_basis, 0);
+      const wins  = raw.filter(r => r.realized_pl > 0).length;
+      const losses = raw.filter(r => r.realized_pl < 0).length;
+      const winRate = raw.length > 0 ? (wins / raw.length) * 100 : 0;
+      const roiPct  = totalBasis > 0 ? (totalPL / totalBasis) * 100 : 0;
+      const plCls = totalPL >= 0 ? 'gain' : 'loss';
+      cards = `
+        <div class="stat-card"><div class="lbl">賣出筆數</div><div class="val">${raw.length}</div></div>
+        <div class="stat-card"><div class="lbl">累計實現損益</div><div class="val ${plCls}">${fmt.moneySigned(totalPL)}</div></div>
+        <div class="stat-card"><div class="lbl">報酬率</div><div class="val ${plCls}">${roiPct >= 0 ? '+' : ''}${roiPct.toFixed(2)}%</div></div>
+        <div class="stat-card"><div class="lbl">勝率</div><div class="val">${winRate.toFixed(0)}% (${wins}/${raw.length})</div></div>
+      `;
+      // 分代號統計
+      const bySym = {};
+      raw.forEach(r => {
+        const k = r.symbol || '?';
+        if (!bySym[k]) bySym[k] = { count: 0, pl: 0, basis: 0 };
+        bySym[k].count += 1;
+        bySym[k].pl    += r.realized_pl;
+        bySym[k].basis += r.cost_basis;
+      });
+      const symRows = Object.keys(bySym).sort().map(k => {
+        const a = bySym[k];
+        const r = a.basis > 0 ? (a.pl / a.basis) * 100 : 0;
+        const cls = a.pl >= 0 ? 'gain' : 'loss';
+        return `<tr><td>${k}</td><td>${a.count}</td><td class="${cls}">${fmt.moneySigned(a.pl)}</td><td class="${cls}">${r >= 0 ? '+' : ''}${r.toFixed(2)}%</td></tr>`;
+      }).join('');
+      // 分年度統計
+      const byYear = {};
+      raw.forEach(r => {
+        const y = String(r.date || '').slice(0, 4) || '?';
+        if (!byYear[y]) byYear[y] = { count: 0, pl: 0 };
+        byYear[y].count += 1;
+        byYear[y].pl    += r.realized_pl;
+      });
+      const yearRows = Object.keys(byYear).sort().map(y => {
+        const a = byYear[y];
+        const cls = a.pl >= 0 ? 'gain' : 'loss';
+        return `<tr><td>${y}</td><td>${a.count}</td><td class="${cls}">${fmt.moneySigned(a.pl)}</td></tr>`;
+      }).join('');
+      breakdown = `<div class="breakdown-title">分代號統計</div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>代號</th><th>筆數</th><th>實現損益</th><th>報酬率</th></tr></thead>
+          <tbody>${symRows}</tbody>
+        </table></div>
+        <div class="breakdown-title">分年度統計</div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>年</th><th>筆數</th><th>實現損益</th></tr></thead>
+          <tbody>${yearRows}</tbody>
         </table></div>`;
     }
 
