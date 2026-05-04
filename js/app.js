@@ -2498,13 +2498,18 @@
         };
       });
     } else if (tab === 'bank') {
-      rows = raw.slice().reverse().map(r => ({
-        id: r.id, sheet: '_bank', person: r.person,
-        title: r.type,
-        sub: `${fmt.date(r.date)}${r.note ? ' · ' + r.note : ''}`,
-        amount: (String(r.type).startsWith('支出') ? -1 : 1) * Number(r.amount),
-        searchText: `${r.type} ${r.note || ''}`.toLowerCase()
-      }));
+      rows = raw.slice().reverse().map(r => {
+        const isLinked = !!r.link_type;
+        const prefix = isLinked ? '🔗 ' : '';
+        return {
+          id: r.id, sheet: '_bank', person: r.person,
+          title: prefix + r.type,
+          sub: `${fmt.date(r.date)}${r.note ? ' · ' + r.note : ''}${isLinked ? ' · 自動同步' : ''}`,
+          amount: (String(r.type).startsWith('支出') ? -1 : 1) * Number(r.amount),
+          readonly: isLinked,  // 連動紀錄不顯示編輯/刪除按鈕(去原始分頁編輯)
+          searchText: `${r.type} ${r.note || ''}`.toLowerCase()
+        };
+      });
     } else if (tab === 'savings') {
       rows = raw.slice().reverse().map(r => ({
         id: r.id, sheet: '_savings', person: r.person,
