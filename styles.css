@@ -674,6 +674,15 @@ th { color: var(--muted); font-weight: 600; font-size: .8rem; }
 .eta-line.gain { color: var(--green); }
 .eta-line.loss { color: var(--red); }
 
+/* === Holdings totals row === */
+#holdings-table .totals-row {
+  background: var(--neutral-bg);
+}
+#holdings-table .totals-row td {
+  border-top: 2px solid var(--border);
+  font-variant-numeric: tabular-nums;
+}
+
 /* === Sortable table headers === */
 #holdings-table thead th[data-sort] {
   position: relative;

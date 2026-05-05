@@ -1253,7 +1253,29 @@
         <td class="${irrCls}">${irrTxt}</td>
       </tr>`;
     }).join('');
-    tbody.innerHTML = rows || `<tr><td colspan="8" class="muted">尚無持股資料</td></tr>`;
+    // 總計列(只有列數 > 0 才顯示)
+    let totalsRow = '';
+    if (items.length > 0) {
+      const totalCost = items.reduce((s, it) => s + it.totalCost, 0);
+      const totalMv   = items.reduce((s, it) => s + it.marketValue, 0);
+      const totalGain = totalMv - totalCost;
+      const totalGainPct = totalCost > 0 ? (totalGain / totalCost * 100) : 0;
+      const totalGainCls = totalGain >= 0 ? 'gain' : 'loss';
+      const portfolioIrr = computeIrr(personFilter, totalMv);
+      const portfolioIrrCls = portfolioIrr === null ? 'muted' : (portfolioIrr >= 0 ? 'gain' : 'loss');
+      const portfolioIrrTxt = portfolioIrr === null ? '—' : `${(portfolioIrr * 100).toFixed(1)}%`;
+      totalsRow = `<tr class="totals-row">
+        <td><b>總計</b></td>
+        <td>—</td>
+        <td>—</td>
+        <td>—</td>
+        <td><b>${fmt.money(totalCost)}</b></td>
+        <td><b>${fmt.money(totalMv)}</b></td>
+        <td class="${totalGainCls}"><b>${fmt.moneySigned(totalGain)}</b> <small>(${fmt.pct(totalGainPct)})</small></td>
+        <td class="${portfolioIrrCls}"><b>${portfolioIrrTxt}</b></td>
+      </tr>`;
+    }
+    tbody.innerHTML = (rows + totalsRow) || `<tr><td colspan="8" class="muted">尚無持股資料</td></tr>`;
 
     // 表頭排序指示
     $$('#holdings-table thead th[data-sort]').forEach(th => {
