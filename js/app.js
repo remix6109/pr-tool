@@ -23,6 +23,14 @@
     }
   };
 
+  // 把 Date 物件格式化為「本地時區」的 yyyy-MM-dd(避免 toISOString 轉 UTC 少 1 天)
+  function ymdLocal(d) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${dd}`;
+  }
+
   async function sha256(s) {
     const buf = new TextEncoder().encode(s);
     const h = await crypto.subtle.digest('SHA-256', buf);
@@ -767,7 +775,7 @@
 
     const earliest = new Date(purchaseDates[0]);
     const today = new Date();
-    const todayStr = today.toISOString().slice(0, 10);
+    const todayStr = ymdLocal(today);
 
     // 生成月底日期序列(每月最後一天,直到今天)+ 今天 + snapshot 日期
     const dateSet = new Set();
@@ -775,7 +783,7 @@
     while (true) {
       const monthEnd = new Date(y, m + 1, 0);  // 該月最後一天
       if (monthEnd > today) break;
-      dateSet.add(monthEnd.toISOString().slice(0, 10));
+      dateSet.add(ymdLocal(monthEnd));
       m++; if (m > 11) { m = 0; y++; }
     }
     dateSet.add(todayStr);
@@ -1764,7 +1772,7 @@
   }
 
   function prefillForm(which) {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = ymdLocal(new Date());
     if (which === 'add-purchase') {
       $('#purchase-date').value = today;
       pickPerson('purchase-person', STATE.defaultPerson);
@@ -3261,7 +3269,7 @@
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `購買記錄_${new Date().toISOString().slice(0, 10)}.json`;
+      a.download = `購買記錄_${ymdLocal(new Date())}.json`;
       a.click();
       URL.revokeObjectURL(url);
     };
