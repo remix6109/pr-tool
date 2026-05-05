@@ -108,6 +108,14 @@ html, body {
 .big-btn.purple  { background: var(--purple); color: white; }
 .big-btn.slate    { background: var(--slate); color: white; }
 .big-btn.dividend { background: var(--huang); color: white; }
+.big-btn-text { display: flex; flex-direction: column; gap: 2px; align-items: flex-start; flex: 1; }
+.big-btn-text .title { font-size: 1.15rem; font-weight: 600; line-height: 1.2; }
+.big-btn-text .hint  { font-size: .78rem; font-weight: 400; opacity: .85; line-height: 1.2; }
+.add-help-row {
+  display: flex; justify-content: flex-end;
+  margin-bottom: 10px;
+}
+.add-help-row .btn { font-size: .8rem; }
 
 /* === Top bar === */
 .topbar {
