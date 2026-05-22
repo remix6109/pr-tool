@@ -37,12 +37,12 @@
     return Array.from(new Uint8Array(h)).map(b => b.toString(16).padStart(2, '0')).join('');
   }
 
-  function showToast(msg) {
+  function showToast(msg, durationMs) {
     const el = $('#toast');
     el.textContent = msg;
     el.classList.remove('hidden');
     clearTimeout(el._t);
-    el._t = setTimeout(() => el.classList.add('hidden'), 1800);
+    el._t = setTimeout(() => el.classList.add('hidden'), durationMs || 1800);
   }
 
   function showActionToast(msg, actionLabel, actionFn, durationMs) {
@@ -1316,13 +1316,24 @@
     const orig = btn.textContent;
     btn.disabled = true;
     btn.textContent = '⏳ 抓取中…';
-    showToast('正在從證交所抓最新現價…');
+    showToast('正在從證交所抓最新現價…', 60000);   // 保留至完成
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 45000);  // 45 秒強制超時
     try {
-      await API.refreshPrices();
+      const result = await API.refreshPrices(ctrl.signal);
+      clearTimeout(timer);
       await loadAndRender();
-      showToast('✅ 現價已更新');
+      const fetched = (result && result.fetched) || 0;
+      if (fetched > 0) {
+        showToast(`✅ 已更新 ${fetched} 檔現價`);
+      } else {
+        showToast('⚠️ 未取得即時報價（非交易時間？），現價維持原值', 3500);
+      }
     } catch (e) {
-      alert('更新失敗:' + e.message);
+      clearTimeout(timer);
+      const isTimeout = e.name === 'AbortError';
+      const msg = isTimeout ? '連線逾時，請稍後再試' : ('更新失敗：' + e.message);
+      showActionToast('❌ ' + msg, '重試', refreshPricesFlow, 6000);
     } finally {
       btn.disabled = false;
       btn.textContent = orig;

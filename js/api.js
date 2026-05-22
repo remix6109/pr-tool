@@ -15,15 +15,17 @@ window.API = (function() {
     return json.data;
   }
 
-  async function post(action, data) {
+  async function post(action, data, signal) {
     const url = getUrl();
     // 注意:用 text/plain 避開 CORS preflight;Apps Script 仍能解析 e.postData.contents
-    const res = await fetch(url, {
+    const opts = {
       method: 'POST',
       body: JSON.stringify({ action, data }),
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       redirect: 'follow'
-    });
+    };
+    if (signal) opts.signal = signal;
+    const res = await fetch(url, opts);
     const json = await res.json();
     if (!json.ok) throw new Error(json.error || '寫入失敗');
     return json.data;
@@ -39,7 +41,7 @@ window.API = (function() {
     updateRecord:  (sheet, id, patch) => post('update_record', { sheet, id, patch }),
     deleteRecord:  (sheet, id) => post('delete_record', { sheet, id }),
     setMeta:       (key, value) => post('set_meta', { key, value }),
-    refreshPrices: () => post('refresh_prices', {}),
+    refreshPrices: (signal) => post('refresh_prices', {}, signal),
     takeSnapshot:  () => post('take_snapshot', {})
   };
 })();
