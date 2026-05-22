@@ -1323,11 +1323,13 @@
       const result = await API.refreshPrices(ctrl.signal);
       clearTimeout(timer);
       await loadAndRender();
-      const fetched = (result && result.fetched) || 0;
+      const fetched    = (result && result.fetched)    || 0;
+      const fromYahoo  = (result && result.fromYahoo)  || 0;
       if (fetched > 0) {
-        showToast(`✅ 已更新 ${fetched} 檔現價`);
+        const note = fromYahoo > 0 ? `（其中 ${fromYahoo} 檔來自 Yahoo）` : '';
+        showToast(`✅ 已更新 ${fetched} 檔現價${note}`, 2800);
       } else {
-        showToast('⚠️ 未取得即時報價（非交易時間？），現價維持原值', 3500);
+        showToast('⚠️ 兩個來源均無回應，現價維持原值', 3500);
       }
     } catch (e) {
       clearTimeout(timer);
