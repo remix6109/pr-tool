@@ -1328,13 +1328,8 @@
       const fromOpenApi  = (result && result.fromOpenApi)  || 0;
       const notFound     = (result && result.notFound)     || [];
       if (fetched > 0) {
-        // 說明價格的新鮮度：stooq = 今日收盤；OpenAPI = 前一交易日
-        let note = '';
-        if (fromStooq > 0 && fromOpenApi > 0)      note = '（今日收盤 + 部分前一交易日）';
-        else if (fromStooq > 0 && fromOpenApi === 0) note = '';           // stooq 全搞定，不用說
-        else if (fromOpenApi > 0)                   note = '（前一交易日收盤）';
         const missingNote = notFound.length > 0 ? `　找不到：${notFound.join('、')}` : '';
-        showToast(`✅ 已更新 ${fetched} 檔現價${note}${missingNote}`, notFound.length > 0 ? 5000 : 2800);
+        showToast(`✅ 已更新 ${fetched} 檔現價${missingNote}`, notFound.length > 0 ? 5000 : 2800);
       } else {
         showToast('⚠️ 所有來源均無回應，現價維持原值', 3500);
       }
