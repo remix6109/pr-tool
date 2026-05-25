@@ -1323,13 +1323,13 @@
       const result = await API.refreshPrices(ctrl.signal);
       clearTimeout(timer);
       await loadAndRender();
-      const fetched    = (result && result.fetched)    || 0;
-      const fromYahoo  = (result && result.fromYahoo)  || 0;
-      const notFound   = (result && result.notFound)   || [];
+      const fetched      = (result && result.fetched)      || 0;
+      const fromOpenApi  = (result && result.fromOpenApi)  || 0;
+      const notFound     = (result && result.notFound)     || [];
       if (fetched > 0) {
-        const yahooNote   = fromYahoo > 0 ? `（其中 ${fromYahoo} 檔來自 Yahoo）` : '';
+        const apiNote     = fromOpenApi > 0 ? `（其中 ${fromOpenApi} 檔來自官方 OpenAPI）` : '';
         const missingNote = notFound.length > 0 ? `　找不到：${notFound.join('、')}` : '';
-        showToast(`✅ 已更新 ${fetched} 檔現價${yahooNote}${missingNote}`, notFound.length > 0 ? 5000 : 2800);
+        showToast(`✅ 已更新 ${fetched} 檔現價${apiNote}${missingNote}`, notFound.length > 0 ? 5000 : 2800);
       } else {
         showToast('⚠️ 兩個來源均無回應，現價維持原值', 3500);
       }
