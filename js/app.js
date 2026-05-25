@@ -1325,9 +1325,11 @@
       await loadAndRender();
       const fetched    = (result && result.fetched)    || 0;
       const fromYahoo  = (result && result.fromYahoo)  || 0;
+      const notFound   = (result && result.notFound)   || [];
       if (fetched > 0) {
-        const note = fromYahoo > 0 ? `（其中 ${fromYahoo} 檔來自 Yahoo）` : '';
-        showToast(`✅ 已更新 ${fetched} 檔現價${note}`, 2800);
+        const yahooNote   = fromYahoo > 0 ? `（其中 ${fromYahoo} 檔來自 Yahoo）` : '';
+        const missingNote = notFound.length > 0 ? `　找不到：${notFound.join('、')}` : '';
+        showToast(`✅ 已更新 ${fetched} 檔現價${yahooNote}${missingNote}`, notFound.length > 0 ? 5000 : 2800);
       } else {
         showToast('⚠️ 兩個來源均無回應，現價維持原值', 3500);
       }
