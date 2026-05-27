@@ -1322,6 +1322,7 @@
     try {
       const result = await API.refreshPrices(ctrl.signal);
       clearTimeout(timer);
+      localStorage.removeItem(KEY.cache);   // 清舊快取，避免 loadAndRender 先閃舊價格
       await loadAndRender();
       const fetched      = (result && result.fetched)      || 0;
       const fromStooq    = (result && result.fromStooq)    || 0;
