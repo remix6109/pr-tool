@@ -584,7 +584,7 @@
       indicator.style.transform = '';
       if (text) text.textContent = '刷新中…';
       try {
-        await loadAndRender();
+        await loadAndRender(true);   // skipCache:使用者下拉時已有畫面,不需先閃舊快取
         if (text) text.textContent = '已更新';
       } catch (e) {
         if (text) text.textContent = '刷新失敗';
@@ -600,21 +600,26 @@
 
   // ============== 載入資料 ==============
 
-  async function loadAndRender() {
+  async function loadAndRender(skipCache = false) {
+    // 防止並發:同時只跑一個;若已在跑就靜默跳過
+    if (loadAndRender._running) return;
+    loadAndRender._running = true;
     $('#home-loading').classList.remove('hidden');
     $('#home-content').classList.add('hidden');
     try {
-      // 先用快取的資料快速顯示
-      const cached = localStorage.getItem(KEY.cache);
-      if (cached) {
-        try {
-          STATE.data = JSON.parse(cached);
-          renderAll();
-          $('#home-loading').classList.add('hidden');
-          $('#home-content').classList.remove('hidden');
-        } catch (_) {}
+      // 初次載入時先用快取快速顯示;刷新/更新現價時跳過,避免舊數字閃爍
+      if (!skipCache) {
+        const cached = localStorage.getItem(KEY.cache);
+        if (cached) {
+          try {
+            STATE.data = JSON.parse(cached);
+            renderAll();
+            $('#home-loading').classList.add('hidden');
+            $('#home-content').classList.remove('hidden');
+          } catch (_) {}
+        }
       }
-      // 再背景拉新資料
+      // 拉最新資料
       const data = await API.getAll();
       STATE.data = data;
       localStorage.setItem(KEY.cache, JSON.stringify(data));
@@ -623,6 +628,8 @@
       $('#home-content').classList.remove('hidden');
     } catch (e) {
       $('#home-loading').textContent = '載入失敗:' + e.message;
+    } finally {
+      loadAndRender._running = false;
     }
   }
 
@@ -1322,8 +1329,7 @@
     try {
       const result = await API.refreshPrices(ctrl.signal);
       clearTimeout(timer);
-      localStorage.removeItem(KEY.cache);   // 清舊快取，避免 loadAndRender 先閃舊價格
-      await loadAndRender();
+      await loadAndRender(true);   // skipCache:直接拉後端最新現價,不閃舊快取
       const fetched      = (result && result.fetched)      || 0;
       const fromStooq    = (result && result.fromStooq)    || 0;
       const fromOpenApi  = (result && result.fromOpenApi)  || 0;
@@ -3277,7 +3283,7 @@
 
     $('#btn-refresh').onclick = async () => {
       closeAllModals();
-      await loadAndRender();
+      await loadAndRender(true);   // skipCache:手動重新載入不需閃舊快取
       showToast('已重新載入');
     };
 
