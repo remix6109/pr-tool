@@ -1329,11 +1329,24 @@
     try {
       const result = await API.refreshPrices(ctrl.signal);
       clearTimeout(timer);
-      await loadAndRender(true);   // skipCache:直接拉後端最新現價,不閃舊快取
-      const fetched      = (result && result.fetched)      || 0;
-      const fromStooq    = (result && result.fromStooq)    || 0;
-      const fromOpenApi  = (result && result.fromOpenApi)  || 0;
-      const notFound     = (result && result.notFound)     || [];
+      const fetched   = (result && result.fetched)   || 0;
+      const notFound  = (result && result.notFound)  || [];
+      const priceMap  = (result && result.prices)    || {};
+
+      // POST 回傳時已帶回最新現價 → 直接就地更新 STATE，不需再發 GET
+      // 完全省掉第二次網路請求，消除任何並發 / 快取閃爍問題
+      if (STATE.data && STATE.data.symbols) {
+        let applied = 0;
+        STATE.data.symbols.forEach(s => {
+          const p = priceMap[s.symbol];
+          if (p && p > 0) { s.current_price = p; applied++; }
+        });
+        if (applied > 0) {
+          localStorage.setItem(KEY.cache, JSON.stringify(STATE.data));
+          renderAll();  // 只 render 一次，無 loading 閃爍
+        }
+      }
+
       if (fetched > 0) {
         const missingNote = notFound.length > 0 ? `　找不到：${notFound.join('、')}` : '';
         showToast(`✅ 已更新 ${fetched} 檔現價${missingNote}`, notFound.length > 0 ? 5000 : 2800);
