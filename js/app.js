@@ -1336,9 +1336,10 @@
       const notFound  = (result && result.notFound)  || [];
       const priceMap  = (result && result.prices)    || {};
 
+      // ── 更新 STATE.data.symbols 現價 ──
       if (Object.keys(priceMap).length > 0 && STATE.data && STATE.data.symbols) {
         // 新版 Code.gs：POST 直接帶回價格 → 就地更新，不需第二次 GET
-        // 注意：代號可能含「代號」前綴(如「代號0056」)，查表時需 strip
+        // 代號可能含「代號」前綴(如「代號0056」)，查表時 strip
         let applied = 0;
         STATE.data.symbols.forEach(s => {
           const key = String(s.symbol || '').replace(/^代號/, '');
@@ -1347,14 +1348,28 @@
         });
         if (applied > 0) {
           localStorage.setItem(KEY.cache, JSON.stringify(STATE.data));
-          renderAll();  // 只 render 一次，無 loading 閃爍
+          renderAll();
         } else {
-          // key 對不上(代號格式不一致) → 退回 GET 確保同步
-          await loadAndRender(true);
+          await loadAndRender(true);  // key 對不上 → 退回 GET
         }
       } else if (fetched > 0) {
-        // 舊版 Code.gs 相容：沒有 prices 欄位時退回 GET 同步
-        await loadAndRender(true);
+        await loadAndRender(true);    // 舊版 Code.gs 相容
+      }
+
+      // ── 更新 STATE.data.price_history（讓「漲跌」tab 立即看到新紀錄）──
+      const histEntries = (result && result.history) || [];
+      if (histEntries.length > 0 && STATE.data) {
+        if (!STATE.data.price_history) STATE.data.price_history = [];
+        // 移除同日期的舊紀錄（今天的資料換成最新一批）
+        const newDates = new Set(histEntries.map(r => String(r.date || '').slice(0, 10)));
+        STATE.data.price_history = STATE.data.price_history
+          .filter(r => !newDates.has(String(r.date || '').slice(0, 10)))
+          .concat(histEntries);
+        localStorage.setItem(KEY.cache, JSON.stringify(STATE.data));
+        // 若目前正在看漲跌 tab，立即重繪
+        if (STATE.currentTab === 'prices' && $('#page-history').classList.contains('active')) {
+          renderPriceHistory();
+        }
       }
 
       if (fetched > 0) {
