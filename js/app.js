@@ -2479,9 +2479,11 @@
         STATE.filterCategories = [];             // 切 tab 重置代號 / 類型篩選
         $('#filter-year').value     = '';        // 與年度
         $('#filter-category-popover').classList.add('hidden');
-        // 從漲跌 tab 離開時恢復代號篩選器顯示
-        const catWrap = $('#filter-category-wrap');
-        if (catWrap) catWrap.style.display = '';
+        // 切走時恢復代號篩選器、隱藏漲跌專用列
+        const catWrap   = $('#filter-category-wrap');
+        const phFilters = $('#ph-filters');
+        if (catWrap)   catWrap.style.display = '';
+        if (phFilters) phFilters.classList.add('hidden');
         renderHistory();
       };
     });
@@ -2525,26 +2527,79 @@
   // ============== 漲跌幅歷史 ==============
 
   function renderPriceHistory() {
-    // 隱藏不適用的 UI
-    const wrap = $('#history-chart-wrap');
+    // 隱藏不適用的共用 UI
+    const wrap    = $('#history-chart-wrap');
     const summary = $('#history-summary');
     const yearSel = $('#filter-year');
     const catWrap = $('#filter-category-wrap');
+    const phFilters = $('#ph-filters');
     if (wrap)    wrap.classList.add('hidden');
     if (summary) summary.innerHTML = '';
     if (yearSel) { yearSel.classList.add('hidden'); yearSel.value = ''; }
     if (catWrap) catWrap.style.display = 'none';
+    if (phFilters) phFilters.classList.remove('hidden');
+
+    // 事件綁定（只綁一次）
+    if (phFilters && !phFilters._bound) {
+      phFilters._bound = true;
+      $('#ph-held-only').onchange  = renderPriceHistory;
+      $('#ph-date-from').oninput   = renderPriceHistory;
+      $('#ph-date-to').oninput     = renderPriceHistory;
+      $('#ph-stat-btn').onclick    = () => {
+        phFilters.dataset.mode = phFilters.dataset.mode === 'stat' ? '' : 'stat';
+        renderPriceHistory();
+      };
+    }
+
+    const statMode = phFilters && phFilters.dataset.mode === 'stat';
+    const statBtn  = $('#ph-stat-btn');
+    if (statBtn) statBtn.textContent = statMode ? '📋 歷史' : '📊 統計';
+
+    const heldOnly = !!($('#ph-held-only') && $('#ph-held-only').checked);
+    const dateFrom = ($('#ph-date-from') || {}).value || '';
+    const dateTo   = ($('#ph-date-to')   || {}).value || '';
 
     const list   = $('#history-list');
     const search = ($('#filter-search').value || '').trim().toLowerCase();
-    const history = (STATE.data.price_history || []);
 
-    if (history.length === 0) {
+    // 計算持有代號集合（買入 shares > 0）
+    let heldSet = null;
+    if (heldOnly) {
+      heldSet = new Set();
+      (STATE.data.purchases || []).forEach(r => {
+        if ((Number(r.shares) || 0) > 0) heldSet.add(String(r.symbol || ''));
+      });
+    }
+
+    // 套用所有篩選
+    const history = (STATE.data.price_history || []).filter(r => {
+      const date = String(r.date || '').slice(0, 10);
+      if (dateFrom && date < dateFrom) return false;
+      if (dateTo   && date > dateTo)   return false;
+      if (heldSet  && !heldSet.has(String(r.symbol || ''))) return false;
+      if (search && !String(r.symbol || '').toLowerCase().includes(search) &&
+                    !String(r.name   || '').toLowerCase().includes(search)) return false;
+      return true;
+    });
+
+    if ((STATE.data.price_history || []).length === 0) {
       list.innerHTML = '<div class="ph-empty">尚無漲跌紀錄<br><small>請先按「抓最新現價」，之後每次抓取都會自動記錄</small></div>';
       return;
     }
+    if (history.length === 0) {
+      list.innerHTML = '<div class="ph-empty">找不到符合條件的紀錄</div>';
+      return;
+    }
 
-    // 按日期分組，每組按漲跌幅排序（跌最多 → 漲最多）
+    if (statMode) {
+      renderPriceHistoryStat(list, history, dateFrom, dateTo);
+    } else {
+      renderPriceHistoryByDate(list, history, search);
+    }
+  }
+
+  // 歷史模式：按日期分組
+  function renderPriceHistoryByDate(list, history, search) {
     const byDate = {};
     history.forEach(r => {
       const date = String(r.date || '').slice(0, 10);
@@ -2555,31 +2610,25 @@
 
     let html = '';
     for (const date of dates) {
-      let rows = byDate[date]
-        .filter(r => !search ||
-          String(r.symbol || '').toLowerCase().includes(search) ||
-          String(r.name   || '').toLowerCase().includes(search))
-        .sort((a, b) => (Number(a.change_pct) || 0) - (Number(b.change_pct) || 0));  // 跌多 → 漲多
-
+      const rows = byDate[date]
+        .sort((a, b) => (Number(a.change_pct) || 0) - (Number(b.change_pct) || 0));
       if (rows.length === 0) continue;
 
       html += `<div class="ph-group">
         <div class="ph-date">${date}</div>
-        <div class="table-wrap">
-        <table class="ph-table">
+        <div class="table-wrap"><table class="ph-table">
           <thead><tr>
             <th>代號</th><th>名稱</th><th>收盤價</th><th>漲跌</th><th>漲跌幅</th>
-          </tr></thead>
-          <tbody>`;
+          </tr></thead><tbody>`;
 
       for (const r of rows) {
-        const close  = Number(r.close_price) || 0;
-        const chg    = Number(r.change_amt)  || 0;
-        const pct    = Number(r.change_pct)  || 0;
-        const hasPrev= (Number(r.prev_close) || 0) > 0;
-        const cls    = !hasPrev ? '' : chg > 0 ? 'gain' : chg < 0 ? 'loss' : '';
-        const chgStr = !hasPrev ? '—' : (chg >= 0 ? '+' : '') + chg.toFixed(2);
-        const pctStr = !hasPrev ? '—' : (pct >= 0 ? '+' : '') + pct.toFixed(2) + '%';
+        const close   = Number(r.close_price) || 0;
+        const chg     = Number(r.change_amt)  || 0;
+        const pct     = Number(r.change_pct)  || 0;
+        const hasPrev = (Number(r.prev_close) || 0) > 0;
+        const cls     = !hasPrev ? '' : chg > 0 ? 'gain' : chg < 0 ? 'loss' : '';
+        const chgStr  = !hasPrev ? '—' : (chg >= 0 ? '+' : '') + chg.toFixed(2);
+        const pctStr  = !hasPrev ? '—' : (pct >= 0 ? '+' : '') + pct.toFixed(2) + '%';
         html += `<tr>
           <td><strong>${escapeHtml(r.symbol || '')}</strong></td>
           <td class="muted small">${escapeHtml(r.name || '')}</td>
@@ -2590,8 +2639,59 @@
       }
       html += `</tbody></table></div></div>`;
     }
+    list.innerHTML = html || '<div class="ph-empty">找不到符合條件的紀錄</div>';
+  }
 
-    list.innerHTML = html || '<div class="ph-empty">找不到符合「' + escapeHtml(search) + '」的紀錄</div>';
+  // 統計模式：按代號聚合期初→期末漲跌
+  function renderPriceHistoryStat(list, history, dateFrom, dateTo) {
+    const bySymbol = {};
+    history.forEach(r => {
+      const sym = String(r.symbol || '');
+      if (!sym) return;
+      if (!bySymbol[sym]) bySymbol[sym] = { name: '', entries: [] };
+      bySymbol[sym].entries.push(r);
+      if (r.name && !bySymbol[sym].name) bySymbol[sym].name = r.name;
+    });
+
+    const rows = [];
+    for (const [sym, data] of Object.entries(bySymbol)) {
+      const sorted     = data.entries.slice().sort((a, b) => String(a.date).localeCompare(String(b.date)));
+      const first      = sorted[0];
+      const last       = sorted[sorted.length - 1];
+      const startPrice = Number(first.close_price) || 0;
+      const endPrice   = Number(last.close_price)  || 0;
+      const chg        = startPrice > 0 ? +(endPrice - startPrice).toFixed(2) : 0;
+      const chgPct     = startPrice > 0 ? +((chg / startPrice) * 100).toFixed(2) : 0;
+      rows.push({ sym, name: data.name, startPrice, endPrice, chg, chgPct, days: sorted.length });
+    }
+    rows.sort((a, b) => a.chgPct - b.chgPct);  // 跌最多 → 漲最多
+
+    const rangeLabel = (dateFrom || dateTo)
+      ? `${dateFrom || '…'} ～ ${dateTo || '…'}`
+      : '全部資料';
+
+    let html = `<div class="ph-group">
+      <div class="ph-date">統計區間：${escapeHtml(rangeLabel)}（共 ${rows.length} 檔）</div>
+      <div class="table-wrap"><table class="ph-table">
+        <thead><tr>
+          <th>代號</th><th>名稱</th><th>期初</th><th>期末</th><th>漲跌</th><th>漲跌幅</th>
+        </tr></thead><tbody>`;
+
+    for (const r of rows) {
+      const cls    = r.chg > 0 ? 'gain' : r.chg < 0 ? 'loss' : '';
+      const chgStr = r.startPrice > 0 ? (r.chg >= 0 ? '+' : '') + r.chg.toFixed(2) : '—';
+      const pctStr = r.startPrice > 0 ? (r.chgPct >= 0 ? '+' : '') + r.chgPct.toFixed(2) + '%' : '—';
+      html += `<tr>
+        <td><strong>${escapeHtml(r.sym)}</strong></td>
+        <td class="muted small">${escapeHtml(r.name)}</td>
+        <td>${r.startPrice > 0 ? r.startPrice.toFixed(2) : '—'}</td>
+        <td>${r.endPrice > 0 ? r.endPrice.toFixed(2) : '—'}</td>
+        <td class="${cls}">${chgStr}</td>
+        <td class="${cls} ph-pct">${pctStr}</td>
+      </tr>`;
+    }
+    html += `</tbody></table></div></div>`;
+    list.innerHTML = html;
   }
 
   function populateYearFilter(tab, raw) {

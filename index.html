@@ -214,6 +214,19 @@
         <input type="text" id="filter-search" placeholder="搜尋代號 / 備註…" />
       </div>
       <div id="history-summary"></div>
+      <!-- 漲跌 tab 專用控制列 -->
+      <div id="ph-filters" class="hidden ph-filter-bar">
+        <label class="ph-filter-label">
+          <input type="checkbox" id="ph-held-only">
+          <span>僅持有</span>
+        </label>
+        <div class="ph-date-range">
+          <input type="date" id="ph-date-from" class="ph-date-input">
+          <span class="ph-date-sep">—</span>
+          <input type="date" id="ph-date-to" class="ph-date-input">
+        </div>
+        <button type="button" id="ph-stat-btn" class="btn ghost small">📊 統計</button>
+      </div>
       <div id="history-chart-wrap" class="card hidden">
         <div class="chart-head">
           <div class="card-title" id="history-chart-title">月份分佈</div>

@@ -382,6 +382,8 @@ th { color: var(--muted); font-weight: 600; font-size: .8rem; }
   padding: 4px 6px; border-bottom: 1px solid var(--border);
   white-space: nowrap;
 }
+/* 收盤價/漲跌/漲跌幅欄靠右，與 td 數值對齊 */
+.ph-table th:nth-child(n+3) { text-align: right; }
 .ph-table td { padding: 7px 6px; border-bottom: 1px solid var(--border); vertical-align: middle; }
 .ph-table tr:last-child td { border-bottom: none; }
 .ph-pct { font-weight: 700; font-variant-numeric: tabular-nums; }
@@ -390,6 +392,26 @@ th { color: var(--muted); font-weight: 600; font-size: .8rem; }
   padding: 36px 16px; text-align: center;
   color: var(--muted); line-height: 1.7;
 }
+/* 漲跌 tab 篩選列 */
+.ph-filter-bar {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+  padding: 6px 12px 4px; border-bottom: 1px solid var(--border);
+}
+.ph-filter-label {
+  display: flex; align-items: center; gap: 5px;
+  font-size: .82rem; cursor: pointer; user-select: none;
+}
+.ph-filter-label input[type="checkbox"] { width: 15px; height: 15px; cursor: pointer; accent-color: var(--accent); }
+.ph-date-range { display: flex; align-items: center; gap: 4px; }
+.ph-date-sep { font-size: .8rem; color: var(--muted); }
+.ph-date-input {
+  padding: 3px 6px; border: 1px solid var(--border); border-radius: 6px;
+  font-size: .78rem; background: var(--surface); color: var(--fg);
+  width: 112px;
+}
+/* 統計模式：期間漲跌幅正負色 */
+.ph-stat-positive { color: var(--green); font-weight: 700; }
+.ph-stat-negative { color: var(--red);   font-weight: 700; }
 
 /* === Load more button (history list) === */
 .load-more-btn {
