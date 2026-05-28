@@ -600,10 +600,12 @@
 
   // ============== 載入資料 ==============
 
+  // 版本計數器：每次呼叫 loadAndRender 就遞增；
+  // GET 回來後若版本不符(更新的呼叫已接管)就丟棄，不覆蓋畫面。
+  let _loadSeq = 0;
+
   async function loadAndRender(skipCache = false) {
-    // 防止並發:同時只跑一個;若已在跑就靜默跳過
-    if (loadAndRender._running) return;
-    loadAndRender._running = true;
+    const mySeq = ++_loadSeq;
     $('#home-loading').classList.remove('hidden');
     $('#home-content').classList.add('hidden');
     try {
@@ -612,24 +614,25 @@
         const cached = localStorage.getItem(KEY.cache);
         if (cached) {
           try {
-            STATE.data = JSON.parse(cached);
-            renderAll();
-            $('#home-loading').classList.add('hidden');
-            $('#home-content').classList.remove('hidden');
+            if (mySeq === _loadSeq) {
+              STATE.data = JSON.parse(cached);
+              renderAll();
+              $('#home-loading').classList.add('hidden');
+              $('#home-content').classList.remove('hidden');
+            }
           } catch (_) {}
         }
       }
       // 拉最新資料
       const data = await API.getAll();
+      if (mySeq !== _loadSeq) return;   // 已有更新的呼叫接管，丟棄過期結果
       STATE.data = data;
       localStorage.setItem(KEY.cache, JSON.stringify(data));
       renderAll();
       $('#home-loading').classList.add('hidden');
       $('#home-content').classList.remove('hidden');
     } catch (e) {
-      $('#home-loading').textContent = '載入失敗:' + e.message;
-    } finally {
-      loadAndRender._running = false;
+      if (mySeq === _loadSeq) $('#home-loading').textContent = '載入失敗:' + e.message;
     }
   }
 
@@ -1335,14 +1338,19 @@
 
       if (Object.keys(priceMap).length > 0 && STATE.data && STATE.data.symbols) {
         // 新版 Code.gs：POST 直接帶回價格 → 就地更新，不需第二次 GET
+        // 注意：代號可能含「代號」前綴(如「代號0056」)，查表時需 strip
         let applied = 0;
         STATE.data.symbols.forEach(s => {
-          const p = priceMap[s.symbol];
+          const key = String(s.symbol || '').replace(/^代號/, '');
+          const p = priceMap[key];
           if (p && p > 0) { s.current_price = p; applied++; }
         });
         if (applied > 0) {
           localStorage.setItem(KEY.cache, JSON.stringify(STATE.data));
           renderAll();  // 只 render 一次，無 loading 閃爍
+        } else {
+          // key 對不上(代號格式不一致) → 退回 GET 確保同步
+          await loadAndRender(true);
         }
       } else if (fetched > 0) {
         // 舊版 Code.gs 相容：沒有 prices 欄位時退回 GET 同步
