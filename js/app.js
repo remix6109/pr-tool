@@ -1333,9 +1333,8 @@
       const notFound  = (result && result.notFound)  || [];
       const priceMap  = (result && result.prices)    || {};
 
-      // POST 回傳時已帶回最新現價 → 直接就地更新 STATE，不需再發 GET
-      // 完全省掉第二次網路請求，消除任何並發 / 快取閃爍問題
-      if (STATE.data && STATE.data.symbols) {
+      if (Object.keys(priceMap).length > 0 && STATE.data && STATE.data.symbols) {
+        // 新版 Code.gs：POST 直接帶回價格 → 就地更新，不需第二次 GET
         let applied = 0;
         STATE.data.symbols.forEach(s => {
           const p = priceMap[s.symbol];
@@ -1345,6 +1344,9 @@
           localStorage.setItem(KEY.cache, JSON.stringify(STATE.data));
           renderAll();  // 只 render 一次，無 loading 閃爍
         }
+      } else if (fetched > 0) {
+        // 舊版 Code.gs 相容：沒有 prices 欄位時退回 GET 同步
+        await loadAndRender(true);
       }
 
       if (fetched > 0) {
