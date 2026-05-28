@@ -2591,6 +2591,17 @@
       return;
     }
 
+    // 圖表事件 delegation（只綁一次，innerHTML 替換後仍有效）
+    if (!list._chartBound) {
+      list._chartBound = true;
+      list.addEventListener('click', e => {
+        const symBtn = e.target.closest('.ph-sym-btn');
+        if (symBtn) { openSymbolChart(symBtn.dataset.sym); return; }
+        const dayBtn = e.target.closest('.ph-day-chart-btn');
+        if (dayBtn) { toggleDayChart(dayBtn.dataset.date); }
+      });
+    }
+
     if (statMode) {
       renderPriceHistoryStat(list, history, dateFrom, dateTo);
     } else {
@@ -2615,7 +2626,13 @@
       if (rows.length === 0) continue;
 
       html += `<div class="ph-group">
-        <div class="ph-date">${date}</div>
+        <div class="ph-date-row">
+          <span class="ph-date">${date}</span>
+          <button type="button" class="btn ghost small ph-day-chart-btn" data-date="${date}">📊</button>
+        </div>
+        <div class="ph-day-chart-wrap hidden" id="ph-dchart-${date}">
+          <canvas></canvas>
+        </div>
         <div class="table-wrap"><table class="ph-table">
           <thead><tr>
             <th>代號</th><th>名稱</th><th>收盤價</th><th>漲跌</th><th>漲跌幅</th>
@@ -2630,7 +2647,7 @@
         const chgStr  = !hasPrev ? '—' : (chg >= 0 ? '+' : '') + chg.toFixed(2);
         const pctStr  = !hasPrev ? '—' : (pct >= 0 ? '+' : '') + pct.toFixed(2) + '%';
         html += `<tr>
-          <td><strong>${escapeHtml(r.symbol || '')}</strong></td>
+          <td><button class="ph-sym-btn" data-sym="${escapeHtml(r.symbol || '')}">${escapeHtml(r.symbol || '')}</button></td>
           <td class="muted small">${escapeHtml(r.name || '')}</td>
           <td>${close > 0 ? close.toFixed(2) : '—'}</td>
           <td class="${cls}">${chgStr}</td>
@@ -2692,6 +2709,106 @@
     }
     html += `</tbody></table></div></div>`;
     list.innerHTML = html;
+  }
+
+  // 切換每日漲跌幅橫條圖
+  function toggleDayChart(date) {
+    if (!window.Chart) return;
+    const wrap   = $(`#ph-dchart-${date}`);
+    if (!wrap) return;
+    const isOpen = !wrap.classList.contains('hidden');
+
+    // 關閉全部已開著的
+    $$('.ph-day-chart-wrap:not(.hidden)').forEach(w => w.classList.add('hidden'));
+    if (_charts.dayBar) { _charts.dayBar.destroy(); _charts.dayBar = null; }
+    if (isOpen) return;  // 原本開著 → 只關閉
+
+    wrap.classList.remove('hidden');
+    const rows = (STATE.data.price_history || [])
+      .filter(r => String(r.date || '').slice(0, 10) === date && (Number(r.prev_close) || 0) > 0)
+      .sort((a, b) => (Number(a.change_pct) || 0) - (Number(b.change_pct) || 0));
+    if (rows.length === 0) { wrap.classList.add('hidden'); return; }
+
+    const css    = getComputedStyle(document.documentElement);
+    const green  = css.getPropertyValue('--green').trim()  || '#22c55e';
+    const red    = css.getPropertyValue('--red').trim()    || '#ef4444';
+    const muted  = css.getPropertyValue('--muted').trim()  || '#94a3b8';
+    const border = css.getPropertyValue('--border').trim() || 'rgba(0,0,0,.08)';
+
+    const labels = rows.map(r => r.symbol);
+    const values = rows.map(r => +(Number(r.change_pct) || 0).toFixed(2));
+    const colors = values.map(v => v > 0 ? green : v < 0 ? red : muted);
+
+    _charts.dayBar = new Chart(wrap.querySelector('canvas'), {
+      type: 'bar',
+      data: { labels, datasets: [{ data: values, backgroundColor: colors, borderRadius: 4 }] },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: ctx => (ctx.raw >= 0 ? '+' : '') + ctx.raw.toFixed(2) + '%' } }
+        },
+        scales: {
+          y: {
+            ticks: { color: muted, callback: v => v.toFixed(1) + '%' },
+            grid:  { color: border }
+          },
+          x: { ticks: { color: muted }, grid: { display: false } }
+        }
+      }
+    });
+  }
+
+  // 個股收盤價走勢折線圖
+  function openSymbolChart(sym) {
+    if (!window.Chart) return;
+    const rows = (STATE.data.price_history || [])
+      .filter(r => String(r.symbol || '') === sym && (Number(r.close_price) || 0) > 0)
+      .sort((a, b) => String(a.date).localeCompare(String(b.date)));
+    if (rows.length === 0) { showToast('沒有足夠的歷史資料'); return; }
+
+    const name = (rows.find(r => r.name) || {}).name || '';
+    $('#ph-chart-title').textContent = sym + (name ? '  ' + name : '');
+
+    const css    = getComputedStyle(document.documentElement);
+    const accent = css.getPropertyValue('--accent').trim() || '#3b82f6';
+    const muted  = css.getPropertyValue('--muted').trim()  || '#94a3b8';
+    const border = css.getPropertyValue('--border').trim() || 'rgba(0,0,0,.08)';
+
+    if (_charts.priceDetail) { _charts.priceDetail.destroy(); }
+    _charts.priceDetail = new Chart($('#chart-price-detail'), {
+      type: 'line',
+      data: {
+        labels: rows.map(r => String(r.date || '').slice(0, 10)),
+        datasets: [{
+          data: rows.map(r => Number(r.close_price) || null),
+          borderColor: accent,
+          backgroundColor: accent + '20',
+          fill: true, tension: 0.35,
+          pointRadius: rows.length > 30 ? 2 : 4,
+          pointHoverRadius: 6,
+          pointBackgroundColor: accent,
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: ctx => '收盤 ' + (ctx.raw !== null ? ctx.raw.toFixed(2) : '—') } }
+        },
+        scales: {
+          y: {
+            ticks: { color: muted, callback: v => v.toFixed(0) },
+            grid:  { color: border }
+          },
+          x: {
+            ticks: { color: muted, maxTicksLimit: 8, maxRotation: 30 },
+            grid:  { display: false }
+          }
+        }
+      }
+    });
+    $('#modal-price-chart').classList.remove('hidden');
   }
 
   function populateYearFilter(tab, raw) {
