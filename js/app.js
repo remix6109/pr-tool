@@ -2444,6 +2444,9 @@
         STATE.filterCategories = [];             // 切 tab 重置代號 / 類型篩選
         $('#filter-year').value     = '';        // 與年度
         $('#filter-category-popover').classList.add('hidden');
+        // 從漲跌 tab 離開時恢復代號篩選器顯示
+        const catWrap = $('#filter-category-wrap');
+        if (catWrap) catWrap.style.display = '';
         renderHistory();
       };
     });
@@ -2482,6 +2485,81 @@
         renderHistory();
       };
     });
+  }
+
+  // ============== 漲跌幅歷史 ==============
+
+  function renderPriceHistory() {
+    // 隱藏不適用的 UI
+    const wrap = $('#history-chart-wrap');
+    const summary = $('#history-summary');
+    const yearSel = $('#filter-year');
+    const catWrap = $('#filter-category-wrap');
+    if (wrap)    wrap.classList.add('hidden');
+    if (summary) summary.innerHTML = '';
+    if (yearSel) { yearSel.classList.add('hidden'); yearSel.value = ''; }
+    if (catWrap) catWrap.style.display = 'none';
+
+    const list   = $('#history-list');
+    const search = ($('#filter-search').value || '').trim().toLowerCase();
+    const history = (STATE.data.price_history || []);
+
+    if (history.length === 0) {
+      list.innerHTML = '<div class="ph-empty">尚無漲跌紀錄<br><small>請先按「抓最新現價」，之後每次抓取都會自動記錄</small></div>';
+      return;
+    }
+
+    // 按日期分組，每組按漲跌幅排序（跌最多 → 漲最多）
+    const byDate = {};
+    history.forEach(r => {
+      const date = String(r.date || '').slice(0, 10);
+      if (!byDate[date]) byDate[date] = [];
+      byDate[date].push(r);
+    });
+    const dates = Object.keys(byDate).sort().reverse();
+
+    let html = '';
+    for (const date of dates) {
+      let rows = byDate[date]
+        .filter(r => !search ||
+          String(r.symbol || '').toLowerCase().includes(search) ||
+          String(r.name   || '').toLowerCase().includes(search))
+        .sort((a, b) => (Number(a.change_pct) || 0) - (Number(b.change_pct) || 0));  // 跌多 → 漲多
+
+      if (rows.length === 0) continue;
+
+      html += `<div class="ph-group">
+        <div class="ph-date">${date}</div>
+        <div class="table-wrap">
+        <table class="ph-table">
+          <thead><tr>
+            <th>代號</th><th>名稱</th><th>收盤價</th><th>漲跌</th><th>漲跌幅</th>
+          </tr></thead>
+          <tbody>`;
+
+      for (const r of rows) {
+        const close  = Number(r.close_price) || 0;
+        const chg    = Number(r.change_amt)  || 0;
+        const pct    = Number(r.change_pct)  || 0;
+        const hasPrev= (Number(r.prev_close) || 0) > 0;
+        const cls    = !hasPrev ? '' : chg > 0 ? 'gain' : chg < 0 ? 'loss' : '';
+        const chgStr = !hasPrev ? '—' : (chg >= 0 ? '+' : '') + chg.toFixed(2);
+        const pctStr = !hasPrev ? '—' : (pct >= 0 ? '+' : '') + pct.toFixed(2) + '%';
+        html += `<tr>
+          <td><strong>${escapeHtml(r.symbol || '')}</strong></td>
+          <td class="muted small">${escapeHtml(r.name || '')}</td>
+          <td>${close > 0 ? close.toFixed(2) : '—'}</td>
+          <td class="${cls}">${chgStr}</td>
+          <td class="${cls} ph-pct">${pctStr}</td>
+        </tr>`;
+      }
+      html += `</tbody></table></div></div>`;
+    }
+
+    list.innerHTML = html || '<div class="ph-empty">找不到符合「' + escapeHtml(search) + '」的紀錄</div>';
+
+    // 離開漲跌 tab 時恢復代號篩選器顯示
+    if (catWrap) catWrap.style.display = '';
   }
 
   function populateYearFilter(tab, raw) {
@@ -2558,6 +2636,9 @@
   function renderHistory() {
     if (!STATE.data) return;
     const tab = STATE.currentTab;
+    // 漲跌幅頁面獨立渲染
+    if (tab === 'prices') { renderPriceHistory(); return; }
+
     const personFilter = STATE.defaultPerson;
     const search = $('#filter-search').value.trim().toLowerCase();
 

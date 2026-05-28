@@ -369,6 +369,26 @@ th { color: var(--muted); font-weight: 600; font-size: .8rem; }
 .list-item .edit-btn:hover { color: var(--primary); }
 .list-item .delete-btn:hover { color: var(--red); }
 
+/* === 漲跌幅歷史 === */
+.ph-group { margin-bottom: 16px; }
+.ph-date {
+  font-size: .78rem; font-weight: 700; color: var(--muted);
+  padding: 4px 2px 6px; letter-spacing: .03em; text-transform: uppercase;
+}
+.ph-table { width: 100%; border-collapse: collapse; font-size: .88rem; }
+.ph-table th {
+  text-align: left; font-size: .75rem; font-weight: 600; color: var(--muted);
+  padding: 4px 6px; border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.ph-table td { padding: 7px 6px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+.ph-table tr:last-child td { border-bottom: none; }
+.ph-pct { font-weight: 700; font-variant-numeric: tabular-nums; }
+.ph-empty {
+  padding: 36px 16px; text-align: center;
+  color: var(--muted); line-height: 1.7;
+}
+
 /* === Load more button (history list) === */
 .load-more-btn {
   margin-top: 8px;
