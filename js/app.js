@@ -1322,6 +1322,8 @@
   }
 
   async function refreshPricesFlow() {
+    // 取消任何進行中的 loadAndRender GET，避免舊資料回來時覆蓋掉我們即將寫入的新現價
+    ++_loadSeq;
     const btn = $('#btn-refresh-prices');
     const orig = btn.textContent;
     btn.disabled = true;
