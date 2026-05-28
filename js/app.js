@@ -2592,9 +2592,6 @@
     }
 
     list.innerHTML = html || '<div class="ph-empty">找不到符合「' + escapeHtml(search) + '」的紀錄</div>';
-
-    // 離開漲跌 tab 時恢復代號篩選器顯示
-    if (catWrap) catWrap.style.display = '';
   }
 
   function populateYearFilter(tab, raw) {
