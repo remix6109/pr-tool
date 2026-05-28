@@ -1297,6 +1297,13 @@
     $('#btn-update-prices').onclick = updatePricesFlow;
     const refreshBtn = $('#btn-refresh-prices');
     if (refreshBtn) refreshBtn.onclick = refreshPricesFlow;
+
+    // 顯示「現價截至」時間（從 _meta 讀 last_price_update）
+    const timeEl = $('#price-update-time');
+    if (timeEl) {
+      const ts = STATE.data.meta && STATE.data.meta.last_price_update;
+      timeEl.textContent = ts ? '現價截至 ' + ts : '';
+    }
   }
 
   function bindHoldingsSort() {
@@ -1375,6 +1382,17 @@
       }
 
       if (fetched > 0) {
+        // 立刻更新「現價截至」顯示，不需等下次 GET
+        const now = new Date();
+        const mm = String(now.getMonth() + 1).padStart(2, '0');
+        const dd = String(now.getDate()).padStart(2, '0');
+        const hh = String(now.getHours()).padStart(2, '0');
+        const mi = String(now.getMinutes()).padStart(2, '0');
+        const tsStr = mm + '/' + dd + ' ' + hh + ':' + mi;
+        const timeEl = $('#price-update-time');
+        if (timeEl) timeEl.textContent = '現價截至 ' + tsStr;
+        if (STATE.data && STATE.data.meta) STATE.data.meta.last_price_update = tsStr;
+
         const missingNote = notFound.length > 0 ? `　找不到：${notFound.join('、')}` : '';
         showToast(`✅ 已更新 ${fetched} 檔現價${missingNote}`, notFound.length > 0 ? 5000 : 2800);
       } else {

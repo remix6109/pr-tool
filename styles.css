@@ -384,6 +384,7 @@ th { color: var(--muted); font-weight: 600; font-size: .8rem; }
 .ph-table td { padding: 7px 6px; border-bottom: 1px solid var(--border); vertical-align: middle; }
 .ph-table tr:last-child td { border-bottom: none; }
 .ph-pct { font-weight: 700; font-variant-numeric: tabular-nums; }
+.price-update-time { font-size: .72rem; color: var(--muted); flex: 1; white-space: nowrap; }
 .ph-empty {
   padding: 36px 16px; text-align: center;
   color: var(--muted); line-height: 1.7;
