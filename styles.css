@@ -371,10 +371,33 @@ th { color: var(--muted); font-weight: 600; font-size: .8rem; }
 .list-item .delete-btn:hover { color: var(--red); }
 
 /* === 漲跌幅歷史 === */
-.ph-group { margin-bottom: 16px; }
+/* 手風琴折疊群組 */
+.ph-group {
+  margin-bottom: 5px;
+  border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
+}
+.ph-group-header {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 12px; cursor: pointer; user-select: none;
+  background: var(--surface);
+}
+.ph-group-header:hover { background: var(--hover, rgba(0,0,0,.04)); }
+.ph-toggle-arrow {
+  font-size: .6rem; color: var(--muted);
+  display: inline-block; transition: transform .2s; flex-shrink: 0;
+}
+.ph-toggle-arrow::before { content: '▶'; }
+.ph-group.open .ph-toggle-arrow { transform: rotate(90deg); }
+.ph-group-header .ph-date { padding: 0; font-size: .85rem; }
+.ph-group-meta { flex: 1; display: flex; align-items: center; gap: 8px; font-size: .78rem; }
+.ph-avg { font-weight: 700; }
+.ph-updown { color: var(--muted); }
+.ph-group-body { display: none; }
+.ph-group.open .ph-group-body { display: block; }
+
 .ph-date {
   font-size: .78rem; font-weight: 700; color: var(--muted);
-  padding: 4px 2px 6px; letter-spacing: .03em; text-transform: uppercase;
+  padding: 4px 2px 6px; letter-spacing: .03em;
 }
 .ph-table { width: 100%; border-collapse: collapse; font-size: .88rem; }
 .ph-table th {
@@ -413,8 +436,6 @@ th { color: var(--muted); font-weight: 600; font-size: .8rem; }
 .ph-stat-positive { color: var(--green); font-weight: 700; }
 .ph-stat-negative { color: var(--red);   font-weight: 700; }
 /* 每日橫條圖 */
-.ph-date-row { display: flex; align-items: center; gap: 6px; padding: 6px 12px 2px; }
-.ph-date-row .ph-date { flex: 1; padding: 0; }
 .ph-day-chart-btn { padding: 1px 7px !important; font-size: .72rem !important; line-height: 1.6; }
 .ph-day-chart-wrap { position: relative; height: 180px; padding: 0 8px 8px; }
 /* 代號可點擊按鈕 */

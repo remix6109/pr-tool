@@ -2595,6 +2595,19 @@
     if (!list._chartBound) {
       list._chartBound = true;
       list.addEventListener('click', e => {
+        // 手風琴展開/折疊
+        const header = e.target.closest('.ph-group-header');
+        if (header) {
+          const group  = header.closest('.ph-group');
+          const dayBtn = e.target.closest('.ph-day-chart-btn');
+          if (dayBtn) {
+            if (group) group.classList.add('open');   // 先確保展開
+            toggleDayChart(dayBtn.dataset.date);
+            return;
+          }
+          if (group) group.classList.toggle('open');
+          return;
+        }
         const symBtn = e.target.closest('.ph-sym-btn');
         if (symBtn) { openSymbolChart(symBtn.dataset.sym); return; }
         const dayBtn = e.target.closest('.ph-day-chart-btn');
@@ -2609,7 +2622,7 @@
     }
   }
 
-  // 歷史模式：按日期分組
+  // 歷史模式：按日期分組（手風琴折疊，最新一天預設展開）
   function renderPriceHistoryByDate(list, history, search) {
     const byDate = {};
     history.forEach(r => {
@@ -2620,23 +2633,37 @@
     const dates = Object.keys(byDate).sort().reverse();
 
     let html = '';
+    let isFirst = true;
     for (const date of dates) {
       const rows = byDate[date]
         .sort((a, b) => (Number(a.change_pct) || 0) - (Number(b.change_pct) || 0));
       if (rows.length === 0) continue;
 
-      html += `<div class="ph-group">
-        <div class="ph-date-row">
+      // 計算摘要：平均漲跌幅、漲/跌股數
+      const valid     = rows.filter(r => (Number(r.prev_close) || 0) > 0);
+      const avgPct    = valid.length > 0
+        ? valid.reduce((s, r) => s + (Number(r.change_pct) || 0), 0) / valid.length : null;
+      const upCount   = valid.filter(r => (Number(r.change_pct) || 0) > 0).length;
+      const downCount = valid.filter(r => (Number(r.change_pct) || 0) < 0).length;
+      const avgCls    = avgPct === null ? '' : avgPct > 0 ? 'gain' : avgPct < 0 ? 'loss' : '';
+      const avgStr    = avgPct !== null
+        ? `<span class="ph-avg ${avgCls}">${avgPct >= 0 ? '+' : ''}${avgPct.toFixed(2)}%</span>` : '';
+      const udStr     = valid.length > 0
+        ? `<span class="ph-updown">↑${upCount} ↓${downCount}</span>` : '';
+
+      html += `<div class="ph-group${isFirst ? ' open' : ''}">
+        <div class="ph-group-header">
+          <span class="ph-toggle-arrow"></span>
           <span class="ph-date">${date}</span>
+          <span class="ph-group-meta">${rows.length}&thinsp;檔&emsp;${avgStr}&emsp;${udStr}</span>
           <button type="button" class="btn ghost small ph-day-chart-btn" data-date="${date}">📊</button>
         </div>
-        <div class="ph-day-chart-wrap hidden" id="ph-dchart-${date}">
-          <canvas></canvas>
-        </div>
-        <div class="table-wrap"><table class="ph-table">
-          <thead><tr>
-            <th>代號</th><th>名稱</th><th>收盤價</th><th>漲跌</th><th>漲跌幅</th>
-          </tr></thead><tbody>`;
+        <div class="ph-group-body">
+          <div class="ph-day-chart-wrap hidden" id="ph-dchart-${date}"><canvas></canvas></div>
+          <div class="table-wrap"><table class="ph-table">
+            <thead><tr>
+              <th>代號</th><th>名稱</th><th>收盤價</th><th>漲跌</th><th>漲跌幅</th>
+            </tr></thead><tbody>`;
 
       for (const r of rows) {
         const close   = Number(r.close_price) || 0;
@@ -2654,7 +2681,10 @@
           <td class="${cls} ph-pct">${pctStr}</td>
         </tr>`;
       }
-      html += `</tbody></table></div></div>`;
+      html += `</tbody></table></div>
+        </div>
+      </div>`;
+      isFirst = false;
     }
     list.innerHTML = html || '<div class="ph-empty">找不到符合條件的紀錄</div>';
   }
