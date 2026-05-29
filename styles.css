@@ -371,29 +371,19 @@ th { color: var(--muted); font-weight: 600; font-size: .8rem; }
 .list-item .delete-btn:hover { color: var(--red); }
 
 /* === 漲跌幅歷史 === */
-/* 手風琴折疊群組 */
-.ph-group {
-  margin-bottom: 5px;
-  border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
-}
-.ph-group-header {
+/* 單日導航列 */
+.ph-nav {
   display: flex; align-items: center; gap: 8px;
-  padding: 8px 12px; cursor: pointer; user-select: none;
-  background: var(--surface);
+  padding: 7px 12px; border-bottom: 1px solid var(--border);
 }
-.ph-group-header:hover { background: var(--hover, rgba(0,0,0,.04)); }
-.ph-toggle-arrow {
-  font-size: .6rem; color: var(--muted);
-  display: inline-block; transition: transform .2s; flex-shrink: 0;
+.ph-nav-date { flex: 1; text-align: center; font-weight: 700; font-size: .9rem; }
+.ph-nav-summary {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 5px 12px 4px; font-size: .8rem;
+  border-bottom: 1px solid var(--border);
 }
-.ph-toggle-arrow::before { content: '▶'; }
-.ph-group.open .ph-toggle-arrow { transform: rotate(90deg); }
-.ph-group-header .ph-date { padding: 0; font-size: .85rem; }
-.ph-group-meta { flex: 1; display: flex; align-items: center; gap: 8px; font-size: .78rem; }
+.ph-nav-latest { font-size: .72rem !important; padding: 1px 6px !important; }
 .ph-avg { font-weight: 700; }
-.ph-updown { color: var(--muted); }
-.ph-group-body { display: none; }
-.ph-group.open .ph-group-body { display: block; }
 
 .ph-date {
   font-size: .78rem; font-weight: 700; color: var(--muted);
