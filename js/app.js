@@ -1579,15 +1579,17 @@
       </div>`;
     };
     // 達成預測:依當前每月增量速度線性外推
+    // 注意:用 pct 換算有效已過月數,與 buildCmp 的 expectedSaved 基準一致,避免矛盾
     const buildEta = (current, target, time) => {
-      if (target <= 0 || time.monthsElapsed <= 0 || time.monthsTotal <= 0) return '';
+      if (target <= 0 || time.pct <= 0 || time.monthsTotal <= 0) return '';
       if (current >= target) {
         return `<div class="eta-line">🎯 已達標</div>`;
       }
-      const pace = current / time.monthsElapsed;       // 平均每月增量(NT$)
+      const monthsElapsedEff = time.monthsTotal * (time.pct / 100); // 與 buildCmp 同基準
+      const pace = current / monthsElapsedEff;         // 平均每月增量(NT$)
       if (pace <= 0) return '';
       const monthsNeeded = (target - current) / pace;  // 達標還需多少個月
-      const totalMonths  = time.monthsElapsed + monthsNeeded;
+      const totalMonths  = monthsElapsedEff + monthsNeeded;
       const diff = time.monthsTotal - totalMonths;     // > 0 = 提前;< 0 = 落後
       const cls = diff >= 0 ? 'gain' : 'loss';
       const tag = diff >= 0
