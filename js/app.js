@@ -83,6 +83,19 @@
       .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
 
+  // 把各種格式的時間戳（ISO UTC 或本地字串）統一顯示為台灣時間 MM/DD HH:mm
+  function fmtPriceTs(ts) {
+    if (!ts) return '';
+    const d = new Date(ts);
+    if (isNaN(d.getTime())) return ts;   // 解析不了就原樣顯示
+    return d.toLocaleString('zh-TW', {
+      timeZone: 'Asia/Taipei',
+      month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit',
+      hour12: false
+    }).replace(/\//g, '/');
+  }
+
   // ============== App title ==============
 
   function getAppTitle() {
@@ -1302,7 +1315,7 @@
     const timeEl = $('#price-update-time');
     if (timeEl) {
       const ts = STATE.data.meta && STATE.data.meta.last_price_update;
-      timeEl.textContent = ts ? '現價截至 ' + ts : '';
+      timeEl.textContent = ts ? '現價截至 ' + fmtPriceTs(ts) : '';
     }
   }
 
