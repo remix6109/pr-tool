@@ -1350,9 +1350,24 @@
     btn.textContent = '⏳ 抓取中…';
     showToast('正在從證交所抓最新現價…', 60000);   // 保留至完成
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 45000);  // 45 秒強制超時
+    const timer = setTimeout(() => ctrl.abort(), 70000);  // 70 秒強制超時（TWSE 多層備援需時）
     try {
-      const result = await API.refreshPrices(ctrl.signal);
+      // 網路不穩時自動重試一次（最多 2 次）
+      let result;
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+          result = await API.refreshPrices(ctrl.signal);
+          break;  // 成功就跳出
+        } catch (fetchErr) {
+          if (fetchErr.name === 'AbortError') throw fetchErr;  // 逾時不重試
+          if (attempt < 2) {
+            showToast(`⚠️ 第 ${attempt} 次失敗，3 秒後重試…`, 3000);
+            await new Promise(r => setTimeout(r, 3000));
+          } else {
+            throw fetchErr;  // 兩次都失敗才丟出
+          }
+        }
+      }
       clearTimeout(timer);
       const fetched   = (result && result.fetched)   || 0;
       const notFound  = (result && result.notFound)  || [];
@@ -1414,7 +1429,10 @@
     } catch (e) {
       clearTimeout(timer);
       const isTimeout = e.name === 'AbortError';
-      const msg = isTimeout ? '連線逾時，請稍後再試' : ('更新失敗：' + e.message);
+      const isNetwork = e.message === 'Failed to fetch' || e.message === 'NetworkError when attempting to fetch resource.';
+      const msg = isTimeout ? '連線逾時（伺服器忙碌），請稍後再試'
+                : isNetwork ? '網路不穩或伺服器暫時無回應，請稍後再試'
+                : ('更新失敗：' + e.message);
       showActionToast('❌ ' + msg, '重試', refreshPricesFlow, 6000);
     } finally {
       btn.disabled = false;
