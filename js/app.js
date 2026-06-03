@@ -1353,19 +1353,26 @@
     const codes = symbols.map(s => String(s.symbol || '').replace(/^代號/, '')).filter(Boolean);
     if (codes.length === 0) return null;
 
+    // 每個來源都加上獨立的 AbortController，避免連線卡住時整個流程永遠等待
+    function _tFetch(url, ms) {
+      const ac = new AbortController();
+      const t = setTimeout(() => ac.abort(), ms);
+      return fetch(url, { signal: ac.signal }).finally(() => clearTimeout(t));
+    }
+
     const merged = {};
     let dataDate = null;
 
     // ── 嘗試 TWSE MIS（即時行情；瀏覽器 IP 不被 TWSE 封鎖）──
     // CORS 許可時可拿到盤中 / 最新成交價（當日資料）。
-    // 若 TWSE 不開放跨域，fetch 會丟出 TypeError，靜默跳過即可。
+    // 若 TWSE 不開放跨域或連線逾時（8s），靜默跳過。
     try {
       const allIds = codes.map(c => 'tse_' + c + '.tw')
                           .concat(codes.map(c => 'otc_' + c + '.tw'))
                           .join('|');
       const misUrl = 'https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=' +
                      encodeURIComponent(allIds) + '&_=' + Date.now();
-      const misRes = await fetch(misUrl);
+      const misRes = await _tFetch(misUrl, 8000);
       if (misRes.ok) {
         const data = await misRes.json();
         (data.msgArray || []).forEach(item => {
@@ -1374,18 +1381,18 @@
           if (code && price > 0) merged[code] = price;
         });
         if (Object.keys(merged).length > 0) {
-          // MIS 成功 → 今天的資料
           const now = new Date();
-          dataDate = now.toLocaleDateString('sv-SE', { timeZone: 'Asia/Taipei' }); // YYYY-MM-DD
+          dataDate = now.toLocaleDateString('sv-SE', { timeZone: 'Asia/Taipei' });
         }
       }
-    } catch (_) { /* CORS 或網路問題，靜默跳過 */ }
+    } catch (_) { /* CORS、逾時或網路問題，靜默跳過 */ }
 
     // ── 補充 TWSE OpenAPI（上市 ETF + 股票；收盤後更新，今日或前日資料）──
     const missingTwse = codes.filter(c => !merged[c]);
     if (missingTwse.length > 0) {
       try {
-        const tRes = await fetch('https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL?t=' + Date.now());
+        const tRes = await _tFetch(
+          'https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL?t=' + Date.now(), 15000);
         if (tRes.ok) {
           const arr = await tRes.json();
           const codeSet = new Set(missingTwse);
@@ -1396,7 +1403,6 @@
             if (price > 0) {
               merged[code] = price;
               if (!dataDate) {
-                // 民國日期 7 碼，如 "1150603" → 2026-06-03
                 const d = String(item['Date'] || '').trim();
                 if (d.length === 7) {
                   dataDate = (parseInt(d.substring(0, 3), 10) + 1911) + '-' +
@@ -1413,7 +1419,8 @@
     const missingTpex = codes.filter(c => !merged[c]);
     if (missingTpex.length > 0) {
       try {
-        const pRes = await fetch('https://www.tpex.org.tw/openapi/v1/tpex_mainboard_quotes?t=' + Date.now());
+        const pRes = await _tFetch(
+          'https://www.tpex.org.tw/openapi/v1/tpex_mainboard_quotes?t=' + Date.now(), 12000);
         if (pRes.ok) {
           const arr = await pRes.json();
           const codeSet = new Set(missingTpex);
@@ -1429,7 +1436,6 @@
 
     if (Object.keys(merged).length === 0) return null;
 
-    // 若所有來源都未回傳日期，用今天（台灣時間）
     if (!dataDate) {
       const now = new Date();
       dataDate = now.toLocaleDateString('sv-SE', { timeZone: 'Asia/Taipei' });
