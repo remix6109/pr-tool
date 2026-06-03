@@ -1341,6 +1341,102 @@
     });
   }
 
+  /**
+   * 直接從瀏覽器端呼叫 TWSE / TPEX 公開 API 抓取現價。
+   * 瀏覽器 IP 不受 TWSE 封鎖（只有 Apps Script 固定 IP 才會被封）。
+   * 成功時回傳 { prices: { '0056': 53.8, ... }, date: 'YYYY-MM-DD' }；
+   * 所有來源都失敗則回傳 null。
+   */
+  async function fetchPricesClientSide() {
+    const symbols = STATE.data && STATE.data.symbols;
+    if (!symbols || symbols.length === 0) return null;
+    const codes = symbols.map(s => String(s.symbol || '').replace(/^代號/, '')).filter(Boolean);
+    if (codes.length === 0) return null;
+
+    const merged = {};
+    let dataDate = null;
+
+    // ── 嘗試 TWSE MIS（即時行情；瀏覽器 IP 不被 TWSE 封鎖）──
+    // CORS 許可時可拿到盤中 / 最新成交價（當日資料）。
+    // 若 TWSE 不開放跨域，fetch 會丟出 TypeError，靜默跳過即可。
+    try {
+      const allIds = codes.map(c => 'tse_' + c + '.tw')
+                          .concat(codes.map(c => 'otc_' + c + '.tw'))
+                          .join('|');
+      const misUrl = 'https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=' +
+                     encodeURIComponent(allIds) + '&_=' + Date.now();
+      const misRes = await fetch(misUrl);
+      if (misRes.ok) {
+        const data = await misRes.json();
+        (data.msgArray || []).forEach(item => {
+          const code  = String(item.c || '').trim();
+          const price = parseFloat(item.z);
+          if (code && price > 0) merged[code] = price;
+        });
+        if (Object.keys(merged).length > 0) {
+          // MIS 成功 → 今天的資料
+          const now = new Date();
+          dataDate = now.toLocaleDateString('sv-SE', { timeZone: 'Asia/Taipei' }); // YYYY-MM-DD
+        }
+      }
+    } catch (_) { /* CORS 或網路問題，靜默跳過 */ }
+
+    // ── 補充 TWSE OpenAPI（上市 ETF + 股票；收盤後更新，今日或前日資料）──
+    const missingTwse = codes.filter(c => !merged[c]);
+    if (missingTwse.length > 0) {
+      try {
+        const tRes = await fetch('https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL?t=' + Date.now());
+        if (tRes.ok) {
+          const arr = await tRes.json();
+          const codeSet = new Set(missingTwse);
+          arr.forEach(item => {
+            const code  = String(item['Code'] || item['證券代號'] || '').trim();
+            if (!codeSet.has(code)) return;
+            const price = parseFloat(String(item['ClosingPrice'] || item['Close'] || item['收盤價'] || '').replace(/,/g, ''));
+            if (price > 0) {
+              merged[code] = price;
+              if (!dataDate) {
+                // 民國日期 7 碼，如 "1150603" → 2026-06-03
+                const d = String(item['Date'] || '').trim();
+                if (d.length === 7) {
+                  dataDate = (parseInt(d.substring(0, 3), 10) + 1911) + '-' +
+                             d.substring(3, 5) + '-' + d.substring(5, 7);
+                }
+              }
+            }
+          });
+        }
+      } catch (_) { /* OpenAPI 失敗，靜默跳過 */ }
+    }
+
+    // ── 補充 TPEX OpenAPI（上櫃股票 + ETF）──
+    const missingTpex = codes.filter(c => !merged[c]);
+    if (missingTpex.length > 0) {
+      try {
+        const pRes = await fetch('https://www.tpex.org.tw/openapi/v1/tpex_mainboard_quotes?t=' + Date.now());
+        if (pRes.ok) {
+          const arr = await pRes.json();
+          const codeSet = new Set(missingTpex);
+          arr.forEach(item => {
+            const code  = String(item['SecuritiesCompanyCode'] || item['代號'] || item['Code'] || '').trim();
+            if (!codeSet.has(code)) return;
+            const price = parseFloat(String(item['Close'] || item['收盤價'] || '').replace(/,/g, ''));
+            if (price > 0) merged[code] = price;
+          });
+        }
+      } catch (_) { /* TPEX 失敗，靜默跳過 */ }
+    }
+
+    if (Object.keys(merged).length === 0) return null;
+
+    // 若所有來源都未回傳日期，用今天（台灣時間）
+    if (!dataDate) {
+      const now = new Date();
+      dataDate = now.toLocaleDateString('sv-SE', { timeZone: 'Asia/Taipei' });
+    }
+    return { prices: merged, date: dataDate };
+  }
+
   async function refreshPricesFlow() {
     // 取消任何進行中的 loadAndRender GET，避免舊資料回來時覆蓋掉我們即將寫入的新現價
     ++_loadSeq;
@@ -1352,11 +1448,21 @@
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 70000);  // 70 秒強制超時（TWSE 多層備援需時）
     try {
-      // 網路不穩時自動重試一次（最多 2 次）
+      // ── 優先從瀏覽器端直接抓取（瀏覽器 IP 不被 TWSE 封鎖）──
+      // 成功時只需請 Apps Script 存檔，不需重新發外部請求。
+      // 失敗（CORS 封鎖、離線等）時退回讓 Apps Script 完整抓取。
       let result;
+      let _clientData = null;
+      try { _clientData = await fetchPricesClientSide(); } catch (_) { /* 靜默 */ }
+
+      // 根據瀏覽器端是否取得資料，選擇呼叫哪個 API
+      const _apiCall = (_clientData && Object.keys(_clientData.prices).length > 0)
+        ? () => API.storePrices(_clientData.prices, _clientData.date, ctrl.signal)
+        : () => API.refreshPrices(ctrl.signal);
+
       for (let attempt = 1; attempt <= 2; attempt++) {
         try {
-          result = await API.refreshPrices(ctrl.signal);
+          result = await _apiCall();
           break;  // 成功就跳出
         } catch (fetchErr) {
           if (fetchErr.name === 'AbortError') throw fetchErr;  // 逾時不重試
