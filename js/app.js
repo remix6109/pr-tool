@@ -1528,7 +1528,14 @@
         if (STATE.data && STATE.data.meta) STATE.data.meta.last_price_update = tsStr;
 
         const missingNote = notFound.length > 0 ? `　找不到：${notFound.join('、')}` : '';
-        showToast(`✅ 已更新 ${fetched} 檔現價${missingNote}`, notFound.length > 0 ? 5000 : 2800);
+        // 顯示資料來源 + 日期，方便診斷是否取到當日資料
+        const _srcDate = _clientData
+          ? _clientData.date          // 瀏覽器端路徑
+          : (histEntries.length > 0 ? String(histEntries[0].date || '').slice(0, 10) : null);
+        const _dateLabel = _srcDate ? ` · ${_srcDate.slice(5).replace('-', '/')} 資料` : '';
+        const _srcLabel  = _clientData ? ' (瀏覽器直取)' : ' (伺服器)';
+        showToast(`✅ 已更新 ${fetched} 檔現價${_dateLabel}${_srcLabel}${missingNote}`,
+                  notFound.length > 0 ? 6000 : 3500);
       } else {
         showToast('⚠️ 所有來源均無回應，現價維持原值', 3500);
       }
