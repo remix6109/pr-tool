@@ -1387,6 +1387,33 @@
       }
     } catch (_) { /* CORS、逾時或網路問題，靜默跳過 */ }
 
+    // ── Yahoo Finance（15 分鐘延遲；CORS 開放，有當日資料）──
+    // 上市用 .TW、上櫃用 .TWO；一次請求涵蓋全部代號
+    const yfMissing = codes.filter(c => !merged[c]);
+    if (yfMissing.length > 0) {
+      try {
+        const yfSyms = yfMissing.flatMap(c => [c + '.TW', c + '.TWO']).join(',');
+        const yfRes = await _tFetch(
+          'https://query2.finance.yahoo.com/v7/finance/quote?symbols=' + encodeURIComponent(yfSyms),
+          10000
+        );
+        if (yfRes.ok) {
+          const yfJson = await yfRes.json();
+          ((yfJson.quoteResponse || {}).result || []).forEach(item => {
+            const code  = String(item.symbol || '').replace(/\.(TW|TWO)$/i, '').trim();
+            const price = Number(item.regularMarketPrice || 0);
+            if (code && price > 0 && !merged[code]) {
+              merged[code] = price;
+              if (!dataDate && item.regularMarketTime) {
+                const d = new Date(item.regularMarketTime * 1000);
+                dataDate = d.toLocaleDateString('sv-SE', { timeZone: 'Asia/Taipei' });
+              }
+            }
+          });
+        }
+      } catch (_) { /* Yahoo Finance 失敗，靜默跳過 */ }
+    }
+
     // ── 補充 TWSE OpenAPI（上市 ETF + 股票；收盤後更新，今日或前日資料）──
     const missingTwse = codes.filter(c => !merged[c]);
     if (missingTwse.length > 0) {
