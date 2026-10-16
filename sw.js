@@ -28,6 +28,7 @@ const SHELL_ASSETS = [
   './js/history-summary.js',
   './js/settings.js',
   './js/autodiv.js',
+  './js/datacheck.js',
   './js/fx.js',
   './js/main.js',
   './js/config.js',

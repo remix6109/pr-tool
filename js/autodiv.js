@@ -15,7 +15,7 @@
     CACHE_MS: 6 * 3600 * 1000,
     TIMEOUT_MS: 12000
   };
-  const _exDiv = { at: 0, list: null, loading: false, failedAt: 0 };
+  const _exDiv = { at: 0, list: null, loading: false, failedAt: 0, heldKey: null };
 
   function autodivYmd(d) { return ymdLocal(d); }
   function autodivAddDays(ymd, n) {
@@ -40,7 +40,8 @@
     try {
       const c = JSON.parse(localStorage.getItem(KEY.divExCache) || 'null');
       if (c && c.v === 2 && Array.isArray(c.list)) {
-        _exDiv.at = (c.held === autodivHeldKey()) ? (c.at || 0) : 0;   // 持有標的變了就視為過期,但舊資料仍可先顯示
+        _exDiv.at = c.at || 0;
+        _exDiv.heldKey = c.held;     // 抓這份資料時的持有標的;之後持有標的變了就要重抓(舊資料仍可先顯示)
         _exDiv.list = c.list;
       }
     } catch (_) {}
@@ -227,11 +228,12 @@
     if (_exDiv.list === null) autodivLoadCache();
     drawPendingDividends();
     if (_exDiv.loading || Date.now() - _exDiv.failedAt < 5 * 60 * 1000) return;   // 失敗後 5 分鐘內不重試
-    if (_exDiv.list && Date.now() - _exDiv.at < AUTODIV.CACHE_MS) return;
+    const heldKey = autodivHeldKey();
+    if (_exDiv.list && _exDiv.heldKey === heldKey && Date.now() - _exDiv.at < AUTODIV.CACHE_MS) return;
     _exDiv.loading = true;
     fetchExDividends().then(list => {
-      _exDiv.list = list; _exDiv.at = Date.now();
-      try { localStorage.setItem(KEY.divExCache, JSON.stringify({ v: 2, held: autodivHeldKey(), at: _exDiv.at, list })); } catch (_) {}
+      _exDiv.list = list; _exDiv.at = Date.now(); _exDiv.heldKey = heldKey;
+      try { localStorage.setItem(KEY.divExCache, JSON.stringify({ v: 2, held: heldKey, at: _exDiv.at, list })); } catch (_) {}
       drawPendingDividends();
       renderDashboard();   // 行事曆與「預估年配息」都用這份資料,重畫首頁
     }).catch(() => { _exDiv.failedAt = Date.now(); /* 抓不到就維持現狀(或舊快取),不打擾使用者 */ })

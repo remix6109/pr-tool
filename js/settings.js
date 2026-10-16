@@ -107,6 +107,7 @@
   }
 
   function bindSettings() {
+    bindDataCheck();
     $('#btn-settings').onclick = () => {
       renderPalettePicker();
       renderFxPicker();
