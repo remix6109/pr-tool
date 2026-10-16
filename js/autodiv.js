@@ -261,13 +261,26 @@
     return (iv >= 20 && iv <= 400) ? iv : null;
   }
 
+  // 週期(天):優先用歷史間隔;只有 1 筆歷史時,改用你在「標的」設定的配息月份數推(例如填 4 個月 = 季配)。
+  // 配息頻率屬於基金公開說明書的資訊,沒有穩定可直接讀取的資料來源,所以由你填的設定補位。
+  function autodivIntervalFor(symbol, hist) {
+    const iv = autodivInterval(hist);
+    if (iv) return iv;
+    if (hist.length === 1) {
+      const s = (STATE.data.symbols || []).find(x => x.symbol === symbol);
+      const n = s ? String(s.months || '').split(',').map(x => Number(x.trim())).filter(Boolean).length : 0;
+      if (n > 0 && n <= 12) return Math.round(365 / n);
+    }
+    return null;
+  }
+
   // 每股「年配息」推估:最近一年份的配息平均 × 每年次數(次數由週期推得)。
   // 例:季配(間隔約 91 天)→ 取最近 4 次平均 × 4;月配取最近 12 次平均 × 12(新上市只有幾次就用現有的平均)。
   // 歷史資料還沒載入、查無資料或只有一筆(推不出週期)時回傳 null,由呼叫端改用手動設定。
   function autodivAnnualPerShare(symbol) {
     if (!Array.isArray(_exDiv.list)) return null;
     const hist = autodivHistory(symbol);
-    const iv = autodivInterval(hist);
+    const iv = autodivIntervalFor(symbol, hist);
     if (!iv) return null;
     const perYear = Math.max(1, Math.round(365 / iv));
     const recent = hist.slice(-Math.min(hist.length, perYear));
@@ -302,7 +315,7 @@
         });
       });
       // 未來預估:最後一次除息 + k × 週期
-      const iv = autodivInterval(hist);
+      const iv = autodivIntervalFor(symbol, hist);
       const last = hist[hist.length - 1];
       if (!iv) return;
       for (let k = 1; k <= 8; k++) {
