@@ -1,4 +1,4 @@
-/* 主題色票 — 5 種預設,可在「設定」切換 */
+/* 主題色票 — 7 種預設,可在「設定」切換 */
 window.THEMES = [
   {
     id: 'sage',
@@ -124,6 +124,56 @@ window.THEMES = [
     },
     chart: ['#5A6B82', '#6B8B6F', '#D08778', '#C9A276', '#8295A8', '#94A294', '#9F8B66', '#7A6E76', '#A4ABB5', '#B59C7E', '#6F8186'],
     metaLight: '#5A6B82', metaDark: '#1A1F26'
+  },
+  {
+    id: 'cyber',
+    name: '賽博霓虹',
+    swatch: ['#00E5FF', '#00FF9D', '#B388FF', '#FF3D71', '#05070D'],
+    light: {
+      '--bg': '#E9F5F9', '--surface': '#FFFFFF', '--surface-2': '#DCEEF4', '--bar-bg': '#BFDCE6',
+      '--text': '#0B2230', '--muted': '#5A7A8C', '--border': '#BFDCE6',
+      '--primary': '#0090B0', '--primary-d': '#006F88',
+      '--green': '#00A86B', '--purple': '#7C4DFF', '--red': '#E0245E',
+      '--huang': '#E6A800', '--su': '#0090B0', '--slate': '#5A7A8C', '--time': '#8FB3C4',
+      '--gain-bg': 'rgba(0,168,107,.12)', '--loss-bg': 'rgba(224,36,94,.10)', '--neutral-bg': 'rgba(143,179,196,.18)',
+      '--shadow': '0 1px 3px rgba(0,144,176,.12), 0 1px 2px rgba(0,144,176,.06)'
+    },
+    dark: {
+      '--bg': '#05070D', '--surface': '#0C1220', '--surface-2': '#111A2E', '--bar-bg': '#1C2A48',
+      '--text': '#D7F5FF', '--muted': '#6F8AA8', '--border': '#1C2A48',
+      '--primary': '#00E5FF', '--primary-d': '#5CF0FF',
+      '--green': '#00FF9D', '--purple': '#B388FF', '--red': '#FF3D71',
+      '--huang': '#FFD23F', '--su': '#00E5FF', '--slate': '#6F8AA8', '--time': '#3A5272',
+      '--gain-bg': 'rgba(0,255,157,.10)', '--loss-bg': 'rgba(255,61,113,.12)', '--neutral-bg': 'rgba(111,138,168,.10)',
+      '--shadow': '0 0 0 1px rgba(0,229,255,.08), 0 2px 12px rgba(0,229,255,.06)'
+    },
+    chart: ['#00E5FF', '#B388FF', '#00FF9D', '#FF3D71', '#FFD23F', '#448AFF', '#FF9100', '#64FFDA', '#EA80FC', '#18FFFF', '#CCFF90'],
+    metaLight: '#0090B0', metaDark: '#05070D'
+  },
+  {
+    id: 'glass',
+    name: '毛玻璃',
+    swatch: ['#7C9CFF', '#5EEAD4', '#F0ABFC', '#FB7185', '#14152B'],
+    light: {
+      '--bg': '#E8ECFA', '--surface': '#FFFFFF', '--surface-2': '#EEF1FC', '--bar-bg': '#D3DAF3',
+      '--text': '#1E2340', '--muted': '#6B7399', '--border': '#D3DAF3',
+      '--primary': '#5B7BE8', '--primary-d': '#4660C9',
+      '--green': '#10B981', '--purple': '#A855F7', '--red': '#F43F5E',
+      '--huang': '#F59E0B', '--su': '#5B7BE8', '--slate': '#6B7399', '--time': '#A5B0DC',
+      '--gain-bg': 'rgba(16,185,129,.12)', '--loss-bg': 'rgba(244,63,94,.10)', '--neutral-bg': 'rgba(165,176,220,.18)',
+      '--shadow': '0 4px 24px rgba(91,123,232,.12)'
+    },
+    dark: {
+      '--bg': '#0E0F22', '--surface': '#1A1C38', '--surface-2': '#25284A', '--bar-bg': '#33375E',
+      '--text': '#EEF0FF', '--muted': '#9AA0CC', '--border': 'rgba(255,255,255,.12)',
+      '--primary': '#7C9CFF', '--primary-d': '#A5BAFF',
+      '--green': '#5EEAD4', '--purple': '#F0ABFC', '--red': '#FB7185',
+      '--huang': '#FCD34D', '--su': '#7C9CFF', '--slate': '#9AA0CC', '--time': '#5A5F8F',
+      '--gain-bg': 'rgba(94,234,212,.12)', '--loss-bg': 'rgba(251,113,133,.12)', '--neutral-bg': 'rgba(154,160,204,.10)',
+      '--shadow': '0 8px 32px rgba(0,0,0,.35)'
+    },
+    chart: ['#7C9CFF', '#5EEAD4', '#F0ABFC', '#FB7185', '#FCD34D', '#38BDF8', '#A78BFA', '#34D399', '#F472B6', '#60A5FA', '#FDBA74'],
+    metaLight: '#5B7BE8', metaDark: '#0E0F22'
   }
 ];
 

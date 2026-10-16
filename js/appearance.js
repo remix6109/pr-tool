@@ -107,6 +107,7 @@
     style.textContent = `:root{${lightVars}} [data-theme="dark"]{${darkVars}}`;
     STATE.chartColors = palette.chart;
     STATE.paletteId   = palette.id;
+    document.documentElement.dataset.palette = palette.id;
     localStorage.setItem(KEY.palette, palette.id);
     // 同步 PWA 標題列顏色
     const meta = document.querySelector('meta[name="theme-color"]');
@@ -179,6 +180,22 @@
       b.onclick = () => {
         applyIconChoice(b.dataset.icon);
         renderIconPicker();
+      };
+    });
+  }
+
+  function renderFxPicker() {
+    const wrap = $('#fx-picker');
+    if (!wrap) return;
+    const cur = FX.getLevel();
+    wrap.innerHTML = FX.LEVELS.map(l =>
+      `<button data-fx-level="${l.id}" class="${l.id === cur ? 'active' : ''}">${l.name}</button>`
+    ).join('');
+    $$('#fx-picker button').forEach(b => {
+      b.onclick = () => {
+        FX.setLevel(b.dataset.fxLevel);
+        renderFxPicker();
+        if (STATE.data) renderAll();     // 圖表漸層與數字動畫要重畫才會套用
       };
     });
   }

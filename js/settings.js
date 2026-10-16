@@ -109,6 +109,7 @@
   function bindSettings() {
     $('#btn-settings').onclick = () => {
       renderPalettePicker();
+      renderFxPicker();
       renderIconPicker();
       renderAppTitleEditor();
       renderPersonLabelEditor();

@@ -9,6 +9,7 @@
   <meta name="apple-mobile-web-app-title" content="購買記錄" />
   <title>購買記錄</title>
   <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="fx.css" />
   <script>
   // 在 <link> 被瀏覽器解析「之前」就動態插入正確的圖示連結
   // (iOS Safari 在頁面載入瞬間就會鎖定 apple-touch-icon 的 URL,之後 JS 改 href 沒用)
@@ -80,6 +81,7 @@
       <button class="chip" data-person="黃" id="chip-huang">黃</button>
       <button class="chip" data-person="蘇" id="chip-su">蘇</button>
     </div>
+    <button class="icon-btn" id="btn-privacy" title="隱藏金額">👁️</button>
     <button class="icon-btn" id="btn-theme" title="切換主題">🌙</button>
     <button class="icon-btn" id="btn-settings" title="設定">⚙️</button>
   </header>
@@ -540,6 +542,11 @@
       <div class="palette-picker" id="palette-picker"></div>
     </div>
     <div class="palette-section">
+      <div class="palette-section-label">效果等級</div>
+      <div class="fx-picker" id="fx-picker"></div>
+      <div class="hint muted small">完整:毛玻璃、數字滾動、轉場動畫、震動回饋;精簡:只留簡單淡入;關閉:無動畫(手機較舊或想省電時使用)。</div>
+    </div>
+    <div class="palette-section">
       <div class="palette-section-label">APP 圖示</div>
       <div class="icon-picker" id="icon-picker"></div>
       <div class="hint muted small">換圖示後,手機主畫面圖示需要先「移除書籤」再「重新加入主畫面」才會更新(系統會把舊圖示快取住)。</div>
@@ -630,6 +637,7 @@
 <script src="js/pricehistory.js"></script>
 <script src="js/history-summary.js"></script>
 <script src="js/settings.js"></script>
+<script src="js/fx.js"></script>
 <script src="js/main.js"></script>
 
 <script>

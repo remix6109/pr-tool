@@ -117,6 +117,7 @@
     renderNetWorthChart(p);
     renderSavingsProgress(stats);
     applyCollapseStates();
+    FX.afterRender();
   }
 
   // 三條線:

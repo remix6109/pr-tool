@@ -87,11 +87,11 @@
           { label: '累計投入',
             data: investedSeries,
             borderColor: colInvested, backgroundColor: 'transparent',
-            tension: 0.2, pointRadius: 2, borderWidth: 2, borderDash: [5, 5] },
+            tension: FX.lineTension(), pointRadius: 2, borderWidth: 2, borderDash: [5, 5] },
           { label: '估算市值 (以今日價回推)',
             data: estimatedSeries,
-            borderColor: colEstimated, backgroundColor: colEstimated + '22',
-            tension: 0.2, pointRadius: 2, borderWidth: 2, fill: true },
+            borderColor: colEstimated, backgroundColor: FX.gradient(colEstimated),
+            tension: FX.lineTension(), pointRadius: 2, borderWidth: 2, fill: true },
           { label: '真實快照',
             data: snapshotSeries,
             borderColor: colSnap, backgroundColor: colSnap,
@@ -129,7 +129,9 @@
     _charts.holdings = new Chart(canvas, {
       type: 'doughnut',
       data: { labels, datasets: [{ data, backgroundColor: colors, borderWidth: 0 }] },
+      plugins: [FX.centerTextPlugin(fmt.money(data.reduce((a, v) => a + v, 0)), '總市值')],
       options: {
+        cutout: '62%',
         responsive: true,
         maintainAspectRatio: false,
         plugins: {
