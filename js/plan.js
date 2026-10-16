@@ -1,40 +1,64 @@
 /* 配息行事曆、5 年計劃進度、標的與目標管理 — 由 app.js 拆出;所有檔案共用全域範圍,載入順序見 index.html */
+  // 手動設定的估算(標的設定裡的配息月份 / 年配息):只在沒有證交所歷史資料時當備援
+  function manualPayoutAmount(s, payMonth, shares) {
+    if (!s || shares <= 0) return null;
+    // 配息月份 +1 (除息月→實際入帳月,例如 1.4.7.10月 配息實際在 2.5.8.11 月入帳)
+    const ms = String(s.months || '').split(',').map(x => Number(x.trim())).filter(Boolean).map(x => (x % 12) + 1);
+    if (!ms.includes(payMonth)) return null;
+    return ((Number(s.annual_yield_per_share) || 0) / ms.length) * shares;
+  }
+
+  const PAYOUT_TAGS = { paid: '已入帳', ex: '已除息', est: '預估', manual: '手動' };
+
   function renderPayoutCalendar(personFilter) {
     const symMap = {};
     (STATE.data.symbols || []).forEach(s => symMap[s.symbol] = s);
+    const persons = personFilter ? [personFilter] : CONFIG.PEOPLE.slice();
     const now = new Date();
-    const curMonth = now.getMonth() + 1;
-    const shareMap = {};
-    (STATE.data.purchases || []).forEach(r => {
-      if (personFilter && r.person !== personFilter) return;
-      if (!shareMap[r.symbol]) shareMap[r.symbol] = 0;
-      shareMap[r.symbol] += Number(r.shares) || 0;
-    });
-    const months = [0, 1, 2].map(off => ((curMonth - 1 + off) % 12) + 1);
-    const html = months.map(m => {
-      const list = [];
-      let sum = 0;
-      Object.keys(symMap).forEach(sym => {
-        const s = symMap[sym];
-        // 配息月份 +1 (除息月→實際入帳月,例如 1.4.7.10月 配息實際在 2.5.8.11 月入帳)
-        const ms = String(s.months || '').split(',')
-          .map(x => Number(x.trim()))
-          .filter(Boolean)
-          .map(x => (x % 12) + 1);
-        if (ms.includes(m)) {
-          const shares = shareMap[sym] || 0;
-          if (shares <= 0) return;
-          const yPerShare = Number(s.annual_yield_per_share) || 0;
-          const perPay = ms.length > 0 ? (yPerShare / ms.length) * shares : 0;
-          sum += perPay;
-          list.push(sym);
+    const hasHistory = Array.isArray(_exDiv.list);
+    const pad = n => String(n).padStart(2, '0');
+
+    const html = [0, 1, 2].map(off => {
+      const first = new Date(now.getFullYear(), now.getMonth() + off, 1);
+      const last  = new Date(now.getFullYear(), now.getMonth() + off + 1, 0);
+      const m = first.getMonth() + 1;
+      const rangeStart = autodivYmd(first), rangeEnd = autodivYmd(last);
+
+      const items = [];                       // { symbol, kind, amount, detail }
+      persons.forEach(p => {
+        const open = computeOpenHoldings(p);
+        let covered = new Set();
+        if (hasHistory) {
+          const r = computePayoutEvents(p, rangeStart, rangeEnd);
+          r.events.forEach(e => items.push({
+            symbol: e.symbol, kind: e.kind, amount: e.amount,
+            detail: `${e.symbol} ${PAYOUT_TAGS[e.kind]} · ${e.exDate.slice(5).replace('-', '/')} 除息 · ${fmt.money(e.shares)} 股 × ${e.perShare}`
+          }));
+          covered = new Set(Object.keys(open).filter(sym => !r.missing.includes(sym)));
         }
+        // 沒有歷史資料的代號(或歷史還沒載入):改用手動設定
+        Object.keys(open).forEach(sym => {
+          if (covered.has(sym)) return;
+          const amt = manualPayoutAmount(symMap[sym], m, open[sym].shares);
+          if (amt !== null) items.push({ symbol: sym, kind: 'manual', amount: amt, detail: `${sym} 手動設定估算(標的設定的配息月份與年配息)` });
+        });
       });
-      const isThis = m === curMonth ? ' (本月)' : '';
+
+      // 同代號合併(多人時)
+      const bySym = {};
+      items.forEach(it => {
+        const k = it.symbol + '|' + it.kind;
+        if (!bySym[k]) bySym[k] = { symbol: it.symbol, kind: it.kind, amount: 0 };
+        bySym[k].amount += it.amount;
+      });
+      const chips = Object.values(bySym).sort((a, b) => a.symbol < b.symbol ? -1 : 1);
+      const sum = chips.reduce((t, c) => t + c.amount, 0);
+      const isThis = off === 0 ? ' (本月)' : '';
       return `<div class="payout-month">
         <div class="month-label">${m} 月${isThis}</div>
-        <div class="symbols">${list.length ? list.join(', ') : '—'}</div>
-        <div class="amount">${list.length ? fmt.money(sum) : ''}</div>
+        <div class="symbols">${chips.length ? chips.map(c => `<span class="pc pc-${c.kind}">${escapeHtml(c.symbol)}<small>${PAYOUT_TAGS[c.kind]}</small></span>`).join(' ') : '—'}</div>
+        <div class="amount">${chips.length ? fmt.money(sum) : ''}</div>
+        ${items.length ? `<div class="pc-detail">${items.map(it => escapeHtml(it.detail) + '・' + fmt.money(it.amount)).join('<br>')}</div>` : ''}
       </div>`;
     }).join('');
     $('#payout-calendar').innerHTML = html;

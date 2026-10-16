@@ -5,7 +5,7 @@
  * 原則:動畫只用 transform / opacity;模糊(backdrop-filter)只在 full 且只套在大塊元素上。 */
 
 /* ---------- 金額隱私模式 ---------- */
-html[data-privacy="on"] :is(.person-card .val, .stat-card .val, table td, .big-num, .bar-label, .pdiv-amt) {
+html[data-privacy="on"] :is(.person-card .val, .stat-card .val, table td, .big-num, .bar-label, .pdiv-amt, .payout-month .amount, .pc-detail) {
   filter: blur(7px);
   user-select: none;
   transition: filter .2s;

@@ -4,7 +4,9 @@
  * 所有檔案共用全域範圍,載入順序見 index.html */
 
   const AUTODIV = {
-    WINDOW_DAYS: 120,       // 往前看幾天內的除息(超過的不再提醒)
+    WINDOW_DAYS: 120,       // 「待確認配息」往前看幾天內的除息(超過的不再提醒)
+    HISTORY_DAYS: 400,      // 抓多久的歷史除息資料(行事曆推估週期用)
+    CHUNK_DAYS: 60,         // 證交所查詢一次的區間長度
     PAID_WINDOW_DAYS: 60,   // 除息後多少天內的股利紀錄視為「已入帳」
     PAY_LAG_DAYS: 28,       // 預估入帳日 = 除息日 + 這麼多天(ETF 常見約 3~5 週)
     NHI_RATE: 0.0211,       // 二代健保補充保費
@@ -28,17 +30,40 @@
     return `${Number(m[1]) + 1911}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`;
   }
 
+  // 目前持有(曾買過)的代號集合,以及它的字串鍵(用來判斷快取是否還適用)
+  function autodivHeldSet() {
+    return new Set((STATE.data.purchases || []).map(r => r.symbol).filter(Boolean));
+  }
+  function autodivHeldKey() { return Array.from(autodivHeldSet()).sort().join(','); }
+
   function autodivLoadCache() {
     try {
       const c = JSON.parse(localStorage.getItem(KEY.divExCache) || 'null');
-      if (c && Array.isArray(c.list)) { _exDiv.at = c.at || 0; _exDiv.list = c.list; }
+      if (c && c.v === 2 && Array.isArray(c.list)) {
+        _exDiv.at = (c.held === autodivHeldKey()) ? (c.at || 0) : 0;   // 持有標的變了就視為過期,但舊資料仍可先顯示
+        _exDiv.list = c.list;
+      }
     } catch (_) {}
   }
 
-  // 抓區間內所有「現金股利(息)」的除息資料 → [{ symbol, exDate, perShare }]
+  // 抓過去 HISTORY_DAYS 天、你持有標的的「現金股利(息)」除息資料 → [{ symbol, exDate, perShare }]
+  // 證交所一次只給一段區間,所以分段依序抓(每段間隔一下,避免被限流)。任何一段失敗就整體失敗。
   async function fetchExDividends() {
-    const end = new Date();
-    const start = new Date(); start.setDate(start.getDate() - AUTODIV.WINDOW_DAYS);
+    const held = autodivHeldSet();
+    const out = [];
+    let to = new Date();
+    const first = new Date(); first.setDate(first.getDate() - AUTODIV.HISTORY_DAYS);
+    while (to >= first) {
+      let from = new Date(to); from.setDate(from.getDate() - AUTODIV.CHUNK_DAYS + 1);
+      if (from < first) from = first;
+      (await fetchExChunk(from, to)).forEach(e => { if (held.has(e.symbol)) out.push(e); });
+      to = new Date(from); to.setDate(to.getDate() - 1);
+      if (to >= first) await new Promise(r => setTimeout(r, 400));
+    }
+    return out;
+  }
+
+  async function fetchExChunk(start, end) {
     const q = d => autodivYmd(d).replace(/-/g, '');
     const url = 'https://www.twse.com.tw/rwd/zh/exRight/TWT49U?response=json&startDate=' + q(start) + '&endDate=' + q(end);
     const ctrl = new AbortController();
@@ -97,8 +122,13 @@
   }
 
   function autodivIsRecorded(person, symbol, exDate, perShare, gross) {
+    return !!autodivFindRecord(person, symbol, exDate, perShare, gross);
+  }
+
+  // 找出已入帳、對應這次除息的股利紀錄(找不到回傳 undefined)
+  function autodivFindRecord(person, symbol, exDate, perShare, gross) {
     const endYmd = autodivAddDays(exDate, AUTODIV.PAID_WINDOW_DAYS);
-    return (STATE.data.dividends || []).some(d => {
+    return (STATE.data.dividends || []).find(d => {
       if (d.person !== person || d.symbol !== symbol) return false;
       const dd = String(d.date || '').slice(0, 10);
       if (dd < exDate || dd > endYmd) return false;
@@ -123,8 +153,9 @@
     const held = new Set((STATE.data.purchases || []).map(r => r.symbol).filter(Boolean));
     const skip = autodivDismissed();
     const out = [];
+    const oldest = autodivAddDays(autodivYmd(new Date()), -AUTODIV.WINDOW_DAYS);
     _exDiv.list.forEach(ev => {
-      if (!held.has(ev.symbol)) return;
+      if (!held.has(ev.symbol) || ev.exDate < oldest) return;
       CONFIG.PEOPLE.forEach(person => {
         const shares = autodivSharesBefore(person, ev.symbol, ev.exDate);
         if (shares <= 0) return;
@@ -199,8 +230,79 @@
     _exDiv.loading = true;
     fetchExDividends().then(list => {
       _exDiv.list = list; _exDiv.at = Date.now();
-      try { localStorage.setItem(KEY.divExCache, JSON.stringify({ at: _exDiv.at, list })); } catch (_) {}
+      try { localStorage.setItem(KEY.divExCache, JSON.stringify({ v: 2, held: autodivHeldKey(), at: _exDiv.at, list })); } catch (_) {}
       drawPendingDividends();
+      renderPayoutCalendar(STATE.defaultPerson);   // 行事曆要用同一份資料推估
     }).catch(() => { _exDiv.failedAt = Date.now(); /* 抓不到就維持現狀(或舊快取),不打擾使用者 */ })
       .finally(() => { _exDiv.loading = false; });
+  }
+
+  // ============== 配息行事曆推估 ==============
+
+  const _median = (a) => { const b = a.slice().sort((x, y) => x - y); return b[Math.floor(b.length / 2)]; };
+  const autodivDaysBetween = (a, b) => Math.round((new Date(b + 'T00:00:00') - new Date(a + 'T00:00:00')) / 864e5);
+
+  // 某代號的歷史除息(由舊到新)
+  function autodivHistory(symbol) {
+    return (_exDiv.list || []).filter(e => e.symbol === symbol)
+      .sort((a, b) => a.exDate < b.exDate ? -1 : 1);
+  }
+
+  // 由歷史推週期:取最近幾次除息間隔的中位數(月配約 30、季配約 91、半年約 182、年配約 365);
+  // 只有一筆或間隔不合理則回傳 null(無法推週期)
+  function autodivInterval(hist) {
+    if (hist.length < 2) return null;
+    const gaps = [];
+    for (let i = Math.max(1, hist.length - 4); i < hist.length; i++) {
+      gaps.push(autodivDaysBetween(hist[i - 1].exDate, hist[i].exDate));
+    }
+    const iv = _median(gaps);
+    return (iv >= 20 && iv <= 400) ? iv : null;
+  }
+
+  // 計算 [rangeStart, rangeEnd](YYYY-MM-DD,以預估入帳日判斷)內某人的配息事件。
+  // 回傳 { symbol, exDate, payDate, perShare, shares, amount, kind }
+  //   kind: 'paid' 已入帳(用你記的實領)| 'ex' 已除息尚未入帳(實際每股配息)| 'est' 預估(最近一次每股配息 × 週期)
+  // 沒有歷史資料的代號回傳在 missing 裡,由呼叫端改用手動設定。
+  function computePayoutEvents(person, rangeStart, rangeEnd) {
+    const events = [], missing = [];
+    const open = computeOpenHoldings(person);
+    const todayYmd = autodivYmd(new Date());
+    Object.keys(open).forEach(symbol => {
+      const hist = autodivHistory(symbol);
+      if (hist.length === 0) { missing.push(symbol); return; }
+      const inRange = (pay) => pay >= rangeStart && pay <= rangeEnd;
+      // 已知的除息(含已入帳)
+      hist.forEach(ev => {
+        const payDate = autodivAddDays(ev.exDate, AUTODIV.PAY_LAG_DAYS);
+        if (!inRange(payDate)) return;
+        const shares = autodivSharesBefore(person, symbol, ev.exDate);
+        if (shares <= 0) return;
+        const gross = shares * ev.perShare;
+        const rec = autodivFindRecord(person, symbol, ev.exDate, ev.perShare, gross);
+        events.push({
+          symbol, exDate: ev.exDate, payDate, perShare: ev.perShare, shares,
+          amount: rec ? Number(rec.total) || 0 : autodivEstimateNet(gross),
+          kind: rec ? 'paid' : 'ex'
+        });
+      });
+      // 未來預估:最後一次除息 + k × 週期
+      const iv = autodivInterval(hist);
+      const last = hist[hist.length - 1];
+      if (!iv) return;
+      for (let k = 1; k <= 8; k++) {
+        const exDate = autodivAddDays(last.exDate, iv * k);
+        if (exDate <= last.exDate) continue;
+        const payDate = autodivAddDays(exDate, AUTODIV.PAY_LAG_DAYS);
+        if (payDate > rangeEnd) break;
+        if (!inRange(payDate)) continue;
+        if (exDate <= todayYmd && hist.some(h => Math.abs(autodivDaysBetween(h.exDate, exDate)) <= 10)) continue;  // 已有實際資料
+        const gross = open[symbol].shares * last.perShare;
+        events.push({
+          symbol, exDate, payDate, perShare: last.perShare, shares: open[symbol].shares,
+          amount: autodivEstimateNet(gross), kind: 'est'
+        });
+      }
+    });
+    return { events, missing };
   }

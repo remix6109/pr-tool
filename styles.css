@@ -867,3 +867,11 @@ th { color: var(--muted); font-weight: 600; font-size: .8rem; }
 .pdiv-row:first-child { border-top: 0; padding-top: 0; }
 .pdiv-main { flex: 1; min-width: 0; line-height: 1.5; }
 .pdiv-actions { display: flex; flex-direction: column; gap: 6px; flex: 0 0 auto; }
+
+.payout-month { flex-wrap: wrap; }
+.payout-month .pc { display: inline-block; margin-right: 4px; }
+.payout-month .pc small { margin-left: 3px; font-size: .72em; padding: 1px 5px; border-radius: 6px; background: var(--neutral-bg); }
+.payout-month .pc-paid { color: var(--green); }
+.payout-month .pc-paid small { background: var(--gain-bg); }
+.payout-month .pc-ex small { background: var(--gain-bg); color: var(--green); }
+.payout-month .pc-detail { flex-basis: 100%; color: var(--muted); font-size: .75rem; line-height: 1.6; }
