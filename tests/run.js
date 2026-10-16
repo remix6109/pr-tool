@@ -103,13 +103,26 @@ set({ purchases: [
   P('d', '黃', 'Z', 1000, 10, 100, 0, '2026-03-15'),                  // 週日
   P('e', '黃', 'Z', 1000, 10, 100, 0, '2026-03-15')                   // 與 d 重複
 ]});
+T._exDiv.list = [{ symbol: 'Z', exDate: '2026-03-17', perShare: 1 }];   // 讓 Z 在 3/15(週日)後兩天除息
 const dc = T.runDataCheck();
 const msgs = dc.warns.map(w => w.msg).join('\n');
 eq('抓到金額不符', /差距較大/.test(msgs), true);
 eq('抓到賣超過持有', /賣超過持有/.test(msgs), true);
 eq('抓到未來日期', /日期在未來/.test(msgs), true);
 eq('抓到重複', /完全相同/.test(msgs), true);
-eq('週日列為參考', dc.infos.some(i => /星期日/.test(i.msg)), true);
+eq('除息前幾天買在週日 → 建議處理', dc.warns.some(w => /星期日/.test(w.msg)), true);
+set({ purchases: [P('w', '黃', 'Z', 1000, 10, 100, 0, '2026-02-01')] });   // 週日但離除息很遠
+{ const r = T.runDataCheck(); eq('週日但離除息很遠 → 不提醒', r.warns.concat(r.infos).some(x => /星期/.test(x.msg)), false); }
+
+// ---------- 股利對應到正確的除息(月配、每股相同時不能對錯期) ----------
+T._exDiv.list = [{ symbol: 'M', exDate: '2026-07-09', perShare: 0.12 }, { symbol: 'M', exDate: '2026-08-05', perShare: 0.12 }];
+set({ purchases: [P('a', '蘇', 'M', 100000, 10, 10000, 0, '2026-06-01'), P('b', '蘇', 'M', 90000, 10, 9000, 0, '2026-07-20')],
+      dividends: [{ id: 'd1', person: '蘇', symbol: 'M', total: 1190, amount_per_share: 0.12, shares: 10000, date: '2026-07-30' },
+                  { id: 'd2', person: '蘇', symbol: 'M', total: 2270, amount_per_share: 0.12, shares: 19000, date: '2026-08-30' }] });
+eq('月配兩期都對得上,不誤報', T.runDataCheck().warns.length, 0);
+set({ purchases: [P('a', '蘇', 'M', 100000, 10, 10000, 0, '2026-06-01')],
+      dividends: [{ id: 'd1', person: '蘇', symbol: 'M', total: 2270, amount_per_share: 0.12, shares: 19000, date: '2026-08-30' }] });
+eq('股數對不上才報', T.runDataCheck().warns.some(w => /領息股數/.test(w.msg)), true);
 
 console.log(`\n${fail === 0 ? '✅ 全部通過' : '❌ 有失敗'}:${pass} 通過、${fail} 失敗`);
 process.exit(fail === 0 ? 0 : 1);

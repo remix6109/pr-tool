@@ -24,7 +24,10 @@
         if (dt > today) add(warns, '_purchases', r, '日期在未來');
         else if (dt < '2015-01-01') add(warns, '_purchases', r, '日期太久以前,年份可能打錯');
         const w = dow(dt);
-        if (w === '日' || w === '六') add(infos, '_purchases', r, `日期是星期${w}(非交易日)。若實際成交日不同,可能影響除息資格判斷`);
+        if ((w === '日' || w === '六') && Array.isArray(_exDiv.list)) {
+          const near = _exDiv.list.find(e => e.symbol === r.symbol && autodivDaysBetween(dt, e.exDate) >= 0 && autodivDaysBetween(dt, e.exDate) <= 7);
+          if (near) add(warns, '_purchases', r, `日期是星期${w}(非交易日),且離 ${near.exDate} 除息只差 ${autodivDaysBetween(dt, near.exDate)} 天。實際成交日會決定有沒有領到這次配息,也可能是年份或日期打錯`);
+        }
       }
       if (price > 0 && shares !== 0) {
         const expect = Math.abs(price * shares);
@@ -69,14 +72,19 @@
             add(warns, '_dividends', r, `每股配息填 ${aps},證交所該期是 ${evs.map(e => e.perShare).join(' / ')}`);
           }
           // 你記的股數 vs 依購買紀錄與除息資格推算的股數
-          const ev = evs.find(e => aps > 0 && Math.abs(e.perShare - aps) < 0.0005) || evs[evs.length - 1];
+          const cand = evs.filter(e => !(aps > 0) || Math.abs(e.perShare - aps) < 0.0005);
+          const pool = (cand.length ? cand : evs).slice();
+          const sharesGap = (e) => sh > 0 ? Math.abs(autodivSharesBefore(r.person, r.symbol, e.exDate) - sh) : 0;
+          const payGap = (e) => Math.abs(autodivDaysBetween(dt, autodivAddDays(e.exDate, AUTODIV.PAY_LAG_DAYS)));
+          pool.sort((a, b) => sharesGap(a) - sharesGap(b) || payGap(a) - payGap(b));
+          const ev = pool[0];
           const should = autodivSharesBefore(r.person, r.symbol, ev.exDate);
           if (sh > 0 && should > 0 && sh !== should) {
             add(warns, '_dividends', r, `你記的領息股數 ${fmt.money(sh)},依購買紀錄與除息資格(${ev.exDate} 除息)推算是 ${fmt.money(should)}。購買日期可能有誤`);
           } else if (!(sh > 0) && aps > 0 && should > 0) {
             const gross = should * aps;
             if (Math.abs(total - gross) > Math.max(30, gross * 0.04)) {
-              add(infos, '_dividends', r, `依購買紀錄推算應領約 ${fmt.money(gross)},你記 ${fmt.money(total)}`);
+              add(warns, '_dividends', r, `依購買紀錄與除息資格(${ev.exDate} 除息,每股 ${ev.perShare})推算應領約 ${fmt.money(gross)},你記 ${fmt.money(total)}。請檢查 ${r.symbol} 在 ${ev.exDate} 前後的購買日期(尤其是落在週末或年份可能打錯的)`);
             }
           }
         }
