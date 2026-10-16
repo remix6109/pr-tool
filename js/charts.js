@@ -111,11 +111,9 @@
     const symMap = {};
     (STATE.data.symbols || []).forEach(s => symMap[s.symbol] = s);
     const agg = {};
-    (STATE.data.purchases || []).forEach(r => {
-      if (personFilter && r.person !== personFilter) return;
-      if (!r.symbol) return;
-      if (!agg[r.symbol]) agg[r.symbol] = 0;
-      agg[r.symbol] += (Number(r.shares) || 0) * (Number((symMap[r.symbol] || {}).current_price) || 0);
+    const open = computeOpenHoldings(personFilter);
+    Object.keys(open).forEach(sym => {
+      agg[sym] = open[sym].shares * (Number((symMap[sym] || {}).current_price) || 0);
     });
     const labels = Object.keys(agg).sort();
     const data   = labels.map(k => Math.round(agg[k]));

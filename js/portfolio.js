@@ -7,20 +7,21 @@
     const symMap = {};
     (STATE.data.symbols || []).forEach(s => symMap[s.symbol] = s);
 
-    (STATE.data.purchases || []).forEach(r => {
-      const p = r.person;
-      if (!out[p]) return;
-      const shares = Number(r.shares) || 0;
-      const amount = Number(r.amount) || 0;
-      const fee    = Number(r.fee)    || 0;
-      out[p].totalShares += shares;
-      out[p].totalCost   += amount + fee;
-      const sym = symMap[r.symbol];
+    // 目前仍持有的部位(已賣出的不再計入股數、本金、市值)
+    const tally = replayPurchases().tally;
+    Object.keys(tally).forEach(key => {
+      const i = key.indexOf('|');
+      const p = key.slice(0, i), symbol = key.slice(i + 1);
+      const t = tally[key];
+      if (!out[p] || t.shares <= 0) return;
+      out[p].totalShares += t.shares;
+      out[p].totalCost   += t.cost;
+      const sym = symMap[symbol];
       if (sym) {
         const y = Number(sym.annual_yield_per_share) || 0;
         const cur = Number(sym.current_price) || 0;
-        out[p].annualYield  += y   * shares;  // shares 即「股數」
-        out[p].marketValue  += cur * shares;
+        out[p].annualYield  += y   * t.shares;  // shares 即「股數」
+        out[p].marketValue  += cur * t.shares;
       }
     });
 
@@ -40,9 +41,11 @@
     return out;
   }
 
-  // 計算每筆「賣出」的已實現損益(用加權平均成本)
-  // 回傳 [{ id, person, symbol, date, sold_shares, sell_price, cost_basis, proceeds, fee, realized_pl }, ...]
-  function computeRealizedPL() {
+  // 依時間重播所有買賣(加權平均成本),同時得到:
+  //   sells — 每筆賣出的已實現損益
+  //   tally — 目前仍持有的部位 { "person|symbol": { shares, cost } }(賣出的部分已從成本扣除)
+  // 賣出所得屬於「已實現」,不應再讓持股成本變負、或在持股明細重複顯示損益。
+  function replayPurchases() {
     const sells = [];
     const tally = {};  // key = "person|symbol" → { shares, cost }
     const sorted = (STATE.data.purchases || []).slice().sort((a, b) => {
@@ -83,27 +86,40 @@
         if (t.shares < 0.0001) { t.shares = 0; t.cost = 0; }
       }
     });
-    return sells;
+    return { sells, tally };
+  }
+
+  // 計算每筆「賣出」的已實現損益(用加權平均成本)
+  // 回傳 [{ id, person, symbol, date, sold_shares, sell_price, cost_basis, proceeds, fee, realized_pl }, ...]
+  function computeRealizedPL() {
+    return replayPurchases().sells;
+  }
+
+  // 目前持有:{ symbol: { shares, cost } };personFilter 為空則合併所有人。已清倉(0 股)的不列入。
+  function computeOpenHoldings(personFilter) {
+    const agg = {};
+    const tally = replayPurchases().tally;
+    Object.keys(tally).forEach(key => {
+      const i = key.indexOf('|');
+      const person = key.slice(0, i), sym = key.slice(i + 1);
+      if (!sym || tally[key].shares <= 0) return;
+      if (personFilter && person !== personFilter) return;
+      if (!agg[sym]) agg[sym] = { shares: 0, cost: 0 };
+      agg[sym].shares += tally[key].shares;
+      agg[sym].cost   += tally[key].cost;
+    });
+    return agg;
   }
 
   function renderHoldings(personFilter) {
     const symMap = {};
     (STATE.data.symbols || []).forEach(s => symMap[s.symbol] = s);
-    const agg = {};
-    (STATE.data.purchases || []).forEach(r => {
-      const k = r.symbol;
-      if (!k) return;
-      if (personFilter && r.person !== personFilter) return;
-      if (!agg[k]) agg[k] = { shares: 0, amount: 0, fee: 0 };
-      agg[k].shares += Number(r.shares) || 0;
-      agg[k].amount += Number(r.amount) || 0;
-      agg[k].fee    += Number(r.fee)    || 0;
-    });
+    const agg = computeOpenHoldings(personFilter);   // 已清倉的不顯示,損益改看「歷史 → 已實現」
     // 先把所有列的數值算好,再排序
     const items = Object.keys(agg).map(sym => {
       const a = agg[sym];
       const totalUnits = a.shares;
-      const totalCost  = a.amount + a.fee;
+      const totalCost  = a.cost;
       const avgPrice   = totalUnits > 0 ? totalCost / totalUnits : 0;
       const cur = Number((symMap[sym] || {}).current_price) || 0;
       const marketValue = cur > 0 ? cur * totalUnits : 0;
