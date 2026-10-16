@@ -156,7 +156,8 @@
     const oldest = autodivAddDays(autodivYmd(new Date()), -AUTODIV.WINDOW_DAYS);
     _exDiv.list.forEach(ev => {
       if (!held.has(ev.symbol) || ev.exDate < oldest) return;
-      CONFIG.PEOPLE.forEach(person => {
+      // 只看目前選的人(跟首頁其他卡片一致);切換黃/蘇時 renderDashboard 會重畫
+      [STATE.defaultPerson || CONFIG.PEOPLE[0]].forEach(person => {
         const shares = autodivSharesBefore(person, ev.symbol, ev.exDate);
         if (shares <= 0) return;
         const key = [person, ev.symbol, ev.exDate].join('|');
