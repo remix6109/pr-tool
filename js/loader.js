@@ -33,7 +33,21 @@
       $('#home-loading').classList.add('hidden');
       $('#home-content').classList.remove('hidden');
     } catch (e) {
-      if (mySeq === _loadSeq) $('#home-loading').textContent = '載入失敗:' + e.message;
+      if (mySeq !== _loadSeq) return;
+      // 連線失敗時退回顯示上次的資料,不要整頁只剩錯誤文字
+      let fallback = STATE.data;
+      if (!fallback) {
+        try { fallback = JSON.parse(localStorage.getItem(KEY.cache) || 'null'); } catch (_) {}
+      }
+      if (fallback) {
+        STATE.data = fallback;
+        renderAll();
+        $('#home-loading').classList.add('hidden');
+        $('#home-content').classList.remove('hidden');
+        showToast('連線失敗(' + e.message + '),目前顯示上次資料,下拉可重試', 4500);
+      } else {
+        $('#home-loading').textContent = '載入失敗:' + e.message + '(下拉或到設定按「重新載入資料」重試)';
+      }
     }
   }
 

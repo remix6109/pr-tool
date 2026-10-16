@@ -7,12 +7,40 @@ window.API = (function() {
     return u;
   }
 
-  async function get() {
+  const GET_TIMEOUT_MS = 30000;   // Apps Script 冷啟動可能要十幾秒
+  const GET_RETRIES = 2;          // 失敗後最多再試 2 次(讀取可安全重試)
+
+  async function getOnce() {
     const url = getUrl();
-    const res = await fetch(url + '?t=' + Date.now(), { method: 'GET' });
-    const json = await res.json();
-    if (!json.ok) throw new Error(json.error || '讀取失敗');
-    return json.data;
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), GET_TIMEOUT_MS);
+    try {
+      const res = await fetch(url + '?t=' + Date.now(), { method: 'GET', signal: ctrl.signal });
+      const text = await res.text();
+      let json;
+      try { json = JSON.parse(text); }
+      catch (_) { throw new Error('伺服器回應異常(可能剛喚醒或暫時忙碌)'); }
+      if (!json.ok) { const e = new Error(json.error || '讀取失敗'); e.fatal = true; throw e; }
+      return json.data;
+    } catch (e) {
+      if (e.name === 'AbortError') throw new Error('連線逾時');
+      throw e;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  async function get() {
+    let lastErr;
+    for (let i = 0; i <= GET_RETRIES; i++) {
+      try { return await getOnce(); }
+      catch (e) {
+        lastErr = e;
+        if (e.fatal || e.message === '尚未設定 API URL') break;   // 後端明確回錯誤,重試沒用
+        if (i < GET_RETRIES) await new Promise(r => setTimeout(r, 1000 * (i + 1)));
+      }
+    }
+    throw lastErr;
   }
 
   async function post(action, data, signal) {
