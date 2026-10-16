@@ -61,7 +61,8 @@
         ${items.length ? `<div class="pc-detail">${items.map(it => escapeHtml(it.detail) + '・' + fmt.money(it.amount)).join('<br>')}</div>` : ''}
       </div>`;
     }).join('');
-    $('#payout-calendar').innerHTML = html;
+    const notes = hasHistory ? computeUpcomingNotes(personFilter) : [];
+    $('#payout-calendar').innerHTML = (notes.length ? `<div class="pay-notes">${notes.join('<br>')}</div>` : '') + html;
   }
 
   // 把 meta 裡的日期值轉成 Date(吃 YYYY-MM-DD 與 ISO 兩種格式)

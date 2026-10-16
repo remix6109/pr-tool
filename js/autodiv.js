@@ -240,6 +240,59 @@
       .finally(() => { _exDiv.loading = false; });
   }
 
+  // ============== 股利統計(近 12 個月、殖利率) ==============
+
+  // 近 12 個月實領股利:{ total, bySym:{sym:amount} };person 為空則全部人
+  function trailing12Dividends(person) {
+    const cutoff = autodivAddDays(autodivYmd(new Date()), -365);
+    const out = { total: 0, bySym: {} };
+    (STATE.data.dividends || []).forEach(r => {
+      if (person && r.person !== person) return;
+      if (String(r.date || '').slice(0, 10) < cutoff) return;
+      const v = Number(r.total) || 0;
+      out.total += v;
+      out.bySym[r.symbol] = (out.bySym[r.symbol] || 0) + v;
+    });
+    return out;
+  }
+
+  // 現金殖利率(成本)= 近 12 個月實領 ÷ 目前持有成本;沒有持有成本回傳 null
+  function dividendYieldOnCost(amount, cost) {
+    return cost > 0 ? amount / cost * 100 : null;
+  }
+
+  // ============== 近期提醒 ==============
+
+  // 近期要注意的配息:7 天內除息(含最後買進日)、3 天內預計入帳。回傳字串陣列(已跳脫)。
+  function computeUpcomingNotes(personFilter) {
+    if (!Array.isArray(_exDiv.list)) return [];
+    const persons = personFilter ? [personFilter] : CONFIG.PEOPLE.slice();
+    const today = autodivYmd(new Date());
+    const in7 = autodivAddDays(today, 7), back2 = autodivAddDays(today, -2), in3 = autodivAddDays(today, 3);
+    const mmdd = (ymd) => ymd.slice(5).replace('-', '/');
+    const left = (ymd) => { const n = autodivDaysBetween(today, ymd); return n <= 0 ? '今天' : n + ' 天後'; };
+    const lastBuyText = (ex) => {
+      const lb = autodivBizDaysBefore(ex, 2);
+      return lb < today ? '最後買進日(約 ' + mmdd(lb) + ')已過,現在買領不到這次' : '最後買進日約 ' + mmdd(lb) + ',之後才買領不到';
+    };
+    const seen = new Set(), notes = [];
+    persons.forEach(p => {
+      computePayoutEvents(p, back2, autodivAddDays(today, 60)).events.forEach(e => {
+        if (e.kind === 'paid') return;
+        const k = e.symbol + e.exDate + e.kind;
+        if (e.kind === 'est' && e.exDate >= today && e.exDate <= in7 && !seen.has('x' + k)) {
+          seen.add('x' + k);
+          notes.push(`⏰ <b>${escapeHtml(e.symbol)}</b> 預計 ${mmdd(e.exDate)} 除息(${left(e.exDate)})。${lastBuyText(e.exDate)}`);
+        }
+        if (e.kind !== 'paid' && e.payDate >= back2 && e.payDate <= in3 && !seen.has('p' + k)) {
+          seen.add('p' + k);
+          notes.push(`💵 <b>${escapeHtml(e.symbol)}</b> 預計 ${mmdd(e.payDate)} 前後入帳,約 ${fmt.money(e.amount)}`);
+        }
+      });
+    });
+    return notes;
+  }
+
   // ============== 配息行事曆推估 ==============
 
   const _median = (a) => { const b = a.slice().sort((x, y) => x - y); return b[Math.floor(b.length / 2)]; };

@@ -82,6 +82,11 @@
     }
 
     else if (tab === 'dividends') {
+      const pf = (person && CONFIG.PEOPLE.includes(person)) ? person : undefined;
+      const t12 = trailing12Dividends(pf);
+      const openH = computeOpenHoldings(pf);
+      const openCost = Object.values(openH).reduce((s, h) => s + h.cost, 0);
+      const yocTotal = dividendYieldOnCost(t12.total, openCost);
       const total = raw.reduce((s, r) => s + (Number(r.total) || 0), 0);
       const avg   = raw.length > 0 ? total / raw.length : 0;
       const max   = raw.reduce((m, r) => Math.max(m, Number(r.total) || 0), 0);
@@ -90,6 +95,8 @@
         <div class="stat-card"><div class="lbl">累計</div><div class="val gain">+${fmt.money(total)}</div></div>
         <div class="stat-card"><div class="lbl">平均</div><div class="val">${fmt.money(avg)}</div></div>
         <div class="stat-card"><div class="lbl">最高單筆</div><div class="val">${fmt.money(max)}</div></div>
+        <div class="stat-card"><div class="lbl">近 12 月實領</div><div class="val gain">+${fmt.money(t12.total)}</div></div>
+        <div class="stat-card"><div class="lbl">殖利率(成本) <button type="button" class="info-btn" data-info="yoc" title="什麼是殖利率(成本)?">ⓘ</button></div><div class="val">${yocTotal === null ? '—' : yocTotal.toFixed(2) + '%'}</div></div>
       `;
       // 分代號統計
       const bySym = {};
@@ -101,19 +108,23 @@
       });
       const symRows = Object.keys(bySym).sort().map(k => {
         const a = bySym[k];
-        return `<tr><td>${k}</td><td>${a.count}</td><td class="gain">+${fmt.money(a.total)}</td></tr>`;
+        const y = openH[k] ? dividendYieldOnCost(t12.bySym[k] || 0, openH[k].cost) : null;
+        return `<tr><td>${k}</td><td>${a.count}</td><td class="gain">+${fmt.money(a.total)}</td><td>${y === null ? '—' : y.toFixed(2) + '%'}</td></tr>`;
       }).join('');
       // 分年度統計
       const byYear = {};
       raw.forEach(r => {
         const y = String(r.date || '').slice(0, 4) || '?';
-        if (!byYear[y]) byYear[y] = { count: 0, total: 0 };
+        if (!byYear[y]) byYear[y] = { count: 0, total: 0, fee: 0 };
         byYear[y].count += 1;
         byYear[y].total += Number(r.total) || 0;
+        // 費用推算(補充保費 + 匯費):每股配息 × 股數 − 實領;只有兩個欄位都有填才算得出
+        const aps = Number(r.amount_per_share) || 0, sh = Number(r.shares) || 0;
+        if (aps > 0 && sh > 0) byYear[y].fee += Math.max(0, aps * sh - (Number(r.total) || 0));
       });
       const yearRows = Object.keys(byYear).sort().map(y => {
         const a = byYear[y];
-        return `<tr><td>${y}</td><td>${a.count}</td><td class="gain">+${fmt.money(a.total)}</td></tr>`;
+        return `<tr><td>${y}</td><td>${a.count}</td><td class="gain">+${fmt.money(a.total)}</td><td>${a.fee > 0 ? '-' + fmt.money(a.fee) : '—'}</td></tr>`;
       }).join('');
       // 樞紐: 代號 × 年
       const pivot = {}; const yearSet = new Set();
@@ -139,14 +150,15 @@
       }).join('');
       breakdown = `<div class="breakdown-title">分代號統計</div>
         <div class="table-wrap"><table>
-          <thead><tr><th>代號</th><th>筆數</th><th>金額</th></tr></thead>
+          <thead><tr><th>代號</th><th>筆數</th><th>金額</th><th>殖利率(成本)</th></tr></thead>
           <tbody>${symRows}</tbody>
         </table></div>
         <div class="breakdown-title">分年度統計</div>
         <div class="table-wrap"><table>
-          <thead><tr><th>年</th><th>筆數</th><th>金額</th></tr></thead>
+          <thead><tr><th>年</th><th>筆數</th><th>實領</th><th>費用(推算)</th></tr></thead>
           <tbody>${yearRows}</tbody>
         </table></div>
+        <div class="muted small" style="margin-top:4px;">費用 = 每股配息 × 股數 − 實領(補充保費與匯費),只有填了每股配息與股數的紀錄才算得出。殖利率(成本)= 近 12 個月實領 ÷ 目前持有成本。</div>
         <div class="breakdown-title">各代號 × 年度</div>
         <div class="table-wrap"><table>
           <thead>${pivotHead}</thead>

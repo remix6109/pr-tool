@@ -257,7 +257,8 @@
       const months = Object.keys(byMonthSymbol).sort();
       if (months.length === 0) { wrap.classList.add('hidden'); return; }
       wrap.classList.remove('hidden');
-      const mode = localStorage.getItem(KEY.dividendChartMode) === 'grouped' ? 'grouped' : 'stacked';
+      const savedMode = localStorage.getItem(KEY.dividendChartMode);
+      const mode = (savedMode === 'grouped' || savedMode === 'cumulative') ? savedMode : 'stacked';
       const toggle = $('#dividend-chart-toggle');
       if (toggle) {
         toggle.classList.remove('hidden');
@@ -267,9 +268,8 @@
           b.title = '';
         });
       }
-      $('#history-chart-title').textContent = mode === 'stacked'
-        ? '每月股利金額(堆疊)'
-        : '每月股利金額(並排)';
+      $('#history-chart-title').textContent = mode === 'stacked' ? '每月股利金額(堆疊)'
+        : mode === 'cumulative' ? '累計領到的股利' : '每月股利金額(並排)';
       const symbols = Array.from(symbolSet).sort();
       const palette = STATE.chartColors || getCurrentPalette().chart;
       const datasets = symbols.map((sym, i) => ({
@@ -283,6 +283,20 @@
         opts.scales.y.stacked = true;
       }
       if (_charts.history) _charts.history.destroy();
+      if (mode === 'cumulative') {
+        let run = 0;
+        const cum = months.map(m => (run += symbols.reduce((s, sym) => s + (byMonthSymbol[m][sym] || 0), 0)));
+        const col = palette[0];
+        _charts.history = new Chart(canvas, {
+          type: 'line',
+          data: { labels: months, datasets: [{
+            label: '累計股利', data: cum, borderColor: col, backgroundColor: FX.gradient(col),
+            fill: true, tension: FX.lineTension(), pointRadius: 3, borderWidth: 2
+          }] },
+          options: opts
+        });
+        return;
+      }
       _charts.history = new Chart(canvas, {
         type: 'bar',
         data: { labels: months, datasets },

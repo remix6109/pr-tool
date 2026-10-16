@@ -883,3 +883,5 @@ th { color: var(--muted); font-weight: 600; font-size: .8rem; }
 .dc-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0; border-top: 1px solid var(--border); }
 .dc-main { flex: 1; min-width: 0; line-height: 1.5; }
 .dc-ok { padding: 12px; border-radius: 10px; background: var(--gain-bg); color: var(--green); font-weight: 600; }
+
+.pay-notes { padding: 8px 10px; margin-bottom: 8px; border-radius: 10px; background: var(--neutral-bg); font-size: .85rem; line-height: 1.7; }
