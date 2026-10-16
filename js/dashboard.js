@@ -118,6 +118,7 @@
     renderSavingsProgress(stats);
     applyCollapseStates();
     FX.afterRender();
+    renderPendingDividends();
   }
 
   // 三條線:

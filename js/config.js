@@ -16,6 +16,8 @@ window.CONFIG = {
     dividendChartMode: 'pr.dividendChartMode',
     purchaseChartMode: 'pr.purchaseChartMode',
     fxLevel: 'pr.fxLevel',
+    divDismissed: 'pr.divDismissed',
+    divExCache: 'pr.divExCache',
     privacy: 'pr.privacy'
   },
   APP_TITLE_DEFAULT: '購買記錄',

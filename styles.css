@@ -861,3 +861,9 @@ th { color: var(--muted); font-weight: 600; font-size: .8rem; }
   from { transform: rotate(0deg); }
   to   { transform: rotate(360deg); }
 }
+
+/* === 待確認配息 === */
+.pdiv-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 0; border-top: 1px solid var(--border); }
+.pdiv-row:first-child { border-top: 0; padding-top: 0; }
+.pdiv-main { flex: 1; min-width: 0; line-height: 1.5; }
+.pdiv-actions { display: flex; flex-direction: column; gap: 6px; flex: 0 0 auto; }
