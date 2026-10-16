@@ -1,4 +1,4 @@
-/* 配息自動偵測 — 抓證交所「除權息計算結果表」,依你除息前一天的持股算出應領配息,
+/* 配息自動偵測 — 抓證交所「除權息計算結果表」,依你除息前 2 個營業日的持股算出應領配息,
  * 顯示在首頁「待確認配息」;按「確認入帳」會帶入現有的股利表單,由你核對後才寫入。
  * 資料來源只含除息日與每股配息(沒有發放日),入帳日與實領金額都是預估,確認時可修改。
  * 所有檔案共用全域範圍,載入順序見 index.html */
@@ -65,13 +65,27 @@
     }
   }
 
-  // 某人在除息日「前一天」仍持有的股數(買進日須早於除息日;賣出已扣除)
+  // 往前推 n 個營業日(只略過週六日,不含國定假日)
+  function autodivBizDaysBefore(ymd, n) {
+    const [y, m, d] = ymd.split('-').map(Number);
+    const t = new Date(y, m - 1, d);
+    while (n > 0) {
+      t.setDate(t.getDate() - 1);
+      if (t.getDay() !== 0 && t.getDay() !== 6) n--;
+    }
+    return autodivYmd(t);
+  }
+
+  // 某人「有資格領息」的股數:買進日須在除息日前 2 個營業日(含)以前(買進 T+2 才交割,
+  // 除息日前一個營業日才買進的領不到);賣出已扣除。
+  // 已用實際配息紀錄回測驗證(買在除息前一個營業日的那批確實沒領到)。
   function autodivSharesBefore(person, symbol, exDate) {
+    const cutoff = autodivBizDaysBefore(exDate, 2);
     let n = 0;
     (STATE.data.purchases || []).forEach(r => {
       if (r.person !== person || r.symbol !== symbol) return;
       const d = String(r.date || '').slice(0, 10);
-      if (!d || d >= exDate) return;
+      if (!d || d > cutoff) return;
       n += Number(r.shares) || 0;
     });
     return n;
