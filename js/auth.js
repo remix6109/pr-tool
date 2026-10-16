@@ -33,6 +33,8 @@
       if (!/^\d{4,8}$/.test(pin))     { err.textContent = 'PIN 必須是 4–8 位數字'; return; }
       if (pin !== pin2)                { err.textContent = '兩次輸入的 PIN 不一致'; return; }
       localStorage.setItem(KEY.apiUrl, url);
+      const tok = ($('#setup-token').value || '').trim();
+      if (tok) localStorage.setItem(KEY.apiToken, tok); else localStorage.removeItem(KEY.apiToken);
       localStorage.setItem(KEY.pinHash, await sha256(pin));
       localStorage.setItem(KEY.sessionUntil, String(Date.now() + CONFIG.SESSION_HOURS * 3600 * 1000));
       enterApp();

@@ -50,6 +50,9 @@
     <label>Apps Script Web App URL
       <input id="setup-api" type="url" placeholder="https://script.google.com/macros/s/.../exec" autocomplete="off" />
     </label>
+    <label>存取密鑰 (後端有設定才需要,沒有就留空)
+      <input id="setup-token" type="password" autocomplete="off" placeholder="後端 setupToken() 產生的密鑰" />
+    </label>
     <label>設定 PIN
       <input id="setup-pin" type="password" inputmode="numeric" pattern="[0-9]*" minlength="4" maxlength="8" autocomplete="new-password" />
     </label>
@@ -571,9 +574,11 @@
     <button class="btn ghost wide" id="btn-deleted-history">📋 最近刪除</button>
     <button class="btn ghost wide" id="btn-change-pin">🔑 變更 PIN</button>
     <button class="btn ghost wide" id="btn-change-api">🔗 變更 API URL</button>
+    <button class="btn ghost wide" id="btn-token">🔐 設定存取密鑰</button>
     <button class="btn ghost wide" id="btn-export">📤 匯出 JSON 備份</button>
     <button class="btn ghost wide" id="btn-import">📥 從 JSON 還原</button>
     <button class="btn danger wide" id="btn-logout">🚪 登出 (清除本機資料)</button>
+    <p class="muted small" id="settings-status"></p>
     <p class="muted small">資料來源:Google 試算表(透過 Apps Script)</p>
     <div class="modal-actions">
       <button class="btn primary" data-close>關閉</button>

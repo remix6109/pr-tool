@@ -200,6 +200,19 @@
     });
   }
 
+  // 設定頁最下面的狀態:密鑰、暫存佇列、最近一次自動備份
+  function renderSettingsStatus() {
+    const el = $('#settings-status');
+    if (!el) return;
+    const lines = [];
+    lines.push('存取密鑰:' + (localStorage.getItem(KEY.apiToken) ? '已設定' : '未設定'));
+    const q = API.queueSize();
+    if (q > 0) lines.push('待補送的暫存紀錄:' + q + ' 筆(連線後自動送出)');
+    const bk = STATE.data && STATE.data.meta && STATE.data.meta.last_backup;
+    lines.push('最近自動備份:' + (bk ? bk : '尚無(後端需執行 installBackupTrigger)'));
+    el.innerHTML = lines.map(escapeHtml).join('<br>');
+  }
+
   function renderPalettePicker() {
     const wrap = $('#palette-picker');
     if (!wrap) return;

@@ -2,3 +2,8 @@
   // ============== Init ==============
 
   document.addEventListener('DOMContentLoaded', () => { FX.init(); bootAuth(); });
+  window.addEventListener('online', () => API.flushQueue());
+  window.addEventListener('pr-queue-flushed', (e) => {
+    showToast('已補送 ' + e.detail.sent + ' 筆暫存的紀錄');
+    loadAndRender(true);
+  });

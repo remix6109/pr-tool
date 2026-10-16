@@ -16,6 +16,8 @@ window.CONFIG = {
     dividendChartMode: 'pr.dividendChartMode',
     purchaseChartMode: 'pr.purchaseChartMode',
     fxLevel: 'pr.fxLevel',
+    apiToken: 'pr.apiToken',
+    queue: 'pr.queue',
     divDismissed: 'pr.divDismissed',
     divExCache: 'pr.divExCache',
     privacy: 'pr.privacy'

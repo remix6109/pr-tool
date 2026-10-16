@@ -110,6 +110,7 @@
     $('#btn-settings').onclick = () => {
       renderPalettePicker();
       renderFxPicker();
+      renderSettingsStatus();
       renderIconPicker();
       renderAppTitleEditor();
       renderPersonLabelEditor();
@@ -154,6 +155,16 @@
       localStorage.setItem(KEY.apiUrl, next.trim());
       showToast('API URL 已更新');
       loadAndRender();
+    };
+
+    $('#btn-token').onclick = () => {
+      const has = !!localStorage.getItem(KEY.apiToken);
+      const next = prompt('輸入存取密鑰(後端 setupToken() 產生的那串)。' + (has ? '\n目前已設定;留空並按確定=清除。' : ''), '');
+      if (next === null) return;
+      if (next.trim()) localStorage.setItem(KEY.apiToken, next.trim());
+      else localStorage.removeItem(KEY.apiToken);
+      showToast(next.trim() ? '存取密鑰已更新' : '存取密鑰已清除');
+      loadAndRender(true);
     };
 
     $('#btn-import').onclick = importJsonFlow;

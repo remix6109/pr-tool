@@ -30,6 +30,7 @@
       STATE.data = data;
       localStorage.setItem(KEY.cache, JSON.stringify(data));
       renderAll();
+      if (API.queueSize() > 0) API.flushQueue();   // 連得上了,把先前暫存的補送出去
       $('#home-loading').classList.add('hidden');
       $('#home-content').classList.remove('hidden');
     } catch (e) {
