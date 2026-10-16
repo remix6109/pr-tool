@@ -133,6 +133,17 @@
           </div>
         </div>
 
+        <div class="card" id="card-town" data-collapse="town">
+          <div class="card-title">持股小鎮 <small class="muted" style="font-weight:500;font-size:.75em;">(點標題展開/收起)</small></div>
+          <div class="seg seg-mini" id="town-mode" style="margin-bottom:8px;">
+            <button type="button" class="seg-btn" data-town-mode="chg">今日漲跌</button>
+            <button type="button" class="seg-btn" data-town-mode="yld">殖利率(成本)</button>
+          </div>
+          <div id="town-scene"></div>
+          <div id="town-readout" class="small" style="min-height:3em;line-height:1.6;margin-top:6px;"></div>
+          <div class="muted small" style="margin-top:6px;">每檔持股一間店:房子越高市值越大、門口人越多占比越高。屋頂顏色:今日漲跌(綠漲、紅跌、灰無資料)或殖利率(深=6% 以上、淺=3% 以上)。掛旗子的是 30 天內要除息。點房子看細節。</div>
+        </div>
+
         <div class="card" data-collapse="composition">
           <div class="card-title">持股組成(以市值)</div>
           <div class="chart-wrap"><canvas id="chart-holdings"></canvas></div>
@@ -663,6 +674,7 @@
 <script src="js/settings.js"></script>
 <script src="js/autodiv.js"></script>
 <script src="js/datacheck.js"></script>
+<script src="js/town.js"></script>
 <script src="js/fx.js"></script>
 <script src="js/main.js"></script>
 

@@ -86,6 +86,7 @@
     bindHistory();
     bindPullToRefresh();
     bindCardCollapse();
+    bindTownCard();
     bindInfoButtons();
     bindHoldingsSort();
     await loadAndRender();

@@ -114,6 +114,7 @@
     renderHoldings(p);
     renderPayoutCalendar(p);
     renderHoldingsChart(p);
+    renderTown(p);
     renderNetWorthChart(p);
     renderSavingsProgress(stats);
     applyCollapseStates();

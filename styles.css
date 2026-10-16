@@ -885,3 +885,9 @@ th { color: var(--muted); font-weight: 600; font-size: .8rem; }
 .dc-ok { padding: 12px; border-radius: 10px; background: var(--gain-bg); color: var(--green); font-weight: 600; }
 
 .pay-notes { padding: 8px 10px; margin-bottom: 8px; border-radius: 10px; background: var(--neutral-bg); font-size: .85rem; line-height: 1.7; }
+
+/* === 持股小鎮 === */
+#town-scene svg { display: block; }
+.town-shop { cursor: pointer; }
+.town-shop:hover rect:first-child { stroke: var(--primary); }
+#town-scene { overflow-x: auto; }
