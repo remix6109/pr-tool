@@ -233,7 +233,7 @@
       _exDiv.list = list; _exDiv.at = Date.now();
       try { localStorage.setItem(KEY.divExCache, JSON.stringify({ v: 2, held: autodivHeldKey(), at: _exDiv.at, list })); } catch (_) {}
       drawPendingDividends();
-      renderPayoutCalendar(STATE.defaultPerson);   // 行事曆要用同一份資料推估
+      renderDashboard();   // 行事曆與「預估年配息」都用這份資料,重畫首頁
     }).catch(() => { _exDiv.failedAt = Date.now(); /* 抓不到就維持現狀(或舊快取),不打擾使用者 */ })
       .finally(() => { _exDiv.loading = false; });
   }
@@ -259,6 +259,20 @@
     }
     const iv = _median(gaps);
     return (iv >= 20 && iv <= 400) ? iv : null;
+  }
+
+  // 每股「年配息」推估:最近一年份的配息平均 × 每年次數(次數由週期推得)。
+  // 例:季配(間隔約 91 天)→ 取最近 4 次平均 × 4;月配取最近 12 次平均 × 12(新上市只有幾次就用現有的平均)。
+  // 歷史資料還沒載入、查無資料或只有一筆(推不出週期)時回傳 null,由呼叫端改用手動設定。
+  function autodivAnnualPerShare(symbol) {
+    if (!Array.isArray(_exDiv.list)) return null;
+    const hist = autodivHistory(symbol);
+    const iv = autodivInterval(hist);
+    if (!iv) return null;
+    const perYear = Math.max(1, Math.round(365 / iv));
+    const recent = hist.slice(-Math.min(hist.length, perYear));
+    const avg = recent.reduce((s, e) => s + e.perShare, 0) / recent.length;
+    return avg * perYear;
   }
 
   // 計算 [rangeStart, rangeEnd](YYYY-MM-DD,以預估入帳日判斷)內某人的配息事件。

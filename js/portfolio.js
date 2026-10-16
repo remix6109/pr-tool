@@ -16,12 +16,18 @@
       if (!out[p] || t.shares <= 0) return;
       out[p].totalShares += t.shares;
       out[p].totalCost   += t.cost;
+      // 預估年配息:優先用證交所歷史配息推算的「每股年配息」,查無資料才用標的設定裡手動填的
+      const auto = autodivAnnualPerShare(symbol);
+      if (auto !== null) out[p].annualYield += auto * t.shares;
+      else {
+        const manual = Number((symMap[symbol] || {}).annual_yield_per_share) || 0;
+        out[p].annualYield += manual * t.shares;
+        if (manual > 0) out[p].annualManual = true;
+      }
       const sym = symMap[symbol];
       if (sym) {
-        const y = Number(sym.annual_yield_per_share) || 0;
         const cur = Number(sym.current_price) || 0;
-        out[p].annualYield  += y   * t.shares;  // shares 即「股數」
-        out[p].marketValue  += cur * t.shares;
+        out[p].marketValue  += cur * t.shares;   // shares 即「股數」
       }
     });
 
