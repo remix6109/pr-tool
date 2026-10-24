@@ -54,6 +54,13 @@
         MKT.daily = await marketGet('/daily');
         MKT.dailyAt = Date.now();
       }
+      if (kind === 'holdings') {
+        const key = marketHeldCodes().join(',');
+        if (force || now - (MKT.holdAt || 0) > 6 * 3600e3 || key !== MKT.holdKey) {
+          MKT.holdings = await marketGet('/holdings?codes=' + encodeURIComponent(key));
+          MKT.holdAt = Date.now(); MKT.holdKey = key;
+        }
+      }
       if (kind === 'hist') {
         const key = MKT_INTL.map(i => i.sym).concat(['^TWII'], marketHeldCodes()).join(',');
         if (force || now - MKT.histAt > MKT_HIST_MS || key !== MKT.histKey) {
@@ -341,10 +348,77 @@
     el.classList.remove('hidden');
   }
 
+  // ---------- 我的成分股(依你的持股市值攤開各 ETF 的成分股) ----------
+  function etfValues(person) {
+    const symMap = {};
+    (STATE.data.symbols || []).forEach(s => symMap[s.symbol] = s);
+    const open = computeOpenHoldings(person);
+    const out = {};
+    Object.keys(open).forEach(sym => {
+      const live = MKT.quote && MKT.quote.stocks && MKT.quote.stocks[sym];
+      const price = (live && live.price) || Number((symMap[sym] || {}).current_price) || 0;
+      out[sym] = price > 0 ? price * open[sym].shares : open[sym].cost;
+    });
+    return out;
+  }
+
+  function renderLookthrough() {
+    const card = $('#card-lookthrough');
+    if (!card || card.classList.contains('collapsed')) return;
+    const body = $('#lookthrough-body');
+    if (!MKT.holdings) { body.innerHTML = `<div class="muted small">${MKT.error ? '讀取失敗:' + escapeHtml(MKT.error) : '成分股讀取中…'}</div>`; return; }
+    const person = STATE.defaultPerson;
+    const values = etfValues(person);
+    const funds = MKT.holdings.funds || {};
+    const total = Object.values(values).reduce((s, v) => s + v, 0);
+    const covered = [], missing = [];
+    const agg = {};
+    let coveredValue = 0, foreignValue = 0, stockValue = 0;
+    Object.keys(values).forEach(code => {
+      const f = funds[code];
+      if (!f || !Array.isArray(f.stocks) || !f.stocks.length) { missing.push(code); return; }
+      covered.push(code);
+      coveredValue += values[code];
+      f.stocks.forEach(s => {
+        const amt = values[code] * s.weight / 100;
+        stockValue += amt;
+        if (s.foreign) foreignValue += amt;
+        const k = s.code;
+        if (!agg[k]) agg[k] = { code: s.code, name: s.name, foreign: s.foreign, amount: 0, from: [] };
+        agg[k].amount += amt;
+        agg[k].from.push(code);
+      });
+    });
+    if (!covered.length) { body.innerHTML = '<div class="muted small">你持有的 ETF 目前都還沒有支援的成分股資料。</div>'; return; }
+    const top = Object.values(agg).sort((a, b) => b.amount - a.amount).slice(0, 15);
+    const pctOf = (v) => coveredValue > 0 ? (v / coveredValue * 100) : 0;
+    const maxAmt = top.length ? top[0].amount : 1;
+
+    let html = `<div class="small" style="line-height:1.7;">已攤開 <b>${covered.join('、')}</b>(占你 ETF 市值 ${total > 0 ? (coveredValue / total * 100).toFixed(0) : 0}%)。`
+      + `其中海外股票約 <b>${pctOf(foreignValue).toFixed(1)}%</b>,現金與期貨等其他資產約 ${Math.max(0, pctOf(coveredValue - stockValue)).toFixed(1)}%。</div>`;
+    if (missing.length) html += `<div class="muted small">${missing.join('、')} 的投信尚未支援,沒有算進來。</div>`;
+    html += '<div class="breakdown-title">你實際持有最多的股票</div>';
+    html += top.map((s, i) => `<div class="lt-row">
+        <span class="lt-rank">${i + 1}</span>
+        <span class="lt-name">${escapeHtml(s.name)} <small class="muted">${escapeHtml(s.code)}${s.foreign ? '・海外' : ''}</small><br><small class="muted">來自 ${s.from.join('、')}</small></span>
+        <span class="lt-bar"><i style="width:${(s.amount / maxAmt * 100).toFixed(0)}%"></i></span>
+        <span class="lt-amt"><span class="lt-money">${fmt.money(s.amount)}</span><br><small class="muted">${pctOf(s.amount).toFixed(1)}%</small></span>
+      </div>`).join('');
+    html += '<div class="breakdown-title">各 ETF 前十大持股</div>';
+    html += covered.map(code => {
+      const f = funds[code];
+      return `<details class="mk-corr"><summary><b>${code}</b> <span class="muted">${f.issuer || ''}・${f.stocks.length} 檔${f.date ? '・' + f.date : ''}${f.stale ? '・資料可能過期' : ''}</span></summary>
+        <div class="mk-corr-body">${f.stocks.slice(0, 10).map(s => `<div class="lt-top"><span>${escapeHtml(s.name)} <small class="muted">${escapeHtml(s.code)}</small></span><span>${s.weight.toFixed(2)}%</span></div>`).join('')}</div>
+      </details>`;
+    }).join('');
+    html += '<div class="muted small" style="margin-top:6px;">金額 = 你持有該 ETF 的市值 × 成分股權重,是依投信公布的申購買回清單估算,不是你直接持有的股數。資料來自各投信官網(非官方開放介面,網站改版時可能暫時取不到)。</div>';
+    body.innerHTML = html;
+  }
+
   // ---------- 排程與綁定 ----------
   function marketActive() {
     const open = (id) => { const c = $(id); return c && !c.classList.contains('collapsed'); };
-    return document.visibilityState === 'visible' && (open('#card-islands') || open('#card-intl'));
+    return document.visibilityState === 'visible' && (open('#card-islands') || open('#card-intl') || open('#card-lookthrough'));
   }
 
   async function marketTick(force) {
@@ -352,9 +426,10 @@
     const tasks = [marketLoad('quote', force)];
     if ($('#card-islands') && !$('#card-islands').classList.contains('collapsed')) tasks.push(marketLoad('daily', force));
     if ($('#card-intl') && !$('#card-intl').classList.contains('collapsed')) tasks.push(marketLoad('hist', force));
-    renderIslands(); renderIntl();   // 先畫舊資料/讀取中
+    if ($('#card-lookthrough') && !$('#card-lookthrough').classList.contains('collapsed')) tasks.push(marketLoad('holdings', force));
+    renderIslands(); renderIntl(); renderLookthrough();   // 先畫舊資料/讀取中
     await Promise.all(tasks);
-    renderIslands(); renderIntl(); renderNightSummary();
+    renderIslands(); renderIntl(); renderLookthrough(); renderNightSummary();
   }
 
   // 首頁摘要:卡片收起時也要有資料,但只在打開 APP 時抓一次(之後依快取時間)
@@ -365,7 +440,7 @@
   }
 
   function bindMarketCards() {
-    ['#card-islands', '#card-intl'].forEach(id => {
+    ['#card-islands', '#card-intl', '#card-lookthrough'].forEach(id => {
       const card = $(id);
       if (!card) return;
       const key = 'pr.collapse.' + card.dataset.collapse;
@@ -379,7 +454,7 @@
 
   // 首頁重繪時呼叫(切換黃/蘇、資料更新)
   function renderMarketCards() {
-    renderIslands(); renderIntl(); renderNightSummary();
+    renderIslands(); renderIntl(); renderLookthrough(); renderNightSummary();
     marketTick();
     marketSummaryLoad();
   }
