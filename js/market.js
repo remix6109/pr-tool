@@ -58,6 +58,7 @@
         const key = marketHeldCodes().join(',');
         if (force || now - (MKT.holdAt || 0) > 6 * 3600e3 || key !== MKT.holdKey) {
           MKT.holdings = await marketGet('/holdings?codes=' + encodeURIComponent(key));
+          await resolveClientHoldings(MKT.holdings);
           MKT.holdAt = Date.now(); MKT.holdKey = key;
         }
       }
@@ -74,6 +75,44 @@
     } finally {
       MKT.loading[kind] = false;
     }
+  }
+
+  // ---------- 成分股:中繼站讀不到、但允許網頁直接讀的投信(目前是國泰) ----------
+  async function cathayClientHoldings(fundCode) {
+    const ck = 'pr.mkt.cathay.' + fundCode;
+    try {
+      const c = JSON.parse(localStorage.getItem(ck) || 'null');
+      if (c && Date.now() - c.at < 12 * 3600e3) return c.data;
+    } catch (_) {}
+    // 要指定「有資料的交易日」,從今天(台灣時間)往前找,週末跳過
+    const d = new Date(Date.now() + 8 * 3600e3);
+    for (let i = 0; i < 8; i++) {
+      const ymd = d.toISOString().slice(0, 10), dow = d.getUTCDay();
+      d.setUTCDate(d.getUTCDate() - 1);
+      if (dow === 0 || dow === 6) continue;
+      const r = await fetch(`https://cwapi.cathaysite.com.tw/api/ETF/GetETFDetailStockList?FundCode=${encodeURIComponent(fundCode)}&SearchDate=${ymd}&status=1`);
+      const j = await r.json();
+      if (Array.isArray(j.result) && j.result.length) {
+        const stocks = j.result.map(s => {
+          const code = String(s.stockCode || '').trim();
+          return { code, name: String(s.stockName || '').trim(), weight: parseFloat(String(s.weights).replace(/,/g, '')), foreign: !/^\d{4,6}[A-Z]?$/.test(code) };
+        }).filter(s => s.code && s.weight > 0).sort((a, b) => b.weight - a.weight);
+        const data = { issuer: '國泰', date: ymd, stocks };
+        try { localStorage.setItem(ck, JSON.stringify({ at: Date.now(), data })); } catch (_) {}
+        return data;
+      }
+    }
+    throw new Error('國泰近一週查無持股資料');
+  }
+
+  async function resolveClientHoldings(h) {
+    const funds = (h && h.funds) || {};
+    await Promise.all(Object.keys(funds).map(async code => {
+      const cf = funds[code] && funds[code].clientFetch;
+      if (!cf || cf.source !== 'cathay') return;
+      try { funds[code] = await cathayClientHoldings(cf.fundCode); }
+      catch (e) { funds[code] = { issuer: '國泰', error: e.message }; }
+    }));
   }
 
   // ---------- 小工具 ----------
@@ -396,7 +435,7 @@
 
     let html = `<div class="small" style="line-height:1.7;">已攤開 <b>${covered.join('、')}</b>(占你 ETF 市值 ${total > 0 ? (coveredValue / total * 100).toFixed(0) : 0}%)。`
       + `其中海外股票約 <b>${pctOf(foreignValue).toFixed(1)}%</b>,現金與期貨等其他資產約 ${Math.max(0, pctOf(coveredValue - stockValue)).toFixed(1)}%。</div>`;
-    if (missing.length) html += `<div class="muted small">${missing.join('、')} 的投信尚未支援,沒有算進來。</div>`;
+    if (missing.length) html += `<div class="muted small">${missing.join("、")} 的成分股暫時取不到,沒有算進來。</div>`;
     html += '<div class="breakdown-title">你實際持有最多的股票</div>';
     html += top.map((s, i) => `<div class="lt-row">
         <span class="lt-rank">${i + 1}</span>
