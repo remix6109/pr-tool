@@ -891,3 +891,15 @@ th { color: var(--muted); font-weight: 600; font-size: .8rem; }
 .town-shop { cursor: pointer; }
 .town-shop:hover rect:first-child { stroke: var(--primary); }
 #town-scene { overflow-x: auto; }
+
+/* === 市場看板 === */
+#islands-scene { overflow-x: auto; }
+#islands-scene svg { display: block; }
+.mk-row { padding: 3px 0; line-height: 1.6; }
+.mk-bars { display: inline-flex; align-items: flex-end; gap: 3px; height: 30px; vertical-align: middle; margin-left: 6px; }
+.mk-bars span { width: 8px; border-radius: 2px; }
+.mk-intl { display: grid; grid-template-columns: minmax(0, 1fr) auto 70px 96px; align-items: center; gap: 10px; padding: 6px 0; border-top: 1px solid var(--border); font-variant-numeric: tabular-nums; }
+.mk-intl:first-child { border-top: 0; }
+.mk-name { font-weight: 600; }
+.mk-chg { text-align: right; font-weight: 600; }
+@media (max-width: 380px) { .mk-intl { grid-template-columns: minmax(0, 1fr) auto 64px; } .mk-spark { display: none; } }

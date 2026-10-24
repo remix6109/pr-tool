@@ -23,6 +23,8 @@ window.CONFIG = {
     privacy: 'pr.privacy'
   },
   APP_TITLE_DEFAULT: '購買記錄',
+  // 市場資料中繼站(worker/ 部署到 Cloudflare 後的網址,不是密鑰);本機測試時自動用 http://localhost:8787
+  MARKET_API_URL: '',
   DELETED_HISTORY_MAX: 50,
   ICON_CHOICES: [
     { id: 'gold',  name: '金塊堆' },

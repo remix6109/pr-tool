@@ -87,6 +87,7 @@
     bindPullToRefresh();
     bindCardCollapse();
     bindTownCard();
+    bindMarketCards();
     bindInfoButtons();
     bindHoldingsSort();
     await loadAndRender();
