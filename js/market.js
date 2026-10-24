@@ -55,7 +55,7 @@
         MKT.dailyAt = Date.now();
       }
       if (kind === 'hist') {
-        const key = MKT_INTL.map(i => i.sym).concat(marketHeldCodes()).join(',');
+        const key = MKT_INTL.map(i => i.sym).concat(['^TWII'], marketHeldCodes()).join(',');
         if (force || now - MKT.histAt > MKT_HIST_MS || key !== MKT.histKey) {
           MKT.hist = await marketGet('/history?s=' + encodeURIComponent(key));
           MKT.histAt = Date.now(); MKT.histKey = key;
@@ -183,6 +183,11 @@
   }
 
   // ---------- 國際市場 + 連動度 ----------
+  // 用每日漲跌算相關係數,不使用成分股(官方沒有可讓程式讀取的成分股資料)。
+  // 台股某天的漲跌,對上「影響它的那一天」:日韓、台股大盤取同一天;美股收在台股之後,取前一個美股交易日。
+  const MKT_TWII = { sym: '^TWII', name: '台股大盤' };
+  const MKT_CORR_DAYS = 90;
+
   function dailyReturns(points) {
     const out = new Map();
     for (let i = 1; i < (points || []).length; i++) {
@@ -199,18 +204,85 @@
     for (let i = 0; i < n; i++) { const x = a[i] - ma, y = b[i] - mb; sab += x * y; saa += x * x; sbb += y * y; }
     return saa > 0 && sbb > 0 ? sab / Math.sqrt(saa * sbb) : null;
   }
-  // 台股某日的報酬,對上「影響它的那一天」的指數報酬:美股收在台股之後,所以取前一個美股交易日
-  function correlation(twPoints, idxPoints, lagUS) {
-    const tw = dailyReturns(twPoints), ix = dailyReturns(idxPoints);
-    const ixDates = Array.from(ix.keys()).sort();
-    const a = [], b = [];
-    tw.forEach((r, date) => {
+  // 對齊:回傳台股日期 → 指數報酬(美股取前一個交易日)
+  function alignTo(twDates, idxReturns, lagUS) {
+    const ixDates = Array.from(idxReturns.keys()).sort();
+    const out = new Map();
+    twDates.forEach(date => {
       let d = null;
       if (lagUS) { for (let i = ixDates.length - 1; i >= 0; i--) if (ixDates[i] < date) { d = ixDates[i]; break; } }
-      else if (ix.has(date)) d = date;
-      if (d && ix.has(d)) { a.push(r); b.push(ix.get(d)); }
+      else if (idxReturns.has(date)) d = date;
+      if (d) out.set(date, idxReturns.get(d));
     });
-    return pearson(a.slice(-90), b.slice(-90));
+    return out;
+  }
+
+  // 一檔持股的完整連動分析
+  function analyzeHolding(code, series) {
+    const h = dailyReturns(series[code]);
+    if (h.size < 30) return null;
+    const dates = Array.from(h.keys()).sort().slice(-MKT_CORR_DAYS);
+    const pair = (aligned) => {
+      const a = [], b = [];
+      dates.forEach(d => { if (aligned.has(d)) { a.push(h.get(d)); b.push(aligned.get(d)); } });
+      return { a, b, r: pearson(a, b) };
+    };
+    const markets = [MKT_TWII].concat(MKT_INTL.filter(i => i.sym !== 'TWD=X'));
+    const aligned = {};
+    markets.forEach(m => { if (Array.isArray(series[m.sym])) aligned[m.sym] = alignTo(dates, dailyReturns(series[m.sym]), m.lagUS); });
+    const rows = markets.filter(m => aligned[m.sym]).map(m => ({ m, r: pair(aligned[m.sym]).r })).filter(x => x.r !== null);
+
+    // 對台股大盤的敏感度(beta),以及「扣掉大盤之後」剩下的漲跌,再看跟前一晚美股的關係
+    let beta = null;
+    const residUS = [];
+    const tw = aligned[MKT_TWII.sym];
+    if (tw) {
+      const p = pair(tw);
+      if (p.a.length >= 30) {
+        const ma = p.a.reduce((s, v) => s + v, 0) / p.a.length, mb = p.b.reduce((s, v) => s + v, 0) / p.b.length;
+        let cov = 0, vb = 0;
+        p.a.forEach((v, i) => { cov += (v - ma) * (p.b[i] - mb); vb += (p.b[i] - mb) ** 2; });
+        beta = vb > 0 ? cov / vb : null;
+        if (beta !== null) {
+          const resid = new Map();
+          dates.forEach(d => { if (tw.has(d)) resid.set(d, h.get(d) - beta * tw.get(d)); });
+          MKT_INTL.filter(i => i.lagUS).forEach(m => {
+            if (!aligned[m.sym]) return;
+            const a = [], b = [];
+            dates.forEach(d => { if (resid.has(d) && aligned[m.sym].has(d)) { a.push(resid.get(d)); b.push(aligned[m.sym].get(d)); } });
+            const r = pearson(a, b);
+            if (r !== null) residUS.push({ m, r });
+          });
+        }
+      }
+    }
+    rows.sort((x, y) => y.r - x.r);
+    residUS.sort((x, y) => y.r - x.r);
+    return { code, rows, beta, residUS, days: dates.length };
+  }
+
+  const corrLevel = (r) => r >= 0.6 ? '高' : r >= 0.3 ? '中' : '低';
+
+  // 白話說明
+  function describeHolding(a) {
+    const out = [];
+    const top = a.rows[0];
+    const rTW = (a.rows.find(x => x.m.sym === MKT_TWII.sym) || {}).r;
+    if (top && top.m.sym === MKT_TWII.sym) out.push(`主要跟台股大盤走(連動${corrLevel(top.r)},${top.r.toFixed(2)})。`);
+    else if (top) out.push(`連動最高的是${top.m.name}${top.m.lagUS ? '(前一晚)' : ''}(${corrLevel(top.r)},${top.r.toFixed(2)})${rTW !== undefined ? `,跟台股大盤是 ${rTW.toFixed(2)}` : ''}。`);
+    if (a.beta !== null) out.push(`台股大盤漲跌 1%,它平均約漲跌 ${Math.abs(a.beta).toFixed(1)}%${a.beta > 1.15 ? '(比大盤波動大)' : a.beta < 0.85 ? '(比大盤溫和)' : ''}。`);
+    const us = a.residUS[0];
+    if (us) {
+      if (us.r >= 0.25) out.push(`扣掉台股大盤的影響後,仍明顯受前一晚${us.m.name}影響(${us.r.toFixed(2)}):${us.m.name}大跌的隔天,它通常比大盤更弱;大漲的隔天通常比大盤更強。`);
+      else if (us.r >= 0.12) out.push(`扣掉台股大盤的影響後,跟前一晚${us.m.name}有一點額外關係(${us.r.toFixed(2)})。`);
+      else out.push('扣掉台股大盤的影響後,跟前一晚美股幾乎沒有額外關係。');
+    }
+    return out.join('');
+  }
+
+  function analyzeAll() {
+    const series = (MKT.hist && MKT.hist.series) || {};
+    return marketHeldCodes().map(code => analyzeHolding(code, series) || { code, missing: true });
   }
 
   function renderIntl() {
@@ -229,20 +301,44 @@
       </div>`;
     }).join('') + `<div class="muted small" style="margin-top:4px;">右側小圖是近 3 個月走勢。部分交易所報價本身延遲約 15 分鐘。</div>`;
 
-    const codes = marketHeldCodes();
-    const rows = codes.map(code => {
-      const pts = series[code];
-      if (!Array.isArray(pts)) return `<tr><td>${code}</td><td colspan="2" class="muted">查無價格歷史</td></tr>`;
-      const scores = MKT_INTL.filter(i => i.sym !== 'TWD=X').map(i => ({ i, r: correlation(pts, series[i.sym], i.lagUS) })).filter(x => x.r !== null);
-      if (!scores.length) return `<tr><td>${code}</td><td colspan="2" class="muted">資料不足</td></tr>`;
-      scores.sort((a, b) => b.r - a.r);
-      const top = scores[0];
-      const level = top.r >= 0.6 ? '高' : top.r >= 0.3 ? '中' : '低';
-      return `<tr><td>${code}</td><td>${top.i.name}${top.i.lagUS ? '<span class="muted small">(前一晚)</span>' : ''}</td><td>${level}(${top.r.toFixed(2)})</td></tr>`;
-    }).join('');
-    $('#intl-corr').innerHTML = codes.length ? `<div class="breakdown-title">你的持股和哪個市場連動最高</div>
-      <div class="table-wrap"><table><thead><tr><th>持股</th><th>連動最高的市場</th><th>程度</th></tr></thead><tbody>${rows}</tbody></table></div>
-      <div class="muted small">用近 90 個交易日的每日漲跌計算相關係數(−1 到 1)。美股收盤在台股之後,所以台股某天是對上「前一晚」的美股。這是過去的關係,不代表未來,也不是投資建議。</div>` : '';
+    if (!MKT.hist) { $('#intl-corr').innerHTML = '<div class="muted small">連動度計算中…</div>'; return; }
+    const list = analyzeAll();
+    $('#intl-corr').innerHTML = list.length ? `<div class="breakdown-title">你的持股受哪個市場影響</div>
+      ${list.map(a => {
+        if (a.missing) return `<div class="mk-corr"><div class="mk-corr-head"><b>${escapeHtml(a.code)}</b> <span class="muted">價格資料不足</span></div></div>`;
+        const top = a.rows[0];
+        const head = top ? (top.m.sym === MKT_TWII.sym ? '主要跟台股大盤走' : '最連動:' + top.m.name) : '資料不足';
+        return `<details class="mk-corr">
+          <summary><b>${escapeHtml(a.code)}</b> ${head}${top ? ` <span class="muted">(${corrLevel(top.r)})</span>` : ''}</summary>
+          <div class="mk-corr-body">
+            <div>${describeHolding(a)}</div>
+            <div class="mk-corr-grid">${a.rows.map(x => `<span>${x.m.name}${x.m.lagUS ? '<small class="muted">(前一晚)</small>' : ''}</span><span class="mk-corr-bar"><i style="width:${Math.max(0, x.r) * 100}%"></i></span><span>${x.r.toFixed(2)}</span>`).join('')}</div>
+          </div>
+        </details>`;
+      }).join('')}
+      <div class="muted small" style="margin-top:6px;">依近 ${MKT_CORR_DAYS} 個交易日的每日漲跌計算(相關係數 −1 到 1,越接近 1 越同步)。用的是實際價格,不是成分股。美股收盤在台股之後,所以對上「前一晚」的美股。這是過去的關係,不代表未來,也不是投資建議。</div>` : '';
+  }
+
+  // ---------- 首頁:前一晚美股摘要 ----------
+  function renderNightSummary() {
+    const el = $('#night-summary');
+    if (!el) return;
+    const q = MKT.quote;
+    const us = ['^GSPC', '^IXIC', '^SOX'].map(s => q && q.intl && q.intl[s]).filter(v => v && v.chgPct !== null && v.chgPct !== undefined);
+    if (!us.length) { el.classList.add('hidden'); return; }
+    // 報價時間在 30 分鐘內 = 美股正在交易;否則是最近一次收盤(週末、假日也正確)
+    const t = Date.parse((q.intl['^GSPC'] || {}).time || '');
+    const label = (t && Date.now() - t < 30 * 60 * 1000) ? '美股盤中' : '最近一次美股收盤';
+    let html = `<b>🌙 ${label}</b>:` + us.map(v => `${v.name} <span class="${mCls(v.chgPct)}">${mPct(v.chgPct)}</span>`).join('・');
+    if (MKT.hist) {
+      const sensitive = analyzeAll().filter(a => !a.missing && a.residUS[0] && a.residUS[0].r >= 0.25)
+        .map(a => `${a.code}(${a.residUS[0].m.name})`);
+      html += '<br>' + (sensitive.length
+        ? `<span class="muted">扣掉台股大盤後仍受美股影響較大的持股:</span>${sensitive.join('、')}`
+        : '<span class="muted">你的持股主要跟台股大盤走,受前一晚美股的額外影響不大。</span>');
+    }
+    el.innerHTML = html;
+    el.classList.remove('hidden');
   }
 
   // ---------- 排程與綁定 ----------
@@ -258,7 +354,14 @@
     if ($('#card-intl') && !$('#card-intl').classList.contains('collapsed')) tasks.push(marketLoad('hist', force));
     renderIslands(); renderIntl();   // 先畫舊資料/讀取中
     await Promise.all(tasks);
-    renderIslands(); renderIntl();
+    renderIslands(); renderIntl(); renderNightSummary();
+  }
+
+  // 首頁摘要:卡片收起時也要有資料,但只在打開 APP 時抓一次(之後依快取時間)
+  async function marketSummaryLoad() {
+    if (!STATE.data || !marketApi() || document.visibilityState !== 'visible') return;
+    await Promise.all([marketLoad('quote'), marketLoad('hist')]);
+    renderNightSummary();
   }
 
   function bindMarketCards() {
@@ -271,11 +374,12 @@
         .observe(card, { attributes: true, attributeFilter: ['class'] });
     });
     if (!MKT.timer) MKT.timer = setInterval(() => marketTick(), MKT_QUOTE_MS);
-    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') marketTick(); });
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { marketTick(); marketSummaryLoad(); } });
   }
 
   // 首頁重繪時呼叫(切換黃/蘇、資料更新)
   function renderMarketCards() {
-    renderIslands(); renderIntl();
+    renderIslands(); renderIntl(); renderNightSummary();
     marketTick();
+    marketSummaryLoad();
   }
