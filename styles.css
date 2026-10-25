@@ -953,3 +953,4 @@ th { color: var(--muted); font-weight: 600; font-size: .8rem; }
 .town3d-hud { position: absolute; left: 10px; top: 10px; padding: 6px 10px; border-radius: 10px; background: rgba(255,255,255,.86); color: #2A3938; line-height: 1.55; pointer-events: none; font-variant-numeric: tabular-nums; }
 .town3d-years { position: absolute; right: 10px; bottom: 10px; padding: 3px 8px; border-radius: 8px; background: rgba(30,42,42,.7); color: #fff; pointer-events: none; }
 .town3d-years i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin: 0 3px 0 6px; vertical-align: -1px; }
+.town3d-date { font-size: 1.2rem; font-variant-numeric: tabular-nums; }

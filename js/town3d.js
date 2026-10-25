@@ -10,7 +10,7 @@
     loading: null,
     sig: '',
     grow: true,           // 下次重建時播「長高」動畫
-    GROW_SECONDS: 2.2,
+    PLAY_MIN: 5, PLAY_MAX: 9, // 時間軸播放秒數(依投資期間長短)
     MAX_H: 9,             // 最高那棟的高度
     MIN_FLOOR: 0.16,      // 金額很小的那層至少這麼厚,才點得到
     YEAR_COLORS: ['#F3E6CC', '#EACB9C', '#DDAA6E', '#C98A52', '#B06C3E', '#8E5533']
@@ -158,6 +158,7 @@
     const unit = Math.max(1, ...totals) / TOWN3D.MAX_H;
     const allFloors = [];
     s.picks = [];
+    s.labels = [];
     const geo = new THREE.BoxGeometry(1, 1, 1); geo.translate(0, 0.5, 0);
     const slabGeo = new THREE.BoxGeometry(1.72, 0.07, 1.72), slabMat = flat('#7D6A55');
     const chgColor = (it) => {
@@ -188,7 +189,7 @@
         const slab = new THREE.Mesh(slabGeo, slabMat);
         slab.castShadow = true;
         g.add(slab);
-        allFloors.push({ m, slab, h: h - 0.035, date: f.date });
+        allFloors.push({ m, slab, h: h - 0.035, date: f.date, sym, f });
         s.picks.push(m);
         y += h;
       });
@@ -196,15 +197,31 @@
       const roof = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.16, 1.8), flat(chgColor(it)));
       roof.position.y = y + 0.08; roof.castShadow = true; g.add(roof);
       const label = town3dLabel();
-      label.draw(sym, it ? fmt.money(it.value) : '', '#5C6B6A');
+      label.final = it ? fmt.money(it.value) : '';
+      label.draw(sym, TOWN3D.grow ? '' : label.final, '#5C6B6A');   // 播放中只顯示代號,播完才顯示今天市值
+      s.labels.push({ label, sym });
       label.position.y = y + 1.05;
       g.add(label);
       g.userData = { roof, label, top: y };
     });
-    // 依買進日期排序 → 長高動畫照時間順序一層層出現
+    // 時間軸:從第一筆買進到今天,每層在實際買進的那天長出來、配息在入帳那天落進金幣堆
     allFloors.sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0);
-    allFloors.forEach((x, i) => { x.at = allFloors.length > 1 ? i / (allFloors.length - 1) * TOWN3D.GROW_SECONDS * 0.85 : 0; });
+    const divRows = (STATE.data.dividends || []).filter(r => r.person === person && Number(r.total) > 0)
+      .map(r => ({ date: String(r.date || '').slice(0, 10), money: Number(r.total), sym: String(r.symbol || '') }))
+      .filter(r => r.date).sort((a, b) => a.date < b.date ? -1 : 1);
+    const t0 = Date.parse((allFloors[0] || divRows[0] || { date: autodivYmd(new Date()) }).date);
+    const t1 = Math.max(t0 + 864e5, Date.parse(autodivYmd(new Date())));
+    const days = (t1 - t0) / 864e5;
+    s.dur = Math.max(TOWN3D.PLAY_MIN, Math.min(TOWN3D.PLAY_MAX, days / 70));
+    s.t0 = t0; s.t1 = t1;
+    const atOf = (date) => (Date.parse(date) - t0) / (t1 - t0) * s.dur * 0.96;
+    allFloors.forEach(x => { x.at = atOf(x.date); });
+    divRows.forEach(d => { d.at = atOf(d.date); });
     s.floors = allFloors;
+    s.divRows = divRows;
+    s.events = allFloors.map(x => ({ at: x.at, html: `${x.date.replace(/-/g, '/')} 🏗️ 買進 <b>${escapeHtml(x.sym)}</b> ${fmt.money(x.f.shares)} 股` }))
+      .concat(divRows.map(d => ({ at: d.at, html: `${d.date.replace(/-/g, '/')} 💰 <b>${escapeHtml(d.sym)}</b> 配息 <span class="town-num">+${fmt.money(d.money)}</span>` })))
+      .sort((a, b) => a.at - b.at);
 
     // 金幣堆(累積配息)
     const div = (STATE.data.dividends || []).filter(r => r.person === person).reduce((a, r) => a + (Number(r.total) || 0), 0);
@@ -233,8 +250,9 @@
     Object.assign(s.sun.shadow.camera, { left: -R - 4, right: R + 4, top: R + 4, bottom: -R - 4, near: 1, far: R * 7 });
     s.sun.shadow.camera.updateProjectionMatrix();
 
-    if (TOWN3D.grow) { s.growT = 0; TOWN3D.grow = false; } else s.growT = 99;
-    town3dApplyGrow(s.growT >= 99 ? 99 : 0);
+    s.lastEv = -1; s.lastDay = '';
+    if (TOWN3D.grow) { s.growT = 0; TOWN3D.grow = false; s.playing = true; } else { s.growT = 99; s.playing = false; }
+    town3dApplyGrow(s.growT);
   }
 
   // 長高動畫:t 秒時每層的高度(ease-out),樓頂和看板跟著最上面那層
@@ -256,11 +274,39 @@
       g.userData.roof.position.y = top + 0.08;
       g.userData.label.position.y = top + 1.05;
       g.userData.roof.visible = top > 0.1;
-      g.userData.label.material.opacity = Math.min(1, Math.max(0, (t - TOWN3D.GROW_SECONDS * 0.6) / 0.6));
-      if (t >= 99) g.userData.label.material.opacity = 1;
+      g.userData.label.visible = top > 0.1;
     });
-    const k = Math.min(1, t / TOWN3D.GROW_SECONDS);
-    s.pile.count = Math.round(s.pileWant * k);
+    let cum = 0;
+    s.divRows.forEach(d => { if (d.at <= t) cum += d.money; });
+    s.pile.count = s.div > 0 ? Math.round(s.pileWant * Math.min(1, cum / s.div)) : 0;
+    if (!s.playing) return;
+    // 播放中:左上角日期和累計數字跟著跑,下方顯示剛發生的事
+    const day = autodivYmd(new Date(s.t0 + Math.min(1, t / (s.dur * 0.96)) * (s.t1 - s.t0)));
+    if (day !== s.lastDay) {
+      s.lastDay = day;
+      const cost = s.floors.reduce((a, x) => a + (x.at <= t ? x.f.money : 0), 0);
+      $('#town3d-hud').innerHTML = `<b class="town3d-date">${day.replace(/-/g, '/')}</b><br>` +
+        `投入成本 <span class="town-num">${fmt.money(cost)}</span><br>累積配息 <span class="town-num">${fmt.money(cum)}</span>`;
+    }
+    let ev = -1;
+    s.events.forEach((e, i) => { if (e.at <= t) ev = i; });
+    if (ev !== s.lastEv) {
+      s.lastEv = ev;
+      $('#town-readout').innerHTML = ev < 0 ? '' : s.events.slice(Math.max(0, ev - 1), ev + 1).reverse()
+        .map((e, i) => `<div${i ? ' class="muted"' : ''}>${e.html}</div>`).join('') + '<div class="muted small">點畫面直接跳到今天</div>';
+    }
+    if (t >= s.dur + 0.4) town3dFinish();
+  }
+
+  // 播完(或點畫面略過):停在今天,顯示總市值與說明
+  function town3dFinish() {
+    const s = TOWN3D.s;
+    s.playing = false;
+    s.growT = 99;
+    s.labels.forEach(x => x.label.draw(x.sym, x.label.final, '#5C6B6A'));
+    town3dApplyGrow(99);
+    $('#town3d-hud').innerHTML = s.finalHud || '';
+    town3dShow(null);
   }
 
   // ---------- 繪圖迴圈 ----------
@@ -285,7 +331,7 @@
     const dt = Math.min(0.05, (now - (s.prev || now)) / 1000);
     s.prev = now;
     s.t += dt;
-    if (s.growT < TOWN3D.GROW_SECONDS + 0.5) { s.growT += dt; town3dApplyGrow(s.growT); }
+    if (s.playing) { s.growT += dt; town3dApplyGrow(s.growT); }
     if (now - s.lastTouch > 3000) s.cam.theta += dt * 0.1;
     const aspect = s.camera.aspect;
     const dist = Math.max(s.R * 4.3, (s.R + 3.2) / (0.364 * aspect) * 1.35);    // 畫面窄時拉遠(0.364 = tan 20°)
@@ -324,6 +370,7 @@
         const r = canvas.getBoundingClientRect();
         v2.set((e.clientX - r.left) / r.width * 2 - 1, -(e.clientY - r.top) / r.height * 2 + 1);
         ray.setFromCamera(v2, s.camera);
+        if (s.playing) { town3dFinish(); p = null; return; }   // 播放中點一下 = 跳到今天
         const hit = ray.intersectObjects(s.picks.filter(o => o.visible), false)[0];
         town3dShow(hit ? hit.object.userData : null);
         s.lastTouch = performance.now();
@@ -388,13 +435,14 @@
       TOWN3D.sig = sig;
       town3dBuild(person, items);
     }
-    $('#town3d-hud').innerHTML =
+    s.finalHud =
       `總市值 <b class="town-num">${fmt.money(total)}</b><br>` +
       `持有成本 <span class="town-num">${fmt.money(cost)}</span><br>` +
       `累積配息 <span class="town-num">${fmt.money(s.div)}</span>`;
     $('#town3d-years').innerHTML = s.years.map(y => `<i style="background:${s.yearColor(y)}"></i>${y}`).join('');
+    if (!s.playing) $('#town3d-hud').innerHTML = s.finalHud;
     s.summary = `${escapeHtml(getPersonLabel(person))}的小鎮:${items.length} 棟大樓、共 ${s.floors.length} 層(一筆買進一層)。點樓層看那筆買進,點中間金幣看配息;左右滑動可以旋轉。`;
-    town3dShow(null);
+    if (!s.playing) town3dShow(null);
     town3dStart();
     return true;
   }
