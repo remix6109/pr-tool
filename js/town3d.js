@@ -10,7 +10,9 @@
     loading: null,
     sig: '',
     grow: true,           // 下次重建時播「長高」動畫
-    PLAY_MIN: 5, PLAY_MAX: 9, // 時間軸播放秒數(依投資期間長短)
+    STEP: 0.75,           // 每個有買進/配息的日子停留秒數(事件很多時自動縮短,總長約 40 秒內)
+    STEP_DIV: 0.35,       // 有配息的日子多停一點
+    MAX_TOTAL: 40,
     LEAD: 1.4,            // 開頭留給第一個特效飛/走的時間
     FLY: 0.75,            // 買進:建材箱飛到大樓的秒數
     WALK: 1.3,            // 配息:小人走到中央的秒數
@@ -219,16 +221,29 @@
       .filter(r => r.date).sort((a, b) => a.date < b.date ? -1 : 1);
     const t0 = Date.parse((allFloors[0] || divRows[0] || { date: autodivYmd(new Date()) }).date);
     const t1 = Math.max(t0 + 864e5, Date.parse(autodivYmd(new Date())));
-    const days = (t1 - t0) / 864e5;
-    s.dur = Math.max(TOWN3D.PLAY_MIN, Math.min(TOWN3D.PLAY_MAX, days / 70));
     s.t0 = t0; s.t1 = t1;
-    const atOf = (date) => TOWN3D.LEAD + (Date.parse(date) - t0) / (t1 - t0) * s.dur * 0.96;
+    const evDates = [...new Set(allFloors.map(x => x.date).concat(divRows.map(d => d.date)))].sort();
+    const divDates = new Set(divRows.map(d => d.date));
+    const raw = evDates.reduce((a, d) => a + TOWN3D.STEP + (divDates.has(d) ? TOWN3D.STEP_DIV : 0), 0);
+    const k = raw > TOWN3D.MAX_TOTAL ? TOWN3D.MAX_TOTAL / raw : 1;
+    const marks = [];                 // [日期毫秒, 播放秒數] 對照表,日期與時間互換用
+    let cur = TOWN3D.LEAD;
+    marks.push([t0 - 864e5, cur - 0.6]);
+    evDates.forEach(d => {
+      cur += (divDates.has(d) ? TOWN3D.STEP_DIV : 0) * k;
+      marks.push([Date.parse(d), cur]);
+      cur += TOWN3D.STEP * k;
+    });
+    marks.push([t1, cur]);
+    s.marks = marks;
+    s.dur = cur - TOWN3D.LEAD;
+    const atOf = (date) => { const m = marks.find(x => x[0] === Date.parse(date)); return m ? m[1] : cur; };
     allFloors.forEach(x => { x.at = atOf(x.date); });
     divRows.forEach(d => { d.at = atOf(d.date); });
     s.floors = allFloors;
     s.divRows = divRows;
-    s.events = allFloors.map(x => ({ at: x.at, html: `${x.date.replace(/-/g, '/')} 🏗️ 買進 <b>${escapeHtml(x.sym)}</b> ${fmt.money(x.f.shares)} 股` }))
-      .concat(divRows.map(d => ({ at: d.at, html: `${d.date.replace(/-/g, '/')} 💰 <b>${escapeHtml(d.sym)}</b> 配息 <span class="town-num">+${fmt.money(d.money)}</span>` })))
+    s.events = allFloors.map(x => ({ at: x.at, sym: x.sym, kind: 'buy', amount: x.f.shares, html: `${x.date.replace(/-/g, '/')} 🏗️ 買進 <b>${escapeHtml(x.sym)}</b> ${fmt.money(x.f.shares)} 股` }))
+      .concat(divRows.map(d => ({ at: d.at, sym: d.sym, kind: 'div', amount: d.money, html: `${d.date.replace(/-/g, '/')} 💰 <b>${escapeHtml(d.sym)}</b> 配息 <span class="town-num">+${fmt.money(d.money)}</span>` })))
       .sort((a, b) => a.at - b.at);
 
     // 金幣堆(累積配息)
@@ -259,7 +274,7 @@
     s.sun.shadow.camera.updateProjectionMatrix();
 
     town3dDecorate(person, items);
-    s.lastEv = -1; s.lastDay = ''; s.lastYear = '';
+    s.lastEv = -1; s.lastDay = ''; s.lastYear = ''; s.focusTheta = undefined;
     const finalCost = allFloors.reduce((a, x) => a + x.f.money, 0);
     s.msStep = finalCost >= 1e6 ? 5e5 : finalCost >= 2e5 ? 1e5 : 5e4;
     s.msNext = s.msStep;
@@ -295,7 +310,7 @@
     if (!s.playing) return;
     // 播放中:左上角日期和累計數字跟著跑,下方顯示剛發生的事
     town3dSpawnFx(t);
-    const day = autodivYmd(new Date(s.t0 + Math.max(0, Math.min(1, (t - TOWN3D.LEAD) / (s.dur * 0.96))) * (s.t1 - s.t0)));
+    const day = autodivYmd(new Date(town3dDateAt(t)));
     if (day !== s.lastDay) {
       s.lastDay = day;
       const cost = s.floors.reduce((a, x) => a + (x.at <= t ? x.f.money : 0), 0);
@@ -314,6 +329,7 @@
     let ev = -1;
     s.events.forEach((e, i) => { if (e.at <= t) ev = i; });
     if (ev !== s.lastEv) {
+      for (let i = Math.max(0, s.lastEv + 1); i <= ev; i++) town3dOnEvent(s.events[i], t);
       s.lastEv = ev;
       $('#town-readout').innerHTML = ev < 0 ? '' : s.events.slice(Math.max(0, ev - 1), ev + 1).reverse()
         .map((e, i) => `<div${i ? ' class="muted"' : ''}>${e.html}</div>`).join('') + '<div class="muted small">點畫面直接跳到今天</div>';
@@ -405,6 +421,51 @@
     town3dDecoShow(true);
     $('#town3d-hud').innerHTML = (s.finalHud || '') + (s.weatherHtml || '');
     town3dShow(null);
+  }
+
+  function town3dDateAt(t) {
+    const m = TOWN3D.s.marks;
+    if (t <= m[0][1]) return m[0][0] + 864e5;
+    for (let i = 1; i < m.length; i++) {
+      if (t <= m[i][1]) {
+        const p = (t - m[i - 1][1]) / Math.max(1e-6, m[i][1] - m[i - 1][1]);
+        return m[i - 1][0] + (m[i][0] - m[i - 1][0]) * p;
+      }
+    }
+    return m[m.length - 1][0];
+  }
+
+  // 每個買進/配息發生的瞬間:浮出數字,鏡頭慢慢轉向那棟大樓
+  function town3dOnEvent(e, t) {
+    const s = TOWN3D.s;
+    const g = s.bldg[e.sym];
+    if (g) s.focusTheta = Math.atan2(g.position.z, g.position.x) + 0.55;
+    const priv = typeof isPrivate === 'function' && isPrivate();
+    if (e.kind === 'buy' && g) {
+      const at = new THREE.Vector3(g.position.x, g.position.y + Math.max(0.6, g.userData.roof.position.y - 0.9), g.position.z);   // 從樓身浮到樓頂,避開看板
+      town3dPopup(`+${fmt.money(e.amount)} 股`, '#2F8A45', at, t);
+    } else if (e.kind === 'div') {
+      town3dPopup(priv ? '+配息' : `+${fmt.money(e.amount)}`, '#B07800', new THREE.Vector3(0, s.TOP + 1.4, 0), t);
+    }
+  }
+
+  // 浮出的文字:往上飄、淡出
+  function town3dPopup(text, color, at, t) {
+    const s = TOWN3D.s;
+    const c = document.createElement('canvas'); c.width = 256; c.height = 80;
+    const g = c.getContext('2d');
+    g.font = 'bold 46px system-ui, sans-serif'; g.textAlign = 'center';
+    g.lineWidth = 8; g.strokeStyle = 'rgba(255,255,255,.95)'; g.strokeText(text, 128, 56);
+    g.fillStyle = color; g.fillText(text, 128, 56);
+    const tex = new THREE.CanvasTexture(c); tex.encoding = THREE.sRGBEncoding;
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false, depthWrite: false }));
+    sp.scale.set(2.6, 0.81, 1);
+    sp.renderOrder = 20;
+    s.content.add(sp);
+    s.fx.push({ obj: sp, start: t, dur: 1.4, update(p) {
+      sp.position.set(at.x, at.y + p * 0.9, at.z);
+      sp.material.opacity = p < 0.15 ? p / 0.15 : p > 0.7 ? (1 - p) / 0.3 : 1;
+    } });
   }
 
   // ---------- 加分效果:煙火、大字、天氣、除息旗子、待確認小人、賺賠光環 ----------
@@ -618,7 +679,11 @@
     if (s.playing) { s.growT += dt; town3dApplyGrow(s.growT); }
     if (s.fx.length) town3dUpdateFx();
     if (s.deco) town3dDecoTick(dt);
-    if (now - s.lastTouch > 3000) s.cam.theta += dt * 0.1;
+    if (s.playing && s.focusTheta !== undefined && now - s.lastTouch > 3000) {
+      let d = s.focusTheta - s.cam.theta;
+      d = Math.atan2(Math.sin(d), Math.cos(d));      // 走最短的方向
+      s.cam.theta += d * Math.min(1, dt * 1.6);
+    } else if (now - s.lastTouch > 3000) s.cam.theta += dt * 0.1;
     const aspect = s.camera.aspect;
     const dist = Math.max(s.R * 4.3, (s.R + 3.2) / (0.364 * aspect) * 1.35);    // 畫面窄時拉遠(0.364 = tan 20°)
     const { theta, phi } = s.cam;
