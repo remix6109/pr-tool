@@ -217,11 +217,20 @@
     const hist = d && Array.isArray(d.history) ? d.history : [];
     const latest = { cash: (hist.filter(h => h.cash).slice(-1)[0] || {}).cash, fut: (hist.filter(h => h.fut).slice(-1)[0] || {}).fut };
     if (!latest.cash && !latest.fut) { $('#islands-scene').innerHTML = '<div class="muted small">每日籌碼讀取中…</div>'; $('#islands-detail').innerHTML = ''; return; }
+    if (I3.s) { islands3dUpdate(hist, q); return; }
     $('#islands-scene').innerHTML = islandsSvg(latest, q);
+    renderIslandsDetail({ cash: latest.cash || {}, fut: latest.fut || {} });
+    // 3D 版載入成功就換掉平面圖(失敗或不支援就維持平面圖)
+    islands3dMount().then(ok => { if (ok) islands3dUpdate(hist, q); });
+  }
 
-    const c = latest.cash || {}, f = latest.fut || {};
+  // 群島下方的文字明細(3D 版選了哪一天就顯示那天)
+  function renderIslandsDetail(row) {
+    const hist = MKT.daily && Array.isArray(MKT.daily.history) ? MKT.daily.history : [];
+    const c = row.cash || {}, f = row.fut || {};
     const oi = (v) => v === null || v === undefined ? '—' : (v > 0 ? '淨多 ' : '淨空 ') + fmt.money(Math.abs(v)) + ' 口';
-    const foreign10 = hist.filter(h => h.cash).slice(-10);
+    const foreign10 = hist.filter(h => h.cash && (!c.date || h.date <= c.date)).slice(-10);
+    const bs = (b, s) => b === undefined || b === null ? '' : `(買 ${mFmt(b, 0)}・賣 ${mFmt(s, 0)})`;
     const bars = foreign10.length ? (() => {
       const max = Math.max(1, ...foreign10.map(h => Math.abs(h.cash.foreign || 0)));
       return '<div class="mk-bars">' + foreign10.map(h => {
@@ -230,12 +239,12 @@
       }).join('') + '</div>';
     })() : '';
     $('#islands-detail').innerHTML = `
-      <div class="mk-row"><b>外資</b> 現貨 <span class="${mCls(c.foreign)}">${mFmt(c.foreign, 1)} 億</span>・台指期 ${oi(f.txForeignNet)}</div>
-      <div class="mk-row"><b>投信</b> 現貨 <span class="${mCls(c.trust)}">${mFmt(c.trust, 1)} 億</span>・台指期 ${oi(f.txTrustNet)}</div>
-      <div class="mk-row"><b>自營商</b> 現貨 <span class="${mCls(c.dealer)}">${mFmt(c.dealer, 1)} 億</span>・台指期 ${oi(f.txDealerNet)}</div>
+      <div class="mk-row"><b>外資</b> 現貨 <span class="${mCls(c.foreign)}">${mFmt(c.foreign, 1)} 億</span>${bs(c.foreignBuy, c.foreignSell)}・台指期 ${oi(f.txForeignNet)}</div>
+      <div class="mk-row"><b>投信</b> 現貨 <span class="${mCls(c.trust)}">${mFmt(c.trust, 1)} 億</span>${bs(c.trustBuy, c.trustSell)}・台指期 ${oi(f.txTrustNet)}</div>
+      <div class="mk-row"><b>自營商</b> 現貨 <span class="${mCls(c.dealer)}">${mFmt(c.dealer, 1)} 億</span>${bs(c.dealerBuy, c.dealerSell)}・台指期 ${oi(f.txDealerNet)}</div>
       <div class="mk-row"><b>散戶(小台)</b> ${oi(f.mtxRetailNet)}・多空比 <span class="${mCls(f.mtxRetailRatio)}">${f.mtxRetailRatio === null || f.mtxRetailRatio === undefined ? '—' : (f.mtxRetailRatio > 0 ? '偏多 ' : '偏空 ') + Math.abs(f.mtxRetailRatio).toFixed(1) + '%'}</span></div>
       ${f.night ? `<div class="mk-row"><b>上一個夜盤收盤</b> ${fmt.money(f.night.close)} <span class="${mCls(f.night.chgPct)}">${mPct(f.night.chgPct)}</span></div>` : ''}
-      <div class="mk-row muted small">外資近 10 日現貨買賣超 ${bars}</div>
+      <div class="mk-row muted small">外資近 10 日現貨買賣超(到這天) ${bars}</div>
       <div class="muted small">籌碼資料日期:現貨 ${c.date || '—'}、期貨 ${f.date || '—'}(官方盤後公布,非即時)</div>`;
   }
 

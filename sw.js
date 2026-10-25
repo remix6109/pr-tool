@@ -30,7 +30,7 @@ const SHELL_ASSETS = [
   './js/autodiv.js',
   './js/datacheck.js',
   './js/town.js',
-  './js/town3d.js',
+  './js/islands3d.js',
   './js/market.js',
   './js/fx.js',
   './js/main.js',
