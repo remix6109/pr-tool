@@ -11,6 +11,9 @@
     sig: '',
     grow: true,           // 下次重建時播「長高」動畫
     PLAY_MIN: 5, PLAY_MAX: 9, // 時間軸播放秒數(依投資期間長短)
+    LEAD: 1.4,            // 開頭留給第一個特效飛/走的時間
+    FLY: 0.75,            // 買進:建材箱飛到大樓的秒數
+    WALK: 1.3,            // 配息:小人走到中央的秒數
     MAX_H: 9,             // 最高那棟的高度
     MIN_FLOOR: 0.16,      // 金額很小的那層至少這麼厚,才點得到
     YEAR_COLORS: ['#F3E6CC', '#EACB9C', '#DDAA6E', '#C98A52', '#B06C3E', '#8E5533']
@@ -109,7 +112,7 @@
     TOWN3D.s = {
       renderer, scene, camera, sun, content, winTex: town3dWindowTex(),
       cam: { theta: 0.9, phi: 1.0 }, R: 5, raf: 0, prev: 0, t: 0, lastTouch: 0,
-      floors: [], pile: null, pileWant: 0, pileShown: 0, growT: 99, picks: []
+      floors: [], pile: null, pileWant: 0, growT: 99, picks: [], fx: [], labels: [], bldg: {}
     };
     town3dBindControls(canvas);
   }
@@ -159,6 +162,9 @@
     const allFloors = [];
     s.picks = [];
     s.labels = [];
+    s.bldg = {};
+    s.fx = [];
+    s.TOP = TOP;
     const geo = new THREE.BoxGeometry(1, 1, 1); geo.translate(0, 0.5, 0);
     const slabGeo = new THREE.BoxGeometry(1.72, 0.07, 1.72), slabMat = flat('#7D6A55');
     const chgColor = (it) => {
@@ -203,6 +209,7 @@
       label.position.y = y + 1.05;
       g.add(label);
       g.userData = { roof, label, top: y };
+      s.bldg[sym] = g;
     });
     // 時間軸:從第一筆買進到今天,每層在實際買進的那天長出來、配息在入帳那天落進金幣堆
     allFloors.sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0);
@@ -214,7 +221,7 @@
     const days = (t1 - t0) / 864e5;
     s.dur = Math.max(TOWN3D.PLAY_MIN, Math.min(TOWN3D.PLAY_MAX, days / 70));
     s.t0 = t0; s.t1 = t1;
-    const atOf = (date) => (Date.parse(date) - t0) / (t1 - t0) * s.dur * 0.96;
+    const atOf = (date) => TOWN3D.LEAD + (Date.parse(date) - t0) / (t1 - t0) * s.dur * 0.96;
     allFloors.forEach(x => { x.at = atOf(x.date); });
     divRows.forEach(d => { d.at = atOf(d.date); });
     s.floors = allFloors;
@@ -281,7 +288,8 @@
     s.pile.count = s.div > 0 ? Math.round(s.pileWant * Math.min(1, cum / s.div)) : 0;
     if (!s.playing) return;
     // 播放中:左上角日期和累計數字跟著跑,下方顯示剛發生的事
-    const day = autodivYmd(new Date(s.t0 + Math.min(1, t / (s.dur * 0.96)) * (s.t1 - s.t0)));
+    town3dSpawnFx(t);
+    const day = autodivYmd(new Date(s.t0 + Math.max(0, Math.min(1, (t - TOWN3D.LEAD) / (s.dur * 0.96))) * (s.t1 - s.t0)));
     if (day !== s.lastDay) {
       s.lastDay = day;
       const cost = s.floors.reduce((a, x) => a + (x.at <= t ? x.f.money : 0), 0);
@@ -295,7 +303,80 @@
       $('#town-readout').innerHTML = ev < 0 ? '' : s.events.slice(Math.max(0, ev - 1), ev + 1).reverse()
         .map((e, i) => `<div${i ? ' class="muted"' : ''}>${e.html}</div>`).join('') + '<div class="muted small">點畫面直接跳到今天</div>';
     }
-    if (t >= s.dur + 0.4) town3dFinish();
+    if (t >= TOWN3D.LEAD + s.dur + 0.4 && !s.fx.length) town3dFinish();
+  }
+
+  // ---------- 特效:買進丟建材箱、配息小人搬金幣 ----------
+  function town3dFxParts() {
+    const s = TOWN3D.s;
+    if (s.fxParts) return s.fxParts;
+    const std = (color, extra) => new THREE.MeshStandardMaterial(Object.assign({ color, flatShading: true, roughness: 0.8 }, extra || {}));
+    s.fxParts = {
+      crateGeo: new THREE.BoxGeometry(0.5, 0.5, 0.5), crateMat: std('#C98F52'), bandGeo: new THREE.BoxGeometry(0.52, 0.1, 0.52), bandMat: std('#7A5432'),
+      bodyGeo: new THREE.CylinderGeometry(0.12, 0.15, 0.4, 8), bodyMat: std('#3F7373'),
+      headGeo: new THREE.SphereGeometry(0.13, 10, 8), headMat: std('#F2D2B0'),
+      coinGeo: new THREE.CylinderGeometry(0.2, 0.2, 0.07, 14), coinMat: new THREE.MeshStandardMaterial({ color: '#FFD447', metalness: 0.35, roughness: 0.3, emissive: '#B07800', emissiveIntensity: 0.5 })
+    };
+    return s.fxParts;
+  }
+
+  function town3dSpawnFx(t) {
+    const s = TOWN3D.s;
+    s.floors.forEach(x => { if (!x.fx && t >= x.at - TOWN3D.FLY) { x.fx = true; town3dCrate(x, t); } });
+    s.divRows.forEach(d => { if (!d.fx && t >= d.at - TOWN3D.WALK) { d.fx = true; town3dWalker(d, t); } });
+  }
+
+  // 建材箱:從鏡頭這一側拋向大樓,落在新樓層的位置
+  function town3dCrate(x, t) {
+    const s = TOWN3D.s, P = town3dFxParts();
+    const box = new THREE.Group();
+    box.add(new THREE.Mesh(P.crateGeo, P.crateMat), new THREE.Mesh(P.bandGeo, P.bandMat));
+    box.children.forEach(m => { m.castShadow = true; });
+    const g = x.m.parent;
+    const to = new THREE.Vector3(g.position.x, s.TOP + x.m.position.y + x.h + 0.3, g.position.z);
+    const cam = s.camera.position.clone(); cam.y = 0;
+    const from = cam.setLength(Math.min(cam.length() * 0.55, s.R + 3)); from.y = 2.5;
+    s.content.add(box);
+    s.fx.push({ obj: box, start: t, dur: TOWN3D.FLY, update(p) {
+      box.position.lerpVectors(from, to, p);
+      box.position.y += Math.sin(p * Math.PI) * 2.6;
+      box.rotation.set(p * 5, p * 3, 0);
+      box.scale.setScalar(p > 0.9 ? 1 - (p - 0.9) * 8 : 1);
+    } });
+  }
+
+  // 配息小人:從那檔的大樓走到中央金幣堆,頭上頂著金幣
+  function town3dWalker(d, t) {
+    const s = TOWN3D.s, P = town3dFxParts();
+    const man = new THREE.Group();
+    const body = new THREE.Mesh(P.bodyGeo, P.bodyMat); body.position.y = 0.22;
+    const head = new THREE.Mesh(P.headGeo, P.headMat); head.position.y = 0.55;
+    const coin = new THREE.Mesh(P.coinGeo, P.coinMat); coin.position.y = 0.76;
+    [body, head, coin].forEach(m => { m.castShadow = true; man.add(m); });
+    const g = s.bldg[d.sym];
+    const dir = g ? new THREE.Vector3(g.position.x, 0, g.position.z) : new THREE.Vector3(s.R + 1.5, 0, 0);
+    const from = dir.clone().setLength(Math.max(1.8, dir.length() - 1.25));
+    const to = dir.clone().setLength(1.35);
+    from.y = to.y = s.TOP + 0.05;
+    man.position.copy(from);
+    man.lookAt(to.x, from.y, to.z);
+    s.content.add(man);
+    s.fx.push({ obj: man, start: t, dur: TOWN3D.WALK, update(p) {
+      man.position.lerpVectors(from, to, p);
+      man.position.y = from.y + Math.abs(Math.sin(p * Math.PI * 7)) * 0.08;   // 走路上下晃
+      coin.rotation.y = p * 12;
+      man.scale.setScalar(1.7 * (p > 0.92 ? 1 - (p - 0.92) * 10 : 1));   // 放大一點,遠看才看得到
+    } });
+  }
+
+  function town3dUpdateFx() {
+    const s = TOWN3D.s;
+    s.fx = s.fx.filter(e => {
+      const p = (s.growT - e.start) / e.dur;
+      if (p >= 1 || !s.playing) { s.content.remove(e.obj); return false; }
+      e.update(Math.max(0, p));
+      return true;
+    });
   }
 
   // 播完(或點畫面略過):停在今天,顯示總市值與說明
@@ -303,6 +384,7 @@
     const s = TOWN3D.s;
     s.playing = false;
     s.growT = 99;
+    town3dUpdateFx();   // 清掉還在飛/走的特效
     s.labels.forEach(x => x.label.draw(x.sym, x.label.final, '#5C6B6A'));
     town3dApplyGrow(99);
     $('#town3d-hud').innerHTML = s.finalHud || '';
@@ -332,6 +414,7 @@
     s.prev = now;
     s.t += dt;
     if (s.playing) { s.growT += dt; town3dApplyGrow(s.growT); }
+    if (s.fx.length) town3dUpdateFx();
     if (now - s.lastTouch > 3000) s.cam.theta += dt * 0.1;
     const aspect = s.camera.aspect;
     const dist = Math.max(s.R * 4.3, (s.R + 3.2) / (0.364 * aspect) * 1.35);    // 畫面窄時拉遠(0.364 = tan 20°)
