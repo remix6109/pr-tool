@@ -106,11 +106,11 @@
     const sun = new THREE.DirectionalLight('#FFF4E0', 0.9);
     sun.castShadow = true;
     sun.shadow.mapSize.set(1024, 1024);
-    scene.add(hemi, sun);
+    scene.add(hemi, sun, camera);
     const content = new THREE.Group();
     scene.add(content);
     TOWN3D.s = {
-      renderer, scene, camera, sun, content, winTex: town3dWindowTex(),
+      renderer, scene, camera, sun, hemi, content, winTex: town3dWindowTex(),
       cam: { theta: 0.9, phi: 1.0 }, R: 5, raf: 0, prev: 0, t: 0, lastTouch: 0,
       floors: [], pile: null, pileWant: 0, growT: 99, picks: [], fx: [], labels: [], bldg: {}
     };
@@ -120,6 +120,7 @@
   // 依資料重建小鎮內容(renderer 保留)
   function town3dBuild(person, items) {
     const s = TOWN3D.s;
+    if (s.deco && s.deco.weather) s.camera.remove(s.deco.weather.grp);
     s.content.children.slice().forEach(o => {
       s.content.remove(o);
       o.traverse(x => { if (x.geometry) x.geometry.dispose(); if (x.material && x.material !== s.sharedMat) { if (x.material.map && x.material.map !== s.winTex) x.material.map.dispose(); x.material.dispose && x.material.dispose(); } });
@@ -257,8 +258,13 @@
     Object.assign(s.sun.shadow.camera, { left: -R - 4, right: R + 4, top: R + 4, bottom: -R - 4, near: 1, far: R * 7 });
     s.sun.shadow.camera.updateProjectionMatrix();
 
-    s.lastEv = -1; s.lastDay = '';
+    town3dDecorate(person, items);
+    s.lastEv = -1; s.lastDay = ''; s.lastYear = '';
+    const finalCost = allFloors.reduce((a, x) => a + x.f.money, 0);
+    s.msStep = finalCost >= 1e6 ? 5e5 : finalCost >= 2e5 ? 1e5 : 5e4;
+    s.msNext = s.msStep;
     if (TOWN3D.grow) { s.growT = 0; TOWN3D.grow = false; s.playing = true; } else { s.growT = 99; s.playing = false; }
+    town3dDecoShow(!s.playing);
     town3dApplyGrow(s.growT);
   }
 
@@ -279,7 +285,7 @@
     });
     tops.forEach((top, g) => {
       g.userData.roof.position.y = top + 0.08;
-      g.userData.label.position.y = top + 1.05;
+      g.userData.label.position.y = top + 1.05 + (g.userData.labelUp || 0);
       g.userData.roof.visible = top > 0.1;
       g.userData.label.visible = top > 0.1;
     });
@@ -293,6 +299,15 @@
     if (day !== s.lastDay) {
       s.lastDay = day;
       const cost = s.floors.reduce((a, x) => a + (x.at <= t ? x.f.money : 0), 0);
+      if (cost >= s.msNext) {
+        let hit = s.msNext;
+        while (cost >= s.msNext) { hit = s.msNext; s.msNext += s.msStep; }
+        town3dBanner(`🎉 投入突破 <span class="town-num">${hit / 1e4} 萬</span>!`, 'ms');
+        town3dFirework(t, 0); town3dFirework(t + 0.25, 1);
+      }
+      const yr = day.slice(0, 4);
+      if (s.lastYear && yr !== s.lastYear && t > TOWN3D.LEAD) town3dBanner(yr, 'year');
+      s.lastYear = yr;
       $('#town3d-hud').innerHTML = `<b class="town3d-date">${day.replace(/-/g, '/')}</b><br>` +
         `投入成本 <span class="town-num">${fmt.money(cost)}</span><br>累積配息 <span class="town-num">${fmt.money(cum)}</span>`;
     }
@@ -387,8 +402,195 @@
     town3dUpdateFx();   // 清掉還在飛/走的特效
     s.labels.forEach(x => x.label.draw(x.sym, x.label.final, '#5C6B6A'));
     town3dApplyGrow(99);
-    $('#town3d-hud').innerHTML = s.finalHud || '';
+    town3dDecoShow(true);
+    $('#town3d-hud').innerHTML = (s.finalHud || '') + (s.weatherHtml || '');
     town3dShow(null);
+  }
+
+  // ---------- 加分效果:煙火、大字、天氣、除息旗子、待確認小人、賺賠光環 ----------
+  function town3dBanner(html, cls) {
+    const b = $('#town3d-banner');
+    if (!b) return;
+    b.className = 'town3d-banner ' + cls;
+    b.innerHTML = html;
+    void b.offsetWidth;            // 重新觸發動畫
+    b.classList.add('show');
+  }
+
+  // 煙火:一團彩色光點炸開後往下掉、淡出
+  function town3dFirework(t, k) {
+    const s = TOWN3D.s, N = 180;
+    const pos = new Float32Array(N * 3), col = new Float32Array(N * 3), vel = [];
+    const c0 = new THREE.Vector3((k ? 1 : -1) * s.R * 0.45, TOWN3D.MAX_H * 0.9 + k, (k ? -1 : 1) * s.R * 0.25);
+    const palette = ['#FFD447', '#FF6B6B', '#6BCBFF', '#9BE36B', '#FF9FF3'].map(c => new THREE.Color(c));
+    for (let i = 0; i < N; i++) {
+      const v = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize().multiplyScalar(2.2 + Math.random() * 1.6);
+      vel.push(v);
+      const c = palette[(i + k) % palette.length];
+      col.set([c.r, c.g, c.b], i * 3);
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    const mat = new THREE.PointsMaterial({ size: 0.5, vertexColors: true, transparent: true, depthWrite: false });
+    const pts = new THREE.Points(geo, mat);
+    s.content.add(pts);
+    s.fx.push({ obj: pts, start: t, dur: 1.6, update(p) {
+      const tt = p * 1.6;
+      for (let i = 0; i < N; i++) {
+        pos[i * 3] = c0.x + vel[i].x * tt;
+        pos[i * 3 + 1] = c0.y + vel[i].y * tt - 1.6 * tt * tt;
+        pos[i * 3 + 2] = c0.z + vel[i].z * tt;
+      }
+      geo.attributes.position.needsUpdate = true;
+      mat.opacity = p < 0.08 ? 0 : 1 - p;
+    } });
+  }
+
+  function town3dDecorate(person, items) {
+    const s = TOWN3D.s, P = town3dFxParts();
+    const deco = { flags: [], halos: [], waiters: [], roofs: [], weather: null, t: 0 };
+    const flat = (color, extra) => new THREE.MeshStandardMaterial(Object.assign({ color, flatShading: true, roughness: 0.8 }, extra || {}));
+    items.forEach(it => {
+      const g = s.bldg[it.sym];
+      if (!g) return;
+      const top = g.userData.top;
+      // 賺賠光環:綠 = 賺、紅 = 賠,越亮報酬率越高(和屋頂的「今日漲跌」不同,這是買進到現在的總報酬)
+      if (it.cost > 0) {
+        const ret = (it.value - it.cost) / it.cost;
+        const halo = new THREE.Mesh(new THREE.TorusGeometry(0.95, 0.07, 8, 36),
+          new THREE.MeshBasicMaterial({ color: ret >= 0 ? '#45D16A' : '#FF5A47', transparent: true, opacity: Math.min(0.95, 0.3 + Math.abs(ret) * 2.2), depthWrite: false }));
+        halo.rotation.x = Math.PI / 2;
+        halo.position.y = top + 0.55;
+        g.add(halo);
+        deco.halos.push({ m: halo, base: top + 0.55 });
+      }
+      // 30 天內除息:屋頂插旗、屋頂微微發光
+      if (it.nextEx) {
+        const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 1.2, 6), flat('#6B5B4B'));
+        pole.position.set(0.7, top + 0.75, 0.7);
+        const flag = new THREE.Mesh(new THREE.PlaneGeometry(1.0, 0.6), flat('#E8A23A', { side: THREE.DoubleSide, emissive: '#7A4A00', emissiveIntensity: 0.4 }));
+        flag.geometry.translate(0.5, 0, 0);
+        flag.position.set(0.7, top + 1.1, 0.7);
+        flag.userData = { kind: 'flag', sym: it.sym, date: it.nextEx };
+        g.add(pole, flag);
+        s.picks.push(flag);
+        deco.flags.push(flag, pole);
+        deco.roofs.push(g.userData.roof);
+        g.userData.labelUp = 0.9;                    // 看板往上移,才不會擋住旗子
+        g.userData.label.position.y = top + 1.05 + 0.9;
+      }
+    });
+    // 待確認配息:小人頂著金幣站在大樓門口等,點他就打開股利表單
+    computePendingDividends().forEach((it, i) => {
+      const g = s.bldg[it.symbol];
+      if (!g) return;
+      const man = new THREE.Group();
+      const body = new THREE.Mesh(P.bodyGeo, P.bodyMat); body.position.y = 0.22;
+      const head = new THREE.Mesh(P.headGeo, P.headMat); head.position.y = 0.55;
+      const coin = new THREE.Mesh(P.coinGeo, P.coinMat); coin.position.y = 0.76;
+      [body, head, coin].forEach(m => { m.castShadow = true; m.userData = { kind: 'pending', it }; man.add(m); s.picks.push(m); });
+      const dir = new THREE.Vector3(g.position.x, 0, g.position.z);
+      const at = dir.clone().setLength(Math.max(1.8, dir.length() - 1.3));
+      man.position.set(at.x, s.TOP + 0.05, at.z);
+      man.lookAt(0, s.TOP + 0.05, 0);
+      man.scale.setScalar(1.7);
+      const tag = town3dLabel();
+      tag.draw('待確認', fmt.money(it.net), '#B07800');
+      tag.scale.set(1.5, 0.61, 1);
+      tag.position.y = 1.25;
+      man.add(tag);
+      s.content.add(man);
+      deco.waiters.push({ man, coin, k: i });
+    });
+    deco.weather = town3dWeather(items);
+    s.deco = deco;
+  }
+
+  // 今日天氣:依持股市值加權的今日漲跌 → 晴(漲)、多雲(小跌)、小雨(跌 1% 以上)
+  function town3dWeather(items) {
+    const s = TOWN3D.s;
+    let wv = 0, w = 0;
+    items.forEach(it => { if (it.chg !== null && it.chg !== undefined) { wv += it.value * it.chg; w += it.value; } });
+    const chg = w > 0 ? wv / w : null;
+    const kind = chg === null ? null : chg >= 0 ? 'sun' : chg > -1 ? 'cloud' : 'rain';
+    const grp = new THREE.Group();
+    s.camera.add(grp);
+    const out = { kind, chg, grp, clouds: [], rain: null, sky0: s.scene.background.clone() };
+    if (kind === 'sun') {
+      const sunM = new THREE.Mesh(new THREE.SphereGeometry(1.3, 20, 14), new THREE.MeshBasicMaterial({ color: '#FFE27A', fog: false }));
+      sunM.position.set(7.5, 5.2, -24);
+      const glow = new THREE.Mesh(new THREE.RingGeometry(1.5, 2.6, 32), new THREE.MeshBasicMaterial({ color: '#FFE9A8', transparent: true, opacity: 0.35, fog: false }));
+      glow.position.copy(sunM.position);
+      grp.add(sunM, glow);
+      out.glow = glow;
+    }
+    if (kind === 'cloud' || kind === 'rain') {
+      const cm = new THREE.MeshStandardMaterial({ color: kind === 'rain' ? '#8E9AA3' : '#F4F6F8', flatShading: true, roughness: 1, fog: false });
+      for (let i = 0; i < 4; i++) {
+        const c = new THREE.Group();
+        [[0, 0, 1.2], [1.1, -0.2, 0.9], [-1.1, -0.25, 0.85], [0.4, 0.5, 0.8]].forEach(([x, y, r]) => {
+          const b = new THREE.Mesh(new THREE.IcosahedronGeometry(r, 0), cm); b.position.set(x, y, 0); c.add(b);
+        });
+        c.position.set(-12 + i * 8, 5 + (i % 2) * 1.2, -24 - (i % 3) * 2);
+        grp.add(c);
+        out.clouds.push(c);
+      }
+    }
+    if (kind === 'rain') {
+      const N = 500, pos = new Float32Array(N * 3), R = s.R + 3;
+      for (let i = 0; i < N; i++) pos.set([(Math.random() * 2 - 1) * R, Math.random() * 12, (Math.random() * 2 - 1) * R], i * 3);
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+      out.rain = new THREE.Points(geo, new THREE.PointsMaterial({ color: '#BFD4E6', size: 0.09, transparent: true, opacity: 0.8 }));
+      s.content.add(out.rain);
+    }
+    return out;
+  }
+
+  // 播放中先藏起來,播完(停在今天)才顯示
+  function town3dDecoShow(on) {
+    const s = TOWN3D.s, d = s.deco;
+    if (!d) return;
+    d.on = on;
+    d.halos.forEach(h => { h.m.visible = on; });
+    d.flags.forEach(m => { m.visible = on; });
+    d.waiters.forEach(w => { w.man.visible = on; });
+    const W = d.weather;
+    W.grp.visible = on;
+    if (W.rain) W.rain.visible = on;
+    const dark = document.documentElement.dataset.theme === 'dark';
+    const sky = W.sky0.clone();
+    if (on && W.kind === 'cloud') sky.lerp(new THREE.Color('#AEB8BF'), 0.5);
+    if (on && W.kind === 'rain') sky.lerp(new THREE.Color('#7D8A93'), 0.65);
+    s.scene.background = sky;
+    s.scene.fog.color = sky;
+    const k = !on || !W.kind ? 1 : W.kind === 'sun' ? 1.15 : W.kind === 'cloud' ? 0.75 : 0.55;
+    s.sun.intensity = (dark ? 0.75 : 0.9) * k;
+    s.hemi.intensity = 0.8 * (0.6 + 0.4 * k);
+    if (on && W.chg !== null) {
+      const icon = W.kind === 'sun' ? '☀️' : W.kind === 'cloud' ? '⛅' : '🌧️';
+      s.weatherHtml = `<br>${icon} 今日 <span class="${W.chg >= 0 ? 'gain' : 'loss'}">${W.chg >= 0 ? '+' : ''}${W.chg.toFixed(2)}%</span>`;
+    } else s.weatherHtml = '';
+    if (on && s.finalHud) $('#town3d-hud').innerHTML = s.finalHud + s.weatherHtml;
+  }
+
+  function town3dDecoTick(dt) {
+    const s = TOWN3D.s, d = s.deco;
+    if (!d.on) return;
+    d.t += dt;
+    d.halos.forEach((h, i) => { h.m.rotation.z += dt * 0.8; h.m.position.y = h.base + Math.sin(d.t * 2 + i) * 0.08; });
+    d.flags.forEach(m => { if (m.userData.kind === 'flag') m.rotation.y = Math.sin(d.t * 3) * 0.35; });
+    d.roofs.forEach(r => { r.material.emissive.set('#E8A23A'); r.material.emissiveIntensity = 0.25 + Math.sin(d.t * 3) * 0.2; });
+    d.waiters.forEach(w => { w.man.position.y = s.TOP + 0.05 + Math.abs(Math.sin(d.t * 4 + w.k)) * 0.1; w.coin.rotation.y += dt * 3; });
+    const W = d.weather;
+    if (W.glow) W.glow.rotation.z += dt * 0.3;
+    W.clouds.forEach((c, i) => { c.position.x += dt * (0.4 + i * 0.1); if (c.position.x > 16) c.position.x = -16; });
+    if (W.rain) {
+      const p = W.rain.geometry.attributes.position;
+      for (let i = 0; i < p.count; i++) { let y = p.getY(i) - dt * 9; if (y < 0) y += 12; p.setY(i, y); }
+      p.needsUpdate = true;
+    }
   }
 
   // ---------- 繪圖迴圈 ----------
@@ -415,6 +617,7 @@
     s.t += dt;
     if (s.playing) { s.growT += dt; town3dApplyGrow(s.growT); }
     if (s.fx.length) town3dUpdateFx();
+    if (s.deco) town3dDecoTick(dt);
     if (now - s.lastTouch > 3000) s.cam.theta += dt * 0.1;
     const aspect = s.camera.aspect;
     const dist = Math.max(s.R * 4.3, (s.R + 3.2) / (0.364 * aspect) * 1.35);    // 畫面窄時拉遠(0.364 = tan 20°)
@@ -473,6 +676,15 @@
         `${f.date.replace(/-/g, '/')} 買進 ${fmt.money(f.shares)} 股・<span class="town-num">${fmt.money(f.money)} 元</span>`;
       return;
     }
+    if (d && d.kind === 'flag') {
+      box.innerHTML = `🚩 <b>${escapeHtml(d.sym)}</b> 預計 ${d.date.slice(5).replace('-', '/')} 除息。除息前 2 個營業日(含)以前買進的才領得到。`;
+      return;
+    }
+    if (d && d.kind === 'pending') {
+      box.innerHTML = `💰 <b>${escapeHtml(d.it.symbol)}</b> 有一筆配息待確認(預估 <span class="town-num">${fmt.money(d.it.net)} 元</span>),已打開股利表單。`;
+      confirmPendingDividend(d.it);
+      return;
+    }
     if (d && d.kind === 'coins') {
       const last = (STATE.data.dividends || []).filter(r => r.person === STATE.defaultPerson)
         .sort((a, b) => String(a.date) < String(b.date) ? 1 : -1)[0];
@@ -506,14 +718,16 @@
     if (!wrap.querySelector('#town3d-stage')) {
       wrap.innerHTML = `<div id="town3d-stage" class="town3d-stage">
         <div class="town3d-hud small" id="town3d-hud"></div>
-        <div class="town3d-years small" id="town3d-years"></div></div>`;
+        <div class="town3d-years small" id="town3d-years"></div>
+        <div class="town3d-banner" id="town3d-banner"></div></div>`;
       $('#town3d-stage').prepend(s.renderer.domElement);
       TOWN3D.grow = true;
     }
     town3dResize();
     const total = items.reduce((a, it) => a + it.value, 0);
     const cost = items.reduce((a, it) => a + it.cost, 0);
-    const sig = [person, TOWN.mode, (STATE.data.purchases || []).length, (STATE.data.dividends || []).length, items.map(it => it.sym + it.value + it.chg).join()].join('|');
+    const sig = [person, TOWN.mode, (STATE.data.purchases || []).length, (STATE.data.dividends || []).length, computePendingDividends().length,
+      items.map(it => it.sym + it.value + it.chg + it.nextEx).join()].join('|');
     if (sig !== TOWN3D.sig || TOWN3D.grow) {
       TOWN3D.sig = sig;
       town3dBuild(person, items);
@@ -523,7 +737,7 @@
       `持有成本 <span class="town-num">${fmt.money(cost)}</span><br>` +
       `累積配息 <span class="town-num">${fmt.money(s.div)}</span>`;
     $('#town3d-years').innerHTML = s.years.map(y => `<i style="background:${s.yearColor(y)}"></i>${y}`).join('');
-    if (!s.playing) $('#town3d-hud').innerHTML = s.finalHud;
+    if (!s.playing) $('#town3d-hud').innerHTML = s.finalHud + (s.weatherHtml || '');
     s.summary = `${escapeHtml(getPersonLabel(person))}的小鎮:${items.length} 棟大樓、共 ${s.floors.length} 層(一筆買進一層)。點樓層看那筆買進,點中間金幣看配息;左右滑動可以旋轉。`;
     if (!s.playing) town3dShow(null);
     town3dStart();

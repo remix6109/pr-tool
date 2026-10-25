@@ -954,3 +954,9 @@ th { color: var(--muted); font-weight: 600; font-size: .8rem; }
 .town3d-years { position: absolute; right: 10px; bottom: 10px; padding: 3px 8px; border-radius: 8px; background: rgba(30,42,42,.7); color: #fff; pointer-events: none; }
 .town3d-years i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin: 0 3px 0 6px; vertical-align: -1px; }
 .town3d-date { font-size: 1.2rem; font-variant-numeric: tabular-nums; }
+.town3d-hud .gain { color: #2F8A45; } .town3d-hud .loss { color: #C8432F; }
+.town3d-banner { position: absolute; left: 50%; top: 42%; transform: translate(-50%, -50%); pointer-events: none; opacity: 0; white-space: nowrap; font-weight: 800; text-shadow: 0 2px 8px rgba(0,0,0,.35); color: #fff; }
+.town3d-banner.ms { font-size: 1.5rem; padding: 8px 16px; border-radius: 14px; background: rgba(176,120,0,.82); }
+.town3d-banner.year { font-size: 3.4rem; letter-spacing: .08em; color: rgba(255,255,255,.95); }
+.town3d-banner.show { animation: town3dBanner 1.8s ease-out forwards; }
+@keyframes town3dBanner { 0% { opacity: 0; transform: translate(-50%, -30%) scale(.8); } 15% { opacity: 1; transform: translate(-50%, -50%) scale(1.05); } 70% { opacity: 1; transform: translate(-50%, -55%) scale(1); } 100% { opacity: 0; transform: translate(-50%, -70%) scale(1); } }
