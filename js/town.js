@@ -140,7 +140,12 @@
   function bindTownCard() {
     const card = $('#card-town');
     if (!card) return;
+    let wasCollapsed = card.classList.contains('collapsed');
     new MutationObserver(() => {
-      if (!card.classList.contains('collapsed') && STATE.data) renderTown(STATE.defaultPerson);
+      const collapsed = card.classList.contains('collapsed');
+      // 只有「收起 → 展開」那一下才讓 3D 小鎮從頭播(卡片上其他 class 變動不算)
+      if (wasCollapsed && !collapsed && typeof TOWN3D !== 'undefined') TOWN3D.grow = true;
+      wasCollapsed = collapsed;
+      if (!collapsed && STATE.data) renderTown(STATE.defaultPerson);
     }).observe(card, { attributes: true, attributeFilter: ['class'] });
   }

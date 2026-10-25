@@ -42,23 +42,26 @@
         if (da !== db) return da < db ? -1 : 1;
         return (Date.parse(a.created_at) || 0) - (Date.parse(b.created_at) || 0);
       });
-    const bySym = {};
+    const bySym = {}, stacks = {};
     rows.forEach(r => {
       const sym = String(r.symbol), shares = Number(r.shares) || 0, amount = Number(r.amount) || 0;
+      const date = String(r.date || '').slice(0, 10);
       const floors = bySym[sym] || (bySym[sym] = []);
+      const stack = stacks[sym] || (stacks[sym] = []);
       if (shares > 0 && amount >= 0) {
-        floors.push({ date: String(r.date || '').slice(0, 10), shares, money: amount + (Number(r.fee) || 0) });
+        const fl = { date, shares, money: amount + (Number(r.fee) || 0) };
+        floors.push(fl); stack.push(fl);
       } else {
-        // 賣出:從最上面的樓層開始拆(只是畫面呈現;成本計算仍以 portfolio.js 為準)
+        // 賣出:從最上面的樓層開始拆,整層賣掉的記下賣出日(播放時那天拆掉);只賣一部分的直接縮小
+        // (只是畫面呈現;成本計算仍以 portfolio.js 為準)
         let left = Math.abs(shares);
-        while (left > 0 && floors.length) {
-          const top = floors[floors.length - 1];
-          if (top.shares <= left) { left -= top.shares; floors.pop(); }
+        while (left > 0 && stack.length) {
+          const top = stack[stack.length - 1];
+          if (top.shares <= left) { left -= top.shares; top.gone = date; stack.pop(); }
           else { top.money *= (top.shares - left) / top.shares; top.shares -= left; left = 0; }
         }
       }
     });
-    Object.keys(bySym).forEach(k => { if (!bySym[k].length) delete bySym[k]; });
     return bySym;
   }
 
@@ -184,6 +187,7 @@
       const base = new THREE.Mesh(new THREE.BoxGeometry(2, 0.08, 2), flat('#CFC7B8'));
       base.position.y = 0.04; base.receiveShadow = true; g.add(base);
       let y = 0.08;
+      const myFloors = [];
       floorsBy[sym].forEach((f, k) => {
         const h = Math.max(TOWN3D.MIN_FLOOR, f.money / unit);
         const tex = s.winTex.clone(); tex.needsUpdate = true;
@@ -198,9 +202,10 @@
         const slab = new THREE.Mesh(slabGeo, slabMat);
         slab.castShadow = true;
         g.add(slab);
-        allFloors.push({ m, slab, h: h - 0.035, date: f.date, sym, f });
+        const rec = { m, slab, h: h - 0.035, date: f.date, sym, f };
+        allFloors.push(rec); myFloors.push(rec);
         s.picks.push(m);
-        y += h;
+        if (!f.gone) y += h;
       });
       const it = items.find(x => x.sym === sym);
       const roof = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.16, 1.8), flat(chgColor(it)));
@@ -211,7 +216,7 @@
       s.labels.push({ label, sym });
       label.position.y = y + 1.05;
       g.add(label);
-      g.userData = { roof, label, top: y };
+      g.userData = { roof, label, top: y, floors: myFloors };
       s.bldg[sym] = g;
     });
     // 時間軸:從第一筆買進到今天,每層在實際買進的那天長出來、配息在入帳那天落進金幣堆
@@ -219,10 +224,11 @@
     const divRows = (STATE.data.dividends || []).filter(r => r.person === person && Number(r.total) > 0)
       .map(r => ({ date: String(r.date || '').slice(0, 10), money: Number(r.total), sym: String(r.symbol || '') }))
       .filter(r => r.date).sort((a, b) => a.date < b.date ? -1 : 1);
-    const t0 = Date.parse((allFloors[0] || divRows[0] || { date: autodivYmd(new Date()) }).date);
+    const firstDate = [allFloors[0] && allFloors[0].date, divRows[0] && divRows[0].date].filter(Boolean).sort()[0] || autodivYmd(new Date());
+    const t0 = Date.parse(firstDate);
     const t1 = Math.max(t0 + 864e5, Date.parse(autodivYmd(new Date())));
     s.t0 = t0; s.t1 = t1;
-    const evDates = [...new Set(allFloors.map(x => x.date).concat(divRows.map(d => d.date)))].sort();
+    const evDates = [...new Set(allFloors.map(x => x.date).concat(allFloors.filter(x => x.f.gone).map(x => x.f.gone), divRows.map(d => d.date)))].sort();
     const divDates = new Set(divRows.map(d => d.date));
     const raw = evDates.reduce((a, d) => a + TOWN3D.STEP + (divDates.has(d) ? TOWN3D.STEP_DIV : 0), 0);
     const k = raw > TOWN3D.MAX_TOTAL ? TOWN3D.MAX_TOTAL / raw : 1;
@@ -238,11 +244,13 @@
     s.marks = marks;
     s.dur = cur - TOWN3D.LEAD;
     const atOf = (date) => { const m = marks.find(x => x[0] === Date.parse(date)); return m ? m[1] : cur; };
-    allFloors.forEach(x => { x.at = atOf(x.date); });
+    allFloors.forEach(x => { x.at = atOf(x.date); x.goneAt = x.f.gone ? atOf(x.f.gone) : Infinity; });
+    s.groups = order.map(sym => s.bldg[sym]);
     divRows.forEach(d => { d.at = atOf(d.date); });
     s.floors = allFloors;
     s.divRows = divRows;
     s.events = allFloors.map(x => ({ at: x.at, sym: x.sym, kind: 'buy', amount: x.f.shares, html: `${x.date.replace(/-/g, '/')} 🏗️ 買進 <b>${escapeHtml(x.sym)}</b> ${fmt.money(x.f.shares)} 股` }))
+      .concat(allFloors.filter(x => x.f.gone).map(x => ({ at: x.goneAt, sym: x.sym, kind: 'sell', amount: x.f.shares, html: `${x.f.gone.replace(/-/g, '/')} 📉 賣出 <b>${escapeHtml(x.sym)}</b> ${fmt.money(x.f.shares)} 股` })))
       .concat(divRows.map(d => ({ at: d.at, sym: d.sym, kind: 'div', amount: d.money, html: `${d.date.replace(/-/g, '/')} 💰 <b>${escapeHtml(d.sym)}</b> 配息 <span class="town-num">+${fmt.money(d.money)}</span>` })))
       .sort((a, b) => a.at - b.at);
 
@@ -273,6 +281,7 @@
     Object.assign(s.sun.shadow.camera, { left: -R - 4, right: R + 4, top: R + 4, bottom: -R - 4, near: 1, far: R * 7 });
     s.sun.shadow.camera.updateProjectionMatrix();
 
+    town3dBannerClear();
     town3dDecorate(person, items);
     s.lastEv = -1; s.lastDay = ''; s.lastYear = ''; s.focusTheta = undefined;
     const finalCost = allFloors.reduce((a, x) => a + x.f.money, 0);
@@ -286,23 +295,21 @@
   // 長高動畫:t 秒時每層的高度(ease-out),樓頂和看板跟著最上面那層
   function town3dApplyGrow(t) {
     const s = TOWN3D.s;
-    const tops = new Map();
-    s.floors.forEach(x => {
-      const p = Math.max(0, Math.min(1, (t - x.at) / 0.35));
-      const e = 1 - Math.pow(1 - p, 3);
-      x.m.scale.y = Math.max(0.001, x.h * e);
-      x.m.visible = x.slab.visible = p > 0;
-      x.slab.position.y = x.m.position.y + x.m.scale.y;
-      const g = x.m.parent;
-      const topY = x.m.position.y + x.m.scale.y + 0.035 * e;
-      if (p > 0) tops.set(g, Math.max(tops.get(g) || 0.08, topY));
-      else if (!tops.has(g)) tops.set(g, 0.08);
-    });
-    tops.forEach((top, g) => {
-      g.userData.roof.position.y = top + 0.08;
-      g.userData.label.position.y = top + 1.05 + (g.userData.labelUp || 0);
-      g.userData.roof.visible = top > 0.1;
-      g.userData.label.visible = top > 0.1;
+    const ease = (v) => 1 - Math.pow(1 - Math.max(0, Math.min(1, v)), 3);
+    s.groups.forEach(g => {
+      let y = 0.08;
+      g.userData.floors.forEach(x => {
+        const e = ease((t - x.at) / 0.35) * (1 - ease((t - x.goneAt) / 0.35));
+        x.m.position.y = y;
+        x.m.scale.y = Math.max(0.001, x.h * e);
+        x.m.visible = x.slab.visible = e > 0.002;
+        x.slab.position.y = y + x.m.scale.y;
+        y += x.m.scale.y + 0.035 * e;
+      });
+      g.userData.roof.position.y = y + 0.08;
+      g.userData.label.position.y = y + 1.05 + (g.userData.labelUp || 0);
+      g.userData.roof.visible = y > 0.1;
+      g.userData.label.visible = y > 0.1;
     });
     let cum = 0;
     s.divRows.forEach(d => { if (d.at <= t) cum += d.money; });
@@ -313,7 +320,7 @@
     const day = autodivYmd(new Date(town3dDateAt(t)));
     if (day !== s.lastDay) {
       s.lastDay = day;
-      const cost = s.floors.reduce((a, x) => a + (x.at <= t ? x.f.money : 0), 0);
+      const cost = s.floors.reduce((a, x) => a + (x.at <= t && x.goneAt > t ? x.f.money : 0), 0);
       if (cost >= s.msNext) {
         let hit = s.msNext;
         while (cost >= s.msNext) { hit = s.msNext; s.msNext += s.msStep; }
@@ -444,6 +451,9 @@
     if (e.kind === 'buy' && g) {
       const at = new THREE.Vector3(g.position.x, g.position.y + Math.max(0.6, g.userData.roof.position.y - 0.9), g.position.z);   // 從樓身浮到樓頂,避開看板
       town3dPopup(`+${fmt.money(e.amount)} 股`, '#2F5F66', at, t);   // 買進不代表賺賠,用中性色
+    } else if (e.kind === 'sell' && g) {
+      const at = new THREE.Vector3(g.position.x, g.position.y + Math.max(0.6, g.userData.roof.position.y - 0.9), g.position.z);
+      town3dPopup(`-${fmt.money(e.amount)} 股`, '#5C6B6A', at, t);
     } else if (e.kind === 'div') {
       town3dPopup(priv ? '+配息' : `+${fmt.money(e.amount)}`, '#B07800', new THREE.Vector3(0, s.TOP + 1.4, 0), t);
     }
@@ -476,6 +486,12 @@
     b.innerHTML = html;
     void b.offsetWidth;            // 重新觸發動畫
     b.classList.add('show');
+    // 播完就清掉:不清的話,卡片收起再展開時瀏覽器會重播動畫,一開場就閃出上一次的提示
+    b.onanimationend = () => town3dBannerClear();
+  }
+  function town3dBannerClear() {
+    const b = $('#town3d-banner');
+    if (b) { b.classList.remove('show'); b.innerHTML = ''; }
   }
 
   // 煙火:一團彩色光點炸開後往下掉、淡出
@@ -780,6 +796,7 @@
       }
     }
     const s = TOWN3D.s;
+    if (s.person !== person) { TOWN3D.grow = true; s.person = person; }   // 切換黃/蘇時也從頭播
     if (!wrap.querySelector('#town3d-stage')) {
       wrap.innerHTML = `<div id="town3d-stage" class="town3d-stage">
         <div class="town3d-hud small" id="town3d-hud"></div>
