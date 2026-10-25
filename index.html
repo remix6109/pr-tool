@@ -143,6 +143,7 @@
           </div>
           <div id="town-scene"></div>
           <div id="town-readout" class="small" style="min-height:3em;line-height:1.6;margin-top:6px;"></div>
+          <button type="button" class="btn primary wide" id="btn-town3d" style="margin-top:8px;">🏙️ 3D 小鎮・時光回放</button>
           <div class="muted small" style="margin-top:6px;">每檔持股一間店:房子越高市值越大、門口人越多占比越高。屋頂顏色:今日漲跌(綠漲、紅跌、灰無資料)或殖利率(深=6% 以上、淺=3% 以上)。掛旗子的是 30 天內要除息。點房子看細節。</div>
         </div>
 
@@ -638,6 +639,25 @@
   </div>
 </div>
 
+<!-- 3D 小鎮 -->
+<div class="modal hidden" id="modal-town3d">
+  <div class="modal-box wide t3-box">
+    <div class="t3-head"><b id="t3-title">3D 小鎮</b><button class="btn ghost small" data-close>關閉</button></div>
+    <div class="t3-stage">
+      <canvas id="t3-canvas"></canvas>
+      <div class="t3-hud"><div id="t3-date" class="t3-date"></div><div id="t3-stats" class="small"></div></div>
+      <div id="t3-ticker" class="t3-ticker small"></div>
+      <div id="t3-loading" class="t3-loading">載入 3D 引擎中…</div>
+    </div>
+    <div class="t3-ctrl">
+      <button type="button" class="btn primary small" id="t3-play">▶ 從頭播放</button>
+      <input type="range" id="t3-slider" min="0" max="1000" value="1000" aria-label="時間軸">
+    </div>
+    <div id="t3-readout" class="small" style="min-height:2.6em;line-height:1.6;"></div>
+    <div class="muted small">每檔持股一棟大樓,高度 = 投入成本(買進就加蓋、賣出就拆掉);屋頂顏色是今日漲跌。配息入帳時金幣會飛進中間的金庫,金幣堆越高代表累積配息越多。回放用的是你的購買與股利記錄,播到今天才顯示市值。</div>
+  </div>
+</div>
+
 <!-- 新聞閱讀 -->
 <div class="modal hidden" id="modal-article">
   <div class="modal-box wide article-box">
@@ -725,6 +745,7 @@
 <script src="js/autodiv.js"></script>
 <script src="js/datacheck.js"></script>
 <script src="js/town.js"></script>
+<script src="js/town3d.js"></script>
 <script src="js/market.js"></script>
 <script src="js/fx.js"></script>
 <script src="js/main.js"></script>
