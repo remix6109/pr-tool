@@ -37,6 +37,11 @@
   }
 
   // 目前持有的台股代號(兩人合併,給即時報價用)
+  function marketPersonCodes() {
+    return Object.keys(computeOpenHoldings(STATE.defaultPerson)).filter(s => /^\d{4,6}[A-Z]?$/.test(s));
+  }
+  const personName = () => getPersonLabel(STATE.defaultPerson);
+
   function marketHeldCodes() {
     return Object.keys(computeOpenHoldings()).filter(s => /^\d{4,6}[A-Z]?$/.test(s));
   }
@@ -206,8 +211,8 @@
     $('#islands-live').innerHTML = strip.length ? strip.join('・') + `<span class="muted small">・更新 ${new Date(MKT.quoteAt).toLocaleTimeString('zh-TW', { hour12: false })}</span>`
       : `<span class="muted small">${MKT.error ? '讀取失敗:' + escapeHtml(MKT.error) : '讀取中…'}</span>`;
     // 你的持股即時
-    const mine = q ? marketHeldCodes().map(c => q.stocks[c] ? `${c} <span class="${mCls(q.stocks[c].chgPct)}">${mFmt(q.stocks[c].price)} ${mPct(q.stocks[c].chgPct)}</span>` : null).filter(Boolean) : [];
-    $('#islands-mine').innerHTML = mine.length ? '你的持股:' + mine.join('・') : '';
+    const mine = q ? marketPersonCodes().map(c => q.stocks[c] ? `${c} <span class="${mCls(q.stocks[c].chgPct)}">${mFmt(q.stocks[c].price)} ${mPct(q.stocks[c].chgPct)}</span>` : null).filter(Boolean) : [];
+    $('#islands-mine').innerHTML = mine.length ? escapeHtml(personName()) + '的持股:' + mine.join('・') : '';
 
     const hist = d && Array.isArray(d.history) ? d.history : [];
     const latest = { cash: (hist.filter(h => h.cash).slice(-1)[0] || {}).cash, fut: (hist.filter(h => h.fut).slice(-1)[0] || {}).fut };
@@ -334,7 +339,7 @@
 
   function analyzeAll() {
     const series = (MKT.hist && MKT.hist.series) || {};
-    return marketHeldCodes().map(code => analyzeHolding(code, series) || { code, missing: true });
+    return marketPersonCodes().map(code => analyzeHolding(code, series) || { code, missing: true });
   }
 
   function renderIntl() {
@@ -355,9 +360,9 @@
 
     if (!MKT.hist) { $('#intl-corr').innerHTML = '<div class="muted small">連動度計算中…</div>'; return; }
     const list = analyzeAll();
-    $('#intl-corr').innerHTML = list.length ? `<div class="breakdown-title">你的持股受哪個市場影響</div>
+    $('#intl-corr').innerHTML = list.length ? `<div class="breakdown-title">${escapeHtml(personName())}的持股受哪個市場影響</div>
       ${list.map(a => {
-        if (a.missing) return `<div class="mk-corr"><div class="mk-corr-head"><b>${escapeHtml(a.code)}</b> <span class="muted">價格資料不足</span></div></div>`;
+        if (a.missing) return `<div class="mk-corr"><div class="mk-corr-head"><b>${escapeHtml(a.code)}</b> <span class="muted">上市時間太短(不到 30 個交易日),還算不出連動度</span></div></div>`;
         const top = a.rows[0];
         const head = top ? (top.m.sym === MKT_TWII.sym ? '主要跟台股大盤走' : '最連動:' + top.m.name) : '資料不足';
         return `<details class="mk-corr">
@@ -439,10 +444,10 @@
     const pctOf = (v) => coveredValue > 0 ? (v / coveredValue * 100) : 0;
     const maxAmt = top.length ? top[0].amount : 1;
 
-    let html = `<div class="small" style="line-height:1.7;">已攤開 <b>${covered.join('、')}</b>(占你 ETF 市值 ${total > 0 ? (coveredValue / total * 100).toFixed(0) : 0}%)。`
+    let html = `<div class="small" style="line-height:1.7;"><b>${escapeHtml(personName())}</b>:已攤開 <b>${covered.join('、')}</b>(占 ETF 市值 ${total > 0 ? (coveredValue / total * 100).toFixed(0) : 0}%)。`
       + `其中海外股票約 <b>${pctOf(foreignValue).toFixed(1)}%</b>,現金與期貨等其他資產約 ${Math.max(0, pctOf(coveredValue - stockValue)).toFixed(1)}%。</div>`;
     if (missing.length) html += `<div class="muted small">${missing.join("、")} 的成分股暫時取不到,沒有算進來。</div>`;
-    html += '<div class="breakdown-title">你實際持有最多的股票</div>';
+    html += '<div class="breakdown-title">' + escapeHtml(personName()) + '實際持有最多的股票</div>';
     html += top.map((s, i) => `<div class="lt-row">
         <span class="lt-rank">${i + 1}</span>
         <span class="lt-name">${escapeHtml(s.name)} <small class="muted">${escapeHtml(s.code)}${s.foreign ? '・海外' : ''}</small><br><small class="muted">來自 ${s.from.join('、')}</small></span>
