@@ -1,7 +1,7 @@
 /* Service Worker — 離線可看(讀取);寫入仍要網路。
  * 改 SW 邏輯時,改下面 CACHE_VERSION,所有客戶端會自動拿新版。
  */
-const CACHE_VERSION = 'v56';
+const CACHE_VERSION = 'v57';
 const APP_CACHE = 'pr-app-' + CACHE_VERSION;
 const API_CACHE = 'pr-api-' + CACHE_VERSION;
 
@@ -54,7 +54,11 @@ const SHELL_ASSETS = [
 
 self.addEventListener('install', (e) => {
   e.waitUntil(
-    caches.open(APP_CACHE).then(c => c.addAll(SHELL_ASSETS)).then(() => self.skipWaiting())
+    // cache: 'reload' 略過瀏覽器的 HTTP 快取(GitHub Pages 會快取 10 分鐘),
+    // 否則剛推送後安裝,可能存到「新 index + 舊 js」混在一起的版本
+    caches.open(APP_CACHE)
+      .then(c => c.addAll(SHELL_ASSETS.map(u => new Request(u, { cache: 'reload' }))))
+      .then(() => self.skipWaiting())
   );
 });
 

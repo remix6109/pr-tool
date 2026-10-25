@@ -91,16 +91,16 @@
         const sharesAbs = Math.abs(rawShares);
         const amountAbs = Math.abs(rawAmount);
         title = isSell
-          ? `<span class="tag-sell">賣</span> ${r.symbol || '?'} × ${fmt.money(sharesAbs)} 股`
-          : `${r.symbol || '?'} × ${fmt.money(sharesAbs)} 股`;
+          ? `<span class="tag-sell">賣</span> ${escapeHtml(r.symbol || '?')} × ${fmt.money(sharesAbs)} 股`
+          : `${escapeHtml(r.symbol || '?')} × ${fmt.money(sharesAbs)} 股`;
         sub = `${fmt.date(r.date)}${fee > 0 ? ' · 手續費 ' + fmt.money(fee) : ''}${r.note ? ' · ' + r.note : ''}`;
         amount = isSell ? (amountAbs - fee) : -(amountAbs + fee);
       } else if (entry.sheet === '_bank') {
-        title = r.type || '';
+        title = escapeHtml(r.type || '');
         sub = `${fmt.date(r.date)}${r.note ? ' · ' + r.note : ''}`;
         amount = (String(r.type).startsWith('支出') ? -1 : 1) * Number(r.amount || 0);
       } else if (entry.sheet === '_dividends') {
-        title = `${r.symbol || '?'} 股利`;
+        title = `${escapeHtml(r.symbol || '?')} 股利`;
         const aps = Number(r.amount_per_share) || 0;
         const subParts = [fmt.date(r.date)];
         if (aps > 0) subParts.push(`每股 ${aps.toFixed(2)}`);
@@ -108,7 +108,7 @@
         sub = subParts.join(' · ');
         amount = Number(r.total || 0);
       } else if (entry.sheet === '_savings') {
-        title = `${r.year} 年 ${r.month} 月`;
+        title = escapeHtml(`${r.year} 年 ${r.month} 月`);
         sub = r.note || '月存';
         amount = Number(r.amount || 0);
       }
@@ -319,8 +319,8 @@
         const sharesAbs = Math.abs(rawShares);
         const amountAbs = Math.abs(rawAmount);
         const title = isSell
-          ? `<span class="tag-sell">賣</span> ${r.symbol} × ${fmt.money(sharesAbs)} 股`
-          : `${r.symbol} × ${fmt.money(sharesAbs)} 股`;
+          ? `<span class="tag-sell">賣</span> ${escapeHtml(r.symbol)} × ${fmt.money(sharesAbs)} 股`
+          : `${escapeHtml(r.symbol)} × ${fmt.money(sharesAbs)} 股`;
         return {
           id: r.id, sheet: '_purchases', person: r.person,
           title,
@@ -337,7 +337,7 @@
         if (r.note) subParts.push(r.note);
         return {
           id: r.id, sheet: '_dividends', person: r.person,
-          title: `${r.symbol} 股利`,
+          title: `${escapeHtml(r.symbol)} 股利`,
           sub: subParts.join(' · '),
           amount: Number(r.total),
           searchText: `${r.symbol} ${r.note || ''}`.toLowerCase()
@@ -349,7 +349,7 @@
         const prefix = isLinked ? '🔗 ' : '';
         return {
           id: r.id, sheet: '_bank', person: r.person,
-          title: prefix + r.type,
+          title: prefix + escapeHtml(r.type),
           sub: `${fmt.date(r.date)}${r.note ? ' · ' + r.note : ''}${isLinked ? ' · 自動同步' : ''}`,
           amount: (String(r.type).startsWith('支出') ? -1 : 1) * Number(r.amount),
           readonly: isLinked,  // 連動紀錄不顯示編輯/刪除按鈕(去原始分頁編輯)
@@ -359,7 +359,7 @@
     } else if (tab === 'savings') {
       rows = raw.slice().reverse().map(r => ({
         id: r.id, sheet: '_savings', person: r.person,
-        title: `${r.year} 年 ${r.month} 月`,
+        title: escapeHtml(`${r.year} 年 ${r.month} 月`),
         sub: r.note || '月存',
         amount: Number(r.amount),
         searchText: `${r.year}/${r.month} ${r.note || ''}`.toLowerCase()
@@ -367,7 +367,7 @@
     } else if (tab === 'realized') {
       rows = raw.slice().reverse().map(r => ({
         id: r.id, sheet: '_purchases', person: r.person,
-        title: `${r.symbol} × ${fmt.money(r.sold_shares)} 股`,
+        title: `${escapeHtml(r.symbol)} × ${fmt.money(r.sold_shares)} 股`,
         sub: `${fmt.date(r.date)} · 售出 ${fmt.money(r.proceeds)} − 成本 ${fmt.money(r.cost_basis)}`,
         amount: r.realized_pl,
         readonly: true,
@@ -392,14 +392,14 @@
         const personCls = r.person === '黃' ? 'huang' : 'su';
         const actionsHtml = r.readonly ? '' : `
             <div class="row-actions">
-              <button class="edit-btn"   data-edit-sheet="${r.sheet}" data-edit-id="${r.id}" title="編輯">✏️</button>
-              <button class="delete-btn" data-del-sheet="${r.sheet}"  data-del-id="${r.id}"  title="刪除">🗑</button>
+              <button class="edit-btn"   data-edit-sheet="${r.sheet}" data-edit-id="${escapeHtml(r.id)}" title="編輯">✏️</button>
+              <button class="delete-btn" data-del-sheet="${r.sheet}"  data-del-id="${escapeHtml(r.id)}"  title="刪除">🗑</button>
             </div>`;
         return `<div class="list-item">
           <div class="badge ${personCls}">${escapeHtml(getPersonLabel(r.person)) || '?'}</div>
           <div class="main">
             <div class="row1">${r.title}</div>
-            <div class="row2">${r.sub}</div>
+            <div class="row2">${escapeHtml(r.sub)}</div>
           </div>
           <div class="right">
             <div class="amount ${cls}">${fmt.moneySigned(r.amount)}</div>${actionsHtml}

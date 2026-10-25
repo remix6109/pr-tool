@@ -15,12 +15,26 @@
     },
     moneySigned: (n) => (n >= 0 ? '+' : '') + fmt.money(n),
     pct: (n) => (n >= 0 ? '+' : '') + n.toFixed(2) + '%',
-    date: (s) => {
-      if (!s) return '';
-      const d = String(s).slice(0, 10);
-      return d;
-    }
+    date: (s) => s ? twYmd(s) : ''
   };
+
+  // 舊版後端把試算表日期以 UTC 傳出(台灣 3/3 00:00 → "2025-03-02T16:00:00.000Z"),
+  // 直接取前 10 字會早一天。帶時間的一律換算成台灣日期(UTC+8,台灣沒有日光節約)。
+  function twYmd(v) {
+    const s = String(v || '');
+    if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(s)) return s.slice(0, 10);
+    const t = Date.parse(s);
+    return isNaN(t) ? s.slice(0, 10) : new Date(t + 8 * 3600e3).toISOString().slice(0, 10);
+  }
+  // 把讀進來的所有記錄的 date 欄統一成 yyyy-MM-dd(台灣日期)
+  function normalizeDataDates(data) {
+    if (!data || typeof data !== 'object') return data;
+    Object.values(data).forEach(list => {
+      if (!Array.isArray(list)) return;
+      list.forEach(r => { if (r && typeof r.date === 'string' && r.date.length > 10) r.date = twYmd(r.date); });
+    });
+    return data;
+  }
 
   // 把 Date 物件格式化為「本地時區」的 yyyy-MM-dd(避免 toISOString 轉 UTC 少 1 天)
   function ymdLocal(d) {

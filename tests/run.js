@@ -18,7 +18,7 @@ const files = ['config', 'utils', 'appearance', 'portfolio', 'autodiv', 'datache
 const src = files.map(f => fs.readFileSync(path.join(root, f + '.js'), 'utf8')).join('\n;\n');
 vm.runInContext(src + '\n;this.__t = { STATE, CONFIG, AUTODIV, _exDiv, replayPurchases, computeRealizedPL, computeOpenHoldings, computePersonStats,' +
   ' autodivSharesBefore, autodivBizDaysBefore, autodivEstimateNet, autodivInterval, autodivIntervalFor, autodivAnnualPerShare,' +
-  ' computePayoutEvents, computePendingDividends, runDataCheck, autodivParseRoc, trailing12Dividends, dividendYieldOnCost, autodivFindRecord, _payDates, autodivPayDate };', ctx);
+  ' computePayoutEvents, computePendingDividends, runDataCheck, autodivParseRoc, trailing12Dividends, dividendYieldOnCost, autodivFindRecord, _payDates, autodivPayDate, twYmd, normalizeDataDates, fmt };', ctx);
 const T = ctx.__t;
 
 let pass = 0, fail = 0;
@@ -135,6 +135,14 @@ eq('月配兩期都對得上,不誤報', T.runDataCheck().warns.length, 0);
 set({ purchases: [P('a', '蘇', 'M', 100000, 10, 10000, 0, '2026-06-01')],
       dividends: [{ id: 'd1', person: '蘇', symbol: 'M', total: 2270, amount_per_share: 0.12, shares: 19000, date: '2026-08-30' }] });
 eq('股數對不上才報', T.runDataCheck().warns.some(w => /領息股數/.test(w.msg)), true);
+
+// ---------- 日期(後端舊版傳 UTC,要換算成台灣日期) ----------
+eq('UTC 16:00 → 台灣隔天', T.twYmd('2025-03-02T16:00:00.000Z'), '2025-03-03');
+eq('跨月跨年', T.twYmd('2025-12-31T16:00:00.000Z'), '2026-01-01');
+eq('純日期不動', T.twYmd('2026-03-16'), '2026-03-16');
+eq('顯示用 fmt.date', T.fmt.date('2025-03-09T16:00:00.000Z'), '2025-03-10');
+const nd = T.normalizeDataDates({ purchases: [{ date: '2025-03-02T16:00:00.000Z', created_at: '2025-03-02T16:00:00.000Z' }], dividends: [{ date: '2026-04-14' }], meta: {} });
+eq('整批正規化只改 date 欄', [nd.purchases[0].date, nd.purchases[0].created_at, nd.dividends[0].date], ['2025-03-03', '2025-03-02T16:00:00.000Z', '2026-04-14']);
 
 console.log(`\n${fail === 0 ? '✅ 全部通過' : '❌ 有失敗'}:${pass} 通過、${fail} 失敗`);
 process.exit(fail === 0 ? 0 : 1);
