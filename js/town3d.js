@@ -820,7 +820,8 @@
       `累積配息 <span class="town-num">${fmt.money(s.div)}</span>`;
     $('#town3d-years').innerHTML = s.years.map(y => `<i style="background:${s.yearColor(y)}"></i>${y}`).join('');
     if (!s.playing) $('#town3d-hud').innerHTML = s.finalHud + (s.weatherHtml || '');
-    s.summary = `${escapeHtml(getPersonLabel(person))}的小鎮:${items.length} 棟大樓、共 ${s.floors.length} 層(一筆買進一層)。點樓層看那筆買進,點中間金幣看配息;左右滑動可以旋轉。`;
+    const soldFloors = s.floors.filter(x => x.f.gone).length;   // 已賣出拆掉的不算進樓層數
+    s.summary = `${escapeHtml(getPersonLabel(person))}的小鎮:${items.length} 棟大樓、共 ${s.floors.length - soldFloors} 層(一筆買進一層${soldFloors ? `;另有 ${soldFloors} 層已賣出拆掉` : ''})。點樓層看那筆買進,點中間金幣看配息;左右滑動可以旋轉。`;
     if (!s.playing) town3dShow(null);
     town3dStart();
     return true;
