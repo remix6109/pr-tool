@@ -934,3 +934,14 @@ th { color: var(--muted); font-weight: 600; font-size: .8rem; }
 .news-title { font-weight: 600; line-height: 1.45; font-size: .95rem; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .news-meta { font-size: .75rem; color: var(--muted); margin-top: 3px; }
 .news-why { font-size: .75rem; color: var(--primary); margin-top: 2px; }
+
+/* === 新聞閱讀 === */
+.article-box { max-height: 88vh; display: flex; flex-direction: column; }
+#article-body { overflow-y: auto; flex: 1; -webkit-overflow-scrolling: touch; }
+.article-title { font-size: 1.15rem; line-height: 1.5; margin: 0 0 4px; }
+.article-cover { width: 100%; border-radius: 10px; margin: 10px 0; }
+.article-content { font-size: 1rem; line-height: 1.85; }
+.article-content p { margin: 0 0 1em; }
+.article-content img { max-width: 100%; height: auto; border-radius: 8px; }
+.article-content table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+.article-content td, .article-content th { border: 1px solid var(--border); padding: 4px 6px; }

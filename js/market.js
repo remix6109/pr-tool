@@ -506,17 +506,17 @@
 
   function newsItems(tab) {
     const cats = (MKT.news && MKT.news.cats) || {};
-    if (tab !== 'mine') return Array.isArray(cats[tab]) ? cats[tab].map(n => ({ n })) : [];
+    if (tab !== 'mine') return Array.isArray(cats[tab]) ? cats[tab].map(n => ({ n, cat: tab })) : [];
     const { codes, names } = myNewsTargets();
     const seen = new Set(), out = [];
-    Object.values(cats).forEach(list => {
+    Object.entries(cats).forEach(([cat, list]) => {
       if (!Array.isArray(list)) return;
       list.forEach(n => {
         if (seen.has(n.id)) return;
         let why = null;
         for (const c of n.stocks || []) { if (codes.has(c)) { why = codes.get(c); break; } }
         if (!why) for (const [nm, w] of names) { if (n.title.includes(nm)) { why = w; break; } }
-        if (why) { seen.add(n.id); out.push({ n, why }); }
+        if (why) { seen.add(n.id); out.push({ n, why, cat }); }
       });
     });
     return out.sort((a, b) => (b.n.time || '').localeCompare(a.n.time || ''));
@@ -538,14 +538,45 @@
       box.innerHTML = `<div class="muted small">${tab === 'mine' ? '最近的新聞裡沒有提到你持有的 ETF 或主要成分股。' : '目前沒有新聞。'}</div>`;
       return;
     }
-    box.innerHTML = items.map(({ n, why }) => `<a class="news-item" href="${escapeHtml(n.url)}" target="_blank" rel="noopener noreferrer">
+    box.innerHTML = items.map(({ n, why, cat }) => `<a class="news-item" href="${escapeHtml(n.url)}" data-news-id="${n.id}" data-news-cat="${cat}" target="_blank" rel="noopener noreferrer">
         ${n.image ? `<img class="news-img" src="${escapeHtml(n.image)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : '<span class="news-img"></span>'}
         <span class="news-body">
           <span class="news-title">${escapeHtml(n.title)}</span>
           ${why ? `<span class="news-why">相關:${escapeHtml(why)}</span>` : ''}
           <span class="news-meta">${escapeHtml(n.source || '')}・${timeAgo(n.time)}</span>
         </span>
-      </a>`).join('') + '<div class="muted small" style="margin-top:6px;">新聞來源:鉅亨網。只顯示標題與封面圖,點擊開啟原文。「與我持股相關」是比對新聞標註的相關股票與標題,可能漏掉或多抓。</div>';
+      </a>`).join('') + '<div class="muted small" style="margin-top:6px;">新聞來源:鉅亨網。點新聞在 APP 內閱讀,內文下方有原文連結。「與我持股相關」是比對新聞標註的相關股票與標題,可能漏掉或多抓。</div>';
+  }
+
+  // 在 APP 內閱讀:中繼站取出那一篇、清理成安全格式後顯示
+  async function openArticle(id, cat, fallbackUrl) {
+    const body = $('#article-body');
+    $('#article-origin').href = fallbackUrl;
+    body.innerHTML = '<div class="muted">讀取中…</div>';
+    openModal('modal-article');
+    try {
+      const a = await marketGet('/article?id=' + encodeURIComponent(id) + '&cat=' + encodeURIComponent(cat));
+      body.innerHTML = `<h2 class="article-title">${escapeHtml(a.title)}</h2>
+        <div class="muted small">${escapeHtml(a.source)}・${a.time ? new Date(a.time).toLocaleString('zh-TW', { hour12: false }) : ''}</div>
+        ${a.image ? `<img class="article-cover" src="${escapeHtml(a.image)}" alt="" referrerpolicy="no-referrer">` : ''}
+        <div class="article-content">${a.html}</div>
+        <div class="muted small" style="margin-top:12px;">本文出自鉅亨網,版權屬原作者與鉅亨網所有。</div>`;
+      body.querySelectorAll('img').forEach(img => img.setAttribute('referrerpolicy', 'no-referrer'));
+      body.scrollTop = 0;
+    } catch (e) {
+      body.innerHTML = `<div class="muted">讀不到內文(${escapeHtml(e.message)}),請按下方「到鉅亨網看原文」。</div>`;
+    }
+  }
+  function bindNewsReader() {
+    const list = $('#news-list');
+    if (!list || list._bound) return;
+    list._bound = true;
+    list.addEventListener('click', (e) => {
+      const a = e.target.closest('a.news-item');
+      if (!a || !a.dataset.newsId) return;
+      e.preventDefault();
+      openArticle(a.dataset.newsId, a.dataset.newsCat, a.href);
+    });
   }
 
   // ---------- 排程與綁定 ----------
@@ -583,6 +614,7 @@
         localStorage.setItem('pr.marketPageV1', '1');
       }
     } catch (_) {}
+    bindNewsReader();
     ['#card-news', '#card-islands', '#card-intl', '#card-lookthrough'].forEach(id => {
       const card = $(id);
       if (!card) return;
