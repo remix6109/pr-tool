@@ -32,7 +32,7 @@
           const r = computePayoutEvents(p, rangeStart, rangeEnd);
           r.events.forEach(e => items.push({
             symbol: e.symbol, kind: e.kind, amount: e.amount,
-            detail: `${e.symbol} ${PAYOUT_TAGS[e.kind]} · ${e.exDate.slice(5).replace('-', '/')} 除息 · ${fmt.money(e.shares)} 股 × ${e.perShare}`
+            detail: `${e.symbol} ${PAYOUT_TAGS[e.kind]} · ${e.exDate.slice(5).replace('-', '/')} 除息 · ${e.payActual ? '公告' : '預估'} ${e.payDate.slice(5).replace('-', '/')} 發放 · ${fmt.money(e.shares)} 股 × ${e.perShare}`
           }));
           covered = new Set(Object.keys(open).filter(sym => !r.missing.includes(sym)));
         }

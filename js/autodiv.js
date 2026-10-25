@@ -168,7 +168,7 @@
         out.push({
           key, person, symbol: ev.symbol, exDate: ev.exDate, perShare: ev.perShare, shares,
           gross: Math.round(gross), net: autodivEstimateNet(gross),
-          payDate: autodivAddDays(ev.exDate, AUTODIV.PAY_LAG_DAYS)
+          ...(p => ({ payDate: p.date, payActual: p.actual }))(autodivPayDate(ev.symbol, ev.exDate, ev.perShare))
         });
       });
     });
@@ -191,7 +191,7 @@
           <div>應領約 <b class="pdiv-amt">${it.gross >= AUTODIV.NHI_THRESHOLD
               ? fmt.money(it.net) + ' ~ ' + fmt.money(Math.round(it.gross - AUTODIV.REMIT_FEE))
               : fmt.money(it.net)}</b>
-            <small class="muted">(${arrived ? '應已入帳' : '預估 ' + it.payDate.slice(5).replace('-', '/') + ' 入帳'})</small></div>
+            <small class="muted">(${arrived ? (it.payActual ? '公告 ' + it.payDate.slice(5).replace('-', '/') + ' 發放,應已入帳' : '應已入帳') : (it.payActual ? '公告 ' : '預估 ') + it.payDate.slice(5).replace('-', '/') + ' 入帳'})</small></div>
           ${it.gross >= AUTODIV.NHI_THRESHOLD ? '<div class="muted small">單次滿 2 萬要扣 2.11% 補充保費,但只扣配息裡屬於「股利所得」的部分(收益平準金、資本利得不扣),實際要看這次配息的組成,以入帳金額為準。</div>' : ''}
         </div>
         <div class="pdiv-actions">
@@ -226,11 +226,46 @@
     showToast('已帶入預估金額,請改成實際入帳的金額和日期再儲存', 4500);
   }
 
+  // ---- 實際發放日:證交所 e添富 的「配息狀況」表(經中繼站),投信公告後才有 ----
+  const _payDates = { data: null, at: 0, key: '', loading: false };
+  function payDatesLoadCache() {
+    if (_payDates.data) return;
+    try {
+      const c = JSON.parse(localStorage.getItem('pr.payDates') || 'null');
+      if (c && c.data) { _payDates.data = c.data; _payDates.at = c.at || 0; _payDates.key = c.key || ''; }
+    } catch (_) {}
+  }
+  // 回傳 { date, actual }:有公告且每股配息對得上就用公告日,否則用「除息日 + 28 天」估算
+  function autodivPayDate(symbol, exDate, perShare) {
+    const list = _payDates.data && Array.isArray(_payDates.data[symbol]) ? _payDates.data[symbol] : [];
+    const cand = list.filter(p => p.payDate > exDate && autodivDaysBetween(exDate, p.payDate) <= 60 && Math.abs(p.perShare - perShare) < 0.0005)
+      .sort((a, b) => a.payDate < b.payDate ? -1 : 1);
+    return cand.length ? { date: cand[0].payDate, actual: true } : { date: autodivAddDays(exDate, AUTODIV.PAY_LAG_DAYS), actual: false };
+  }
+  function loadPayDates() {
+    if (typeof marketApi !== 'function' || !marketApi() || _payDates.loading) return;
+    const key = autodivHeldKey();
+    if (_payDates.data && _payDates.key === key && Date.now() - _payDates.at < 12 * 3600e3) return;
+    const codes = key.split(',').filter(c => /^\d{4,6}[A-Z]?$/.test(c));
+    if (!codes.length) return;
+    _payDates.loading = true;
+    marketGet('/paydates?codes=' + encodeURIComponent(codes.join(','))).then(d => {
+      const data = {};
+      Object.entries(d.funds || {}).forEach(([c, v]) => { if (Array.isArray(v)) data[c] = v; });
+      _payDates.data = data; _payDates.at = Date.now(); _payDates.key = key;
+      try { localStorage.setItem('pr.payDates', JSON.stringify({ at: _payDates.at, key, data })); } catch (_) {}
+      drawPendingDividends();
+      renderPayoutCalendar(STATE.defaultPerson);
+    }).catch(() => { /* 抓不到就用估算日期 */ }).finally(() => { _payDates.loading = false; });
+  }
+
   // 每次首頁重繪呼叫:先用快取畫,過期才重新抓
   function renderPendingDividends() {
     if (!STATE.data) return;
     if (_exDiv.list === null) autodivLoadCache();
+    payDatesLoadCache();
     drawPendingDividends();
+    loadPayDates();
     if (_exDiv.loading || Date.now() - _exDiv.failedAt < 5 * 60 * 1000) return;   // 失敗後 5 分鐘內不重試
     const heldKey = autodivHeldKey();
     if (_exDiv.list && _exDiv.heldKey === heldKey && Date.now() - _exDiv.at < AUTODIV.CACHE_MS) return;
@@ -361,14 +396,14 @@
       const inRange = (pay) => pay >= rangeStart && pay <= rangeEnd;
       // 已知的除息(含已入帳)
       hist.forEach(ev => {
-        const payDate = autodivAddDays(ev.exDate, AUTODIV.PAY_LAG_DAYS);
+        const pd = autodivPayDate(symbol, ev.exDate, ev.perShare), payDate = pd.date;
         if (!inRange(payDate)) return;
         const shares = autodivSharesBefore(person, symbol, ev.exDate);
         if (shares <= 0) return;
         const gross = shares * ev.perShare;
         const rec = autodivFindRecord(person, symbol, ev.exDate, ev.perShare, gross);
         events.push({
-          symbol, exDate: ev.exDate, payDate, perShare: ev.perShare, shares,
+          symbol, exDate: ev.exDate, payDate, payActual: pd.actual, perShare: ev.perShare, shares,
           amount: rec ? Number(rec.total) || 0 : autodivEstimateNet(gross),
           kind: rec ? 'paid' : 'ex'
         });

@@ -18,7 +18,7 @@ const files = ['config', 'utils', 'appearance', 'portfolio', 'autodiv', 'datache
 const src = files.map(f => fs.readFileSync(path.join(root, f + '.js'), 'utf8')).join('\n;\n');
 vm.runInContext(src + '\n;this.__t = { STATE, CONFIG, AUTODIV, _exDiv, replayPurchases, computeRealizedPL, computeOpenHoldings, computePersonStats,' +
   ' autodivSharesBefore, autodivBizDaysBefore, autodivEstimateNet, autodivInterval, autodivIntervalFor, autodivAnnualPerShare,' +
-  ' computePayoutEvents, computePendingDividends, runDataCheck, autodivParseRoc, trailing12Dividends, dividendYieldOnCost, autodivFindRecord };', ctx);
+  ' computePayoutEvents, computePendingDividends, runDataCheck, autodivParseRoc, trailing12Dividends, dividendYieldOnCost, autodivFindRecord, _payDates, autodivPayDate };', ctx);
 const T = ctx.__t;
 
 let pass = 0, fail = 0;
@@ -94,6 +94,18 @@ set({ purchases: [P('1', '黃', 'Q', 1, 25, 1000, 0, '2025-01-01')],
 const ev2 = T.computePayoutEvents('黃', '2026-09-01', '2026-12-31').events;
 eq('已記錄的配息標為已入帳', ev2.find(e => e.exDate === '2026-09-16').kind, 'paid');
 eq('已入帳金額用你記的實領', ev2.find(e => e.exDate === '2026-09-16').amount, 1090);
+
+// ---------- 實際發放日 ----------
+T._payDates.data = {
+  '0056': [{ payDate: '2026-11-11', perShare: 1.72 }, { payDate: '2026-08-10', perShare: 1.35 }],
+  '00400A': [{ payDate: '2026-11-05', perShare: 0.12 }, { payDate: '2026-10-05', perShare: 0.12 }, { payDate: '2026-08-31', perShare: 0.12 }]
+};
+eq('有公告:用實際發放日', T.autodivPayDate('0056', '2026-10-22', 1.72), { date: '2026-11-11', actual: true });
+eq('每股配息對不上:改用估算', T.autodivPayDate('0056', '2026-10-22', 1.5).actual, false);
+eq('月配每次金額一樣:取除息後最近的一次', T.autodivPayDate('00400A', '2026-10-08', 0.12).date, '2026-11-05');
+eq('月配:9 月那次對到 10/05', T.autodivPayDate('00400A', '2026-09-07', 0.12).date, '2026-10-05');
+eq('沒資料:除息日 + 28 天', T.autodivPayDate('9999', '2026-10-01', 1), { date: '2026-10-29', actual: false });
+T._payDates.data = null;
 
 // ---------- 資料檢查 ----------
 set({ purchases: [
