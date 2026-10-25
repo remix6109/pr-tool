@@ -100,6 +100,8 @@
         $$('.nav-btn').forEach(b => b.classList.toggle('active', b === btn));
         $$('.page').forEach(p => p.classList.toggle('active', p.id === 'page-' + page));
         if (page === 'history') renderHistory();
+        if (page === 'market') marketTick();
+        window.scrollTo(0, 0);
       };
     });
   }

@@ -62,6 +62,12 @@
           MKT.holdAt = Date.now(); MKT.holdKey = key;
         }
       }
+      if (kind === 'news') {
+        if (force || now - (MKT.newsAt || 0) > 10 * 60 * 1000) {
+          MKT.news = await marketGet('/news?cat=tech,tw,us,world,quick&limit=30');
+          MKT.newsAt = Date.now();
+        }
+      }
       if (kind === 'hist') {
         const key = MKT_INTL.map(i => i.sym).concat(['^TWII'], marketHeldCodes()).join(',');
         if (force || now - MKT.histAt > MKT_HIST_MS || key !== MKT.histKey) {
@@ -454,10 +460,99 @@
     body.innerHTML = html;
   }
 
+  // ---------- 財經新聞 ----------
+  const NEWS_TABS = ['mine', 'tech', 'tw', 'us', 'world'];
+  function newsTab() {
+    let t = null;
+    try { t = localStorage.getItem('pr.newsTab'); } catch (_) {}
+    return NEWS_TABS.includes(t) ? t : 'mine';
+  }
+  function timeAgo(iso) {
+    const m = Math.round((Date.now() - Date.parse(iso)) / 60000);
+    if (!(m >= 0)) return '';
+    if (m < 60) return m + ' 分鐘前';
+    if (m < 24 * 60) return Math.round(m / 60) + ' 小時前';
+    return Math.round(m / 1440) + ' 天前';
+  }
+
+  // 「與我持股相關」要比對的代號與名稱:持有的 ETF + 攤開後實際持有最多的 30 檔股票
+  function myNewsTargets() {
+    const codes = new Map();   // 鉅亨網代號格式 → 顯示用說明
+    const names = new Map();
+    const values = etfValues(STATE.defaultPerson);
+    Object.keys(values).forEach(c => codes.set(c, c + '(你持有的 ETF)'));
+    const funds = (MKT.holdings && MKT.holdings.funds) || {};
+    const agg = {};
+    Object.keys(values).forEach(etf => {
+      const f = funds[etf];
+      if (!f || !Array.isArray(f.stocks)) return;
+      f.stocks.forEach(s => {
+        const k = s.code;
+        if (!agg[k]) agg[k] = { s, amount: 0, from: [] };
+        agg[k].amount += values[etf] * s.weight / 100;
+        agg[k].from.push(etf);
+      });
+    });
+    Object.values(agg).sort((a, b) => b.amount - a.amount).slice(0, 30).forEach(({ s, from }) => {
+      const why = s.name + '(在 ' + from.slice(0, 2).join('、') + (from.length > 2 ? ' 等 ' + from.length + ' 檔' : '') + ' 裡)';
+      // 美股代號:成分股是 "NVDA US",鉅亨網是 "US-NVDA"
+      const m = s.code.match(/^([A-Z.]+)\s+US$/);
+      codes.set(m ? 'US-' + m[1] : s.code, why);
+      const short = s.name.replace(/\*|-KY$/g, '').trim();
+      if (!s.foreign && short.length >= 2) names.set(short, why);
+    });
+    return { codes, names };
+  }
+
+  function newsItems(tab) {
+    const cats = (MKT.news && MKT.news.cats) || {};
+    if (tab !== 'mine') return Array.isArray(cats[tab]) ? cats[tab].map(n => ({ n })) : [];
+    const { codes, names } = myNewsTargets();
+    const seen = new Set(), out = [];
+    Object.values(cats).forEach(list => {
+      if (!Array.isArray(list)) return;
+      list.forEach(n => {
+        if (seen.has(n.id)) return;
+        let why = null;
+        for (const c of n.stocks || []) { if (codes.has(c)) { why = codes.get(c); break; } }
+        if (!why) for (const [nm, w] of names) { if (n.title.includes(nm)) { why = w; break; } }
+        if (why) { seen.add(n.id); out.push({ n, why }); }
+      });
+    });
+    return out.sort((a, b) => (b.n.time || '').localeCompare(a.n.time || ''));
+  }
+
+  function renderNews() {
+    const card = $('#card-news');
+    if (!card || card.classList.contains('collapsed')) return;
+    const tab = newsTab();
+    $$('#news-tabs [data-news-tab]').forEach(b => {
+      b.classList.toggle('active', b.dataset.newsTab === tab);
+      b.onclick = () => { try { localStorage.setItem('pr.newsTab', b.dataset.newsTab); } catch (_) {} renderNews(); };
+    });
+    const box = $('#news-list');
+    if (!MKT.news) { box.innerHTML = `<div class="muted small">${MKT.error ? '讀取失敗:' + escapeHtml(MKT.error) : '新聞讀取中…'}</div>`; return; }
+    if (tab === 'mine' && !MKT.holdings) { box.innerHTML = '<div class="muted small">正在讀取你的成分股,用來比對相關新聞…</div>'; return; }
+    const items = newsItems(tab).slice(0, 30);
+    if (!items.length) {
+      box.innerHTML = `<div class="muted small">${tab === 'mine' ? '最近的新聞裡沒有提到你持有的 ETF 或主要成分股。' : '目前沒有新聞。'}</div>`;
+      return;
+    }
+    box.innerHTML = items.map(({ n, why }) => `<a class="news-item" href="${escapeHtml(n.url)}" target="_blank" rel="noopener noreferrer">
+        ${n.image ? `<img class="news-img" src="${escapeHtml(n.image)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : '<span class="news-img"></span>'}
+        <span class="news-body">
+          <span class="news-title">${escapeHtml(n.title)}</span>
+          ${why ? `<span class="news-why">相關:${escapeHtml(why)}</span>` : ''}
+          <span class="news-meta">${escapeHtml(n.source || '')}・${timeAgo(n.time)}</span>
+        </span>
+      </a>`).join('') + '<div class="muted small" style="margin-top:6px;">新聞來源:鉅亨網。只顯示標題與封面圖,點擊開啟原文。「與我持股相關」是比對新聞標註的相關股票與標題,可能漏掉或多抓。</div>';
+  }
+
   // ---------- 排程與綁定 ----------
   function marketActive() {
     const open = (id) => { const c = $(id); return c && !c.classList.contains('collapsed'); };
-    return document.visibilityState === 'visible' && (open('#card-islands') || open('#card-intl') || open('#card-lookthrough'));
+    const onPage = $('#page-market') && $('#page-market').classList.contains('active');
+    return document.visibilityState === 'visible' && onPage && (open('#card-news') || open('#card-islands') || open('#card-intl') || open('#card-lookthrough'));
   }
 
   async function marketTick(force) {
@@ -465,10 +560,12 @@
     const tasks = [marketLoad('quote', force)];
     if ($('#card-islands') && !$('#card-islands').classList.contains('collapsed')) tasks.push(marketLoad('daily', force));
     if ($('#card-intl') && !$('#card-intl').classList.contains('collapsed')) tasks.push(marketLoad('hist', force));
-    if ($('#card-lookthrough') && !$('#card-lookthrough').classList.contains('collapsed')) tasks.push(marketLoad('holdings', force));
-    renderIslands(); renderIntl(); renderLookthrough();   // 先畫舊資料/讀取中
+    const newsOpen = $('#card-news') && !$('#card-news').classList.contains('collapsed');
+    if (newsOpen) tasks.push(marketLoad('news', force));
+    if (($('#card-lookthrough') && !$('#card-lookthrough').classList.contains('collapsed')) || (newsOpen && newsTab() === 'mine')) tasks.push(marketLoad('holdings', force));
+    renderNews(); renderIslands(); renderIntl(); renderLookthrough();   // 先畫舊資料/讀取中
     await Promise.all(tasks);
-    renderIslands(); renderIntl(); renderLookthrough(); renderNightSummary();
+    renderNews(); renderIslands(); renderIntl(); renderLookthrough(); renderNightSummary();
   }
 
   // 首頁摘要:卡片收起時也要有資料,但只在打開 APP 時抓一次(之後依快取時間)
@@ -479,11 +576,17 @@
   }
 
   function bindMarketCards() {
-    ['#card-islands', '#card-intl', '#card-lookthrough'].forEach(id => {
+    // 搬到「市場」頁後預設展開(只重設一次,之後尊重使用者的收合)
+    try {
+      if (!localStorage.getItem('pr.marketPageV1')) {
+        ['news', 'islands', 'intl', 'lookthrough'].forEach(k => localStorage.setItem('pr.collapse.' + k, '0'));
+        localStorage.setItem('pr.marketPageV1', '1');
+      }
+    } catch (_) {}
+    ['#card-news', '#card-islands', '#card-intl', '#card-lookthrough'].forEach(id => {
       const card = $(id);
       if (!card) return;
-      const key = 'pr.collapse.' + card.dataset.collapse;
-      if (localStorage.getItem(key) === null) { localStorage.setItem(key, '1'); card.classList.add('collapsed'); }
+      card.classList.toggle('collapsed', localStorage.getItem('pr.collapse.' + card.dataset.collapse) === '1');
       new MutationObserver(() => { if (!card.classList.contains('collapsed')) marketTick(); })
         .observe(card, { attributes: true, attributeFilter: ['class'] });
     });
@@ -493,7 +596,7 @@
 
   // 首頁重繪時呼叫(切換黃/蘇、資料更新)
   function renderMarketCards() {
-    renderIslands(); renderIntl(); renderLookthrough(); renderNightSummary();
+    renderNews(); renderIslands(); renderIntl(); renderLookthrough(); renderNightSummary();
     marketTick();
     marketSummaryLoad();
   }
