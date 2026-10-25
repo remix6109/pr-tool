@@ -188,11 +188,14 @@
           <div><b>${escapeHtml(it.symbol)}</b> · ${escapeHtml(getPersonLabel(it.person))}
             <span class="muted small">除息 ${it.exDate.slice(5).replace('-', '/')}</span></div>
           <div class="muted small">${fmt.money(it.shares)} 股 × ${it.perShare} = ${fmt.money(it.gross)}</div>
-          <div>應領約 <b class="pdiv-amt">${fmt.money(it.net)}</b>
-            <small class="muted">(${arrived ? '應已入帳' : '預估 ' + it.payDate.slice(5).replace('-', '/') + ' 入帳'}・已扣費用估算)</small></div>
+          <div>應領約 <b class="pdiv-amt">${it.gross >= AUTODIV.NHI_THRESHOLD
+              ? fmt.money(it.net) + ' ~ ' + fmt.money(Math.round(it.gross - AUTODIV.REMIT_FEE))
+              : fmt.money(it.net)}</b>
+            <small class="muted">(${arrived ? '應已入帳' : '預估 ' + it.payDate.slice(5).replace('-', '/') + ' 入帳'})</small></div>
+          ${it.gross >= AUTODIV.NHI_THRESHOLD ? '<div class="muted small">單次滿 2 萬要扣 2.11% 補充保費,但只扣配息裡屬於「股利所得」的部分(收益平準金、資本利得不扣),實際要看這次配息的組成,以入帳金額為準。</div>' : ''}
         </div>
         <div class="pdiv-actions">
-          <button class="btn primary small" data-pdiv="confirm">確認入帳</button>
+          <button class="btn primary small" data-pdiv="confirm">確認 / 修改入帳</button>
           <button class="btn ghost small" data-pdiv="skip">略過</button>
         </div>
       </div>`;
@@ -219,7 +222,8 @@
     $('#dividend-per-share').value = it.perShare;
     $('#dividend-shares').value = it.shares;
     $('#dividend-date').value = it.payDate;
-    $('#dividend-note').value = '自動偵測(除息 ' + it.exDate + ',金額為預估,請依實際入帳修改)';
+    $('#dividend-note').value = '自動偵測(除息 ' + it.exDate + ')';
+    showToast('已帶入預估金額,請改成實際入帳的金額和日期再儲存', 4500);
   }
 
   // 每次首頁重繪呼叫:先用快取畫,過期才重新抓
