@@ -143,7 +143,7 @@
           </div>
           <div id="town-scene"></div>
           <div id="town-readout" class="small" style="min-height:3em;line-height:1.6;margin-top:6px;"></div>
-          <div class="muted small" style="margin-top:6px;">每檔持股一間店:房子越高市值越大、門口人越多占比越高。屋頂顏色:今日漲跌(綠漲、紅跌、灰無資料)或殖利率(深=6% 以上、淺=3% 以上)。掛旗子的是 30 天內要除息。點房子看細節。</div>
+          <div class="muted small" style="margin-top:6px;">每檔持股一棟大樓,<b>一筆買進就是一層樓</b>(越早買越下面,顏色依年份由淺到深,賣出從上面拆),所以大樓越高代表投入越多。中間金幣堆是累積配息。屋頂顏色:今日漲跌(綠漲、紅跌、灰無資料)或殖利率(深=6% 以上)。舊手機不支援 3D 時會顯示平面版。</div>
         </div>
 
         <div class="card" data-collapse="composition">
@@ -190,20 +190,9 @@
         <div class="card-title">台股群島 <small class="muted" style="font-weight:500;font-size:.75em;">(三大法人、散戶、夜盤)</small></div>
         <div id="islands-live" class="small" style="line-height:1.7;"></div>
         <div id="islands-mine" class="small" style="line-height:1.7;margin-bottom:6px;"></div>
-        <div id="islands-3d" class="hidden">
-          <div class="i3-stage">
-            <div class="i3-hud"><b id="i3-date"></b></div>
-            <div class="i3-legend small"><i style="background:#2FA052"></i>買進<i style="background:#E04A3A"></i>賣出</div>
-          </div>
-          <div class="i3-ctrl">
-            <button type="button" class="btn primary small" id="i3-play">▶ 回放</button>
-            <input type="range" id="i3-slider" min="0" max="0" value="0" aria-label="選擇日期">
-          </div>
-          <div id="i3-tip" class="small muted" style="margin-top:6px;line-height:1.6;">點島看說明;左右拖曳旋轉。</div>
-        </div>
         <div id="islands-scene"></div>
         <div id="islands-detail" class="small" style="margin-top:8px;"></div>
-        <div class="muted small" style="margin-top:6px;">綠色光點從法人島流進中央台股 = 買進金額,紅色光點流回去 = 賣出金額,越密金額越大;島上柱子是買賣超。散戶看小台指期多空比。中間燈塔是台指期,下午 3 點到清晨 5 點是夜盤(天色變暗)。按「回放」逐日播放近 20 個交易日。即時報價每 30 秒更新,籌碼是官方盤後資料。</div>
+        <div class="muted small" style="margin-top:6px;">島上房子越多、燈越亮代表買超越大;虛線箭頭是資金方向(流入島=買超,流出=賣超)。中間燈塔是台指期,下午 3 點到清晨 5 點顯示夜盤。下方明細括號內是當天的買進/賣出總金額。即時報價每 30 秒更新,籌碼是官方盤後資料。</div>
       </div>
 
       <div class="card" id="card-intl" data-collapse="intl">
@@ -736,7 +725,7 @@
 <script src="js/autodiv.js"></script>
 <script src="js/datacheck.js"></script>
 <script src="js/town.js"></script>
-<script src="js/islands3d.js"></script>
+<script src="js/town3d.js"></script>
 <script src="js/market.js"></script>
 <script src="js/fx.js"></script>
 <script src="js/main.js"></script>

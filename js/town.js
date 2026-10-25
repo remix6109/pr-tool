@@ -73,6 +73,11 @@
     const items = townItems(person);
     const wrap = $('#town-scene');
     if (items.length === 0) { wrap.innerHTML = '<div class="muted small">目前沒有持股</div>'; $('#town-readout').textContent = ''; return; }
+    $$('#town-mode [data-town-mode]').forEach(b => {
+      b.classList.toggle('active', b.dataset.townMode === TOWN.mode);
+      b.onclick = () => { TOWN.mode = b.dataset.townMode; renderTown(person); };
+    });
+    if (town3dRender(person, items)) return;   // 3D 版(town3d.js);不支援時往下畫平面圖
 
     // 依實際寬度排版(viewBox = 真實像素,字不會被縮小);持股太多時寬度超出就左右滑動
     const n = items.length;
@@ -129,10 +134,6 @@
       g.addEventListener('click', () => show(+g.dataset.i));
     });
     show(0);
-    $$('#town-mode [data-town-mode]').forEach(b => {
-      b.classList.toggle('active', b.dataset.townMode === TOWN.mode);
-      b.onclick = () => { TOWN.mode = b.dataset.townMode; renderTown(person); };
-    });
   }
 
   // 卡片展開時才畫(收合狀態由 ui.js 的點標題機制切換)

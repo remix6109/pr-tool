@@ -1,0 +1,403 @@
+/* 3D 持股小鎮 — 嵌在首頁「持股小鎮」卡片裡(取代平面圖;不支援 WebGL 時退回平面圖)。
+ * 每檔持股一棟大樓,一筆買進 = 一層樓(越早買越下面,顏色依年份由淺到深),賣出從最上面拆掉。
+ * 中間的金幣堆 = 累積配息。卡片展開時大樓依買進順序一層層長出來(只播一次,不用按鈕)。
+ * three.js(js/three.min.js)第一次展開才載入;卡片收起、換頁或 APP 在背景時停止繪圖。
+ * 所有檔案共用全域範圍,載入順序見 index.html */
+
+  const TOWN3D = {
+    s: null,              // 場景(renderer 常駐,資料變了只重建內容)
+    failed: false,
+    loading: null,
+    sig: '',
+    grow: true,           // 下次重建時播「長高」動畫
+    GROW_SECONDS: 2.2,
+    MAX_H: 9,             // 最高那棟的高度
+    MIN_FLOOR: 0.16,      // 金額很小的那層至少這麼厚,才點得到
+    YEAR_COLORS: ['#F3E6CC', '#EACB9C', '#DDAA6E', '#C98A52', '#B06C3E', '#8E5533']
+  };
+
+  function town3dLoadThree() {
+    if (window.THREE) return Promise.resolve();
+    if (TOWN3D.loading) return TOWN3D.loading;
+    TOWN3D.loading = new Promise((ok, fail) => {
+      const sc = document.createElement('script');
+      sc.src = 'js/three.min.js';
+      sc.onload = ok;
+      sc.onerror = () => { TOWN3D.loading = null; fail(new Error('3D 引擎載入失敗')); };
+      document.head.appendChild(sc);
+    });
+    return TOWN3D.loading;
+  }
+
+  // ---------- 資料:每檔的樓層(依時間重播買賣) ----------
+  function town3dFloors(person) {
+    const rows = (STATE.data.purchases || []).filter(r => r.person === person && r.symbol && Number(r.shares))
+      .slice().sort((a, b) => {
+        const da = String(a.date || '').slice(0, 10), db = String(b.date || '').slice(0, 10);
+        if (da !== db) return da < db ? -1 : 1;
+        return (Date.parse(a.created_at) || 0) - (Date.parse(b.created_at) || 0);
+      });
+    const bySym = {};
+    rows.forEach(r => {
+      const sym = String(r.symbol), shares = Number(r.shares) || 0, amount = Number(r.amount) || 0;
+      const floors = bySym[sym] || (bySym[sym] = []);
+      if (shares > 0 && amount >= 0) {
+        floors.push({ date: String(r.date || '').slice(0, 10), shares, money: amount + (Number(r.fee) || 0) });
+      } else {
+        // 賣出:從最上面的樓層開始拆(只是畫面呈現;成本計算仍以 portfolio.js 為準)
+        let left = Math.abs(shares);
+        while (left > 0 && floors.length) {
+          const top = floors[floors.length - 1];
+          if (top.shares <= left) { left -= top.shares; floors.pop(); }
+          else { top.money *= (top.shares - left) / top.shares; top.shares -= left; left = 0; }
+        }
+      }
+    });
+    Object.keys(bySym).forEach(k => { if (!bySym[k].length) delete bySym[k]; });
+    return bySym;
+  }
+
+  // ---------- 素材 ----------
+  function town3dWindowTex() {
+    const c = document.createElement('canvas'); c.width = c.height = 64;
+    const g = c.getContext('2d');
+    g.fillStyle = '#FFFFFF'; g.fillRect(0, 0, 64, 64);
+    [[9, 14], [37, 14]].forEach(([x, y]) => {
+      g.fillStyle = '#5A6B73'; g.fillRect(x, y, 18, 30);
+      g.fillStyle = '#FFF2C4'; g.fillRect(x + 2, y + 2, 14, 26);
+    });
+    const t = new THREE.CanvasTexture(c);
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.encoding = THREE.sRGBEncoding;
+    return t;
+  }
+
+  function town3dLabel() {
+    const c = document.createElement('canvas'); c.width = 256; c.height = 104;
+    const tex = new THREE.CanvasTexture(c); tex.encoding = THREE.sRGBEncoding;
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
+    sp.scale.set(2.9, 1.18, 1);
+    sp.renderOrder = 10;
+    sp.draw = (title, sub, subColor) => {
+      const g = c.getContext('2d');
+      g.clearRect(0, 0, 256, 104);
+      g.fillStyle = 'rgba(255,255,255,.92)';
+      g.beginPath(); g.roundRect ? g.roundRect(6, 6, 244, 92, 20) : g.rect(6, 6, 244, 92); g.fill();
+      g.textAlign = 'center';
+      g.fillStyle = '#2A3938'; g.font = 'bold 40px system-ui, sans-serif'; g.fillText(title, 128, 50);
+      g.fillStyle = subColor || '#5C6B6A'; g.font = '26px system-ui, sans-serif'; g.fillText(sub, 128, 84);
+      tex.needsUpdate = true;
+    };
+    return sp;
+  }
+
+  function town3dInit(canvas) {
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.outputEncoding = THREE.sRGBEncoding;
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 300);
+    const hemi = new THREE.HemisphereLight('#FFFFFF', '#6E7F5A', 0.8);
+    const sun = new THREE.DirectionalLight('#FFF4E0', 0.9);
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(1024, 1024);
+    scene.add(hemi, sun);
+    const content = new THREE.Group();
+    scene.add(content);
+    TOWN3D.s = {
+      renderer, scene, camera, sun, content, winTex: town3dWindowTex(),
+      cam: { theta: 0.9, phi: 1.0 }, R: 5, raf: 0, prev: 0, t: 0, lastTouch: 0,
+      floors: [], pile: null, pileWant: 0, pileShown: 0, growT: 99, picks: []
+    };
+    town3dBindControls(canvas);
+  }
+
+  // 依資料重建小鎮內容(renderer 保留)
+  function town3dBuild(person, items) {
+    const s = TOWN3D.s;
+    s.content.children.slice().forEach(o => {
+      s.content.remove(o);
+      o.traverse(x => { if (x.geometry) x.geometry.dispose(); if (x.material && x.material !== s.sharedMat) { if (x.material.map && x.material.map !== s.winTex) x.material.map.dispose(); x.material.dispose && x.material.dispose(); } });
+    });
+    const floorsBy = town3dFloors(person);
+    const order = items.map(it => it.sym).filter(sym => floorsBy[sym]);
+    Object.keys(floorsBy).forEach(sym => { if (!order.includes(sym)) order.push(sym); });
+    const n = order.length, R = Math.max(4.6, n * 0.95);
+    s.R = R;
+    const flat = (color, extra) => new THREE.MeshStandardMaterial(Object.assign({ color, flatShading: true, roughness: 0.9 }, extra || {}));
+
+    // 島、廣場、樹
+    const dark = document.documentElement.dataset.theme === 'dark';
+    const sky = new THREE.Color(dark ? '#22323A' : '#D3E8EF');
+    s.scene.background = sky;
+    s.scene.fog = new THREE.Fog(sky, R * 4, R * 9);
+    const sea = new THREE.Mesh(new THREE.CircleGeometry(R * 9, 40), flat(dark ? '#29495A' : '#9CCADA'));
+    sea.rotation.x = -Math.PI / 2; sea.position.y = -0.35; s.content.add(sea);
+    const island = new THREE.Mesh(new THREE.CylinderGeometry(R + 3, R + 3.8, 0.9, 26), flat(dark ? '#55744B' : '#8DB86E'));
+    island.position.y = 0.0; island.receiveShadow = true; s.content.add(island);
+    const TOP = 0.45;
+    const plaza = new THREE.Mesh(new THREE.CylinderGeometry(1.9, 2.1, 0.12, 22), flat('#DCD3C3'));
+    plaza.position.y = TOP + 0.06; plaza.receiveShadow = true; s.content.add(plaza);
+    let seed = n * 31 + 7;
+    const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+    const treeGeo = new THREE.ConeGeometry(0.45, 1.2, 6), leaf = flat(dark ? '#3F6B4A' : '#5E9A5A');
+    for (let i = 0; i < 22; i++) {
+      const a = rnd() * Math.PI * 2, r = R + 1.1 + rnd() * 1.7, k = 0.7 + rnd() * 0.5;
+      const t = new THREE.Mesh(treeGeo, leaf);
+      t.position.set(Math.cos(a) * r, TOP + 0.6 * k, Math.sin(a) * r); t.scale.setScalar(k); t.castShadow = true;
+      s.content.add(t);
+    }
+
+    // 樓層
+    const years = [...new Set(Object.values(floorsBy).flat().map(f => f.date.slice(0, 4)))].sort();
+    // 越早越淺;年份少時把色階拉開,才分得出來
+    const yearColor = (y) => { const P = TOWN3D.YEAR_COLORS, i = years.indexOf(y); return P[years.length < 2 ? 2 : Math.round(i * (P.length - 1) / (years.length - 1))]; };
+    const totals = order.map(sym => floorsBy[sym].reduce((a, f) => a + f.money, 0));
+    const unit = Math.max(1, ...totals) / TOWN3D.MAX_H;
+    const allFloors = [];
+    s.picks = [];
+    const geo = new THREE.BoxGeometry(1, 1, 1); geo.translate(0, 0.5, 0);
+    const slabGeo = new THREE.BoxGeometry(1.72, 0.07, 1.72), slabMat = flat('#7D6A55');
+    const chgColor = (it) => {
+      if (!it) return '#9AA5A4';
+      if (TOWN.mode === 'chg') return it.chg === null ? '#9AA5A4' : it.chg > 0 ? '#3E9B54' : it.chg < 0 ? '#D2533F' : '#9AA5A4';
+      return !it.yld ? '#9AA5A4' : it.yld >= 6 ? '#3F7373' : it.yld >= 3 ? '#6E9AA0' : '#9AA5A4';
+    };
+    order.forEach((sym, i) => {
+      const a = (i / n) * Math.PI * 2 + Math.PI / 2;
+      const g = new THREE.Group();
+      g.position.set(Math.cos(a) * R, TOP, Math.sin(a) * R);
+      g.rotation.y = -a + Math.PI / 2;
+      s.content.add(g);
+      const base = new THREE.Mesh(new THREE.BoxGeometry(2, 0.08, 2), flat('#CFC7B8'));
+      base.position.y = 0.04; base.receiveShadow = true; g.add(base);
+      let y = 0.08;
+      floorsBy[sym].forEach((f, k) => {
+        const h = Math.max(TOWN3D.MIN_FLOOR, f.money / unit);
+        const tex = s.winTex.clone(); tex.needsUpdate = true;
+        tex.repeat.set(2, Math.max(1, Math.round(h / 0.55)));
+        const m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: yearColor(f.date.slice(0, 4)), map: tex, roughness: 0.85 }));
+        m.scale.set(1.6, Math.max(0.001, h - 0.035), 1.6);
+        m.position.y = y;
+        m.castShadow = m.receiveShadow = true;
+        m.userData = { kind: 'floor', sym, floor: k + 1, total: floorsBy[sym].length, f };
+        g.add(m);
+        // 每層上緣一片深色樓板,層與層才分得出來
+        const slab = new THREE.Mesh(slabGeo, slabMat);
+        slab.castShadow = true;
+        g.add(slab);
+        allFloors.push({ m, slab, h: h - 0.035, date: f.date });
+        s.picks.push(m);
+        y += h;
+      });
+      const it = items.find(x => x.sym === sym);
+      const roof = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.16, 1.8), flat(chgColor(it)));
+      roof.position.y = y + 0.08; roof.castShadow = true; g.add(roof);
+      const label = town3dLabel();
+      label.draw(sym, it ? fmt.money(it.value) : '', '#5C6B6A');
+      label.position.y = y + 1.05;
+      g.add(label);
+      g.userData = { roof, label, top: y };
+    });
+    // 依買進日期排序 → 長高動畫照時間順序一層層出現
+    allFloors.sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0);
+    allFloors.forEach((x, i) => { x.at = allFloors.length > 1 ? i / (allFloors.length - 1) * TOWN3D.GROW_SECONDS * 0.85 : 0; });
+    s.floors = allFloors;
+
+    // 金幣堆(累積配息)
+    const div = (STATE.data.dividends || []).filter(r => r.person === person).reduce((a, r) => a + (Number(r.total) || 0), 0);
+    const MAXC = 260;
+    const coinGeo = new THREE.CylinderGeometry(0.2, 0.2, 0.065, 12);
+    const coinMat = new THREE.MeshStandardMaterial({ color: '#FFD447', metalness: 0.35, roughness: 0.3, emissive: '#B07800', emissiveIntensity: 0.4 });
+    const pile = new THREE.InstancedMesh(coinGeo, coinMat, MAXC);
+    const m4 = new THREE.Matrix4();
+    for (let i = 0; i < MAXC; i++) {
+      const stack = Math.floor(i / 9), lv = i % 9;
+      const a = stack * 2.4, r = stack === 0 ? 0 : 0.26 + 0.22 * Math.sqrt(stack);
+      m4.makeTranslation(Math.cos(a) * r, TOP + 0.15 + lv * 0.068 + Math.max(0, 0.35 - r * 0.25), Math.sin(a) * r);
+      pile.setMatrixAt(i, m4);
+    }
+    pile.castShadow = true;
+    pile.userData = { kind: 'coins', total: div };
+    s.content.add(pile);
+    s.pile = pile;
+    s.pileWant = div > 0 ? Math.min(MAXC, Math.max(4, Math.round(div / 1000))) : 0;   // 一枚約 1,000 元
+    s.picks.push(pile);
+    s.div = div;
+    s.years = years;
+    s.yearColor = yearColor;
+
+    Object.assign(s.sun.position, { x: R * 1.3, y: R * 2.4, z: R * 0.9 });
+    Object.assign(s.sun.shadow.camera, { left: -R - 4, right: R + 4, top: R + 4, bottom: -R - 4, near: 1, far: R * 7 });
+    s.sun.shadow.camera.updateProjectionMatrix();
+
+    if (TOWN3D.grow) { s.growT = 0; TOWN3D.grow = false; } else s.growT = 99;
+    town3dApplyGrow(s.growT >= 99 ? 99 : 0);
+  }
+
+  // 長高動畫:t 秒時每層的高度(ease-out),樓頂和看板跟著最上面那層
+  function town3dApplyGrow(t) {
+    const s = TOWN3D.s;
+    const tops = new Map();
+    s.floors.forEach(x => {
+      const p = Math.max(0, Math.min(1, (t - x.at) / 0.35));
+      const e = 1 - Math.pow(1 - p, 3);
+      x.m.scale.y = Math.max(0.001, x.h * e);
+      x.m.visible = x.slab.visible = p > 0;
+      x.slab.position.y = x.m.position.y + x.m.scale.y;
+      const g = x.m.parent;
+      const topY = x.m.position.y + x.m.scale.y + 0.035 * e;
+      if (p > 0) tops.set(g, Math.max(tops.get(g) || 0.08, topY));
+      else if (!tops.has(g)) tops.set(g, 0.08);
+    });
+    tops.forEach((top, g) => {
+      g.userData.roof.position.y = top + 0.08;
+      g.userData.label.position.y = top + 1.05;
+      g.userData.roof.visible = top > 0.1;
+      g.userData.label.material.opacity = Math.min(1, Math.max(0, (t - TOWN3D.GROW_SECONDS * 0.6) / 0.6));
+      if (t >= 99) g.userData.label.material.opacity = 1;
+    });
+    const k = Math.min(1, t / TOWN3D.GROW_SECONDS);
+    s.pile.count = Math.round(s.pileWant * k);
+  }
+
+  // ---------- 繪圖迴圈 ----------
+  function town3dVisible() {
+    const card = $('#card-town');
+    return !!(TOWN3D.s && card && !card.classList.contains('collapsed') && $('#page-home').classList.contains('active') && document.visibilityState === 'visible');
+  }
+  function town3dStart() {
+    const s = TOWN3D.s;
+    if (!s || s.raf || !town3dVisible()) return;
+    s.prev = 0;
+    s.raf = requestAnimationFrame(town3dFrame);
+  }
+  function town3dFrame(now) {
+    const s = TOWN3D.s;
+    if (!s) return;
+    if (!town3dVisible()) {
+      s.raf = 0;
+      if ($('#card-town').classList.contains('collapsed')) TOWN3D.grow = true;   // 收起後再展開才重播長高
+      return;
+    }
+    const dt = Math.min(0.05, (now - (s.prev || now)) / 1000);
+    s.prev = now;
+    s.t += dt;
+    if (s.growT < TOWN3D.GROW_SECONDS + 0.5) { s.growT += dt; town3dApplyGrow(s.growT); }
+    if (now - s.lastTouch > 3000) s.cam.theta += dt * 0.1;
+    const aspect = s.camera.aspect;
+    const dist = Math.max(s.R * 4.3, (s.R + 3.2) / (0.364 * aspect) * 1.35);    // 畫面窄時拉遠(0.364 = tan 20°)
+    const { theta, phi } = s.cam;
+    s.camera.position.set(Math.cos(theta) * Math.sin(phi) * dist, Math.cos(phi) * dist + 1, Math.sin(theta) * Math.sin(phi) * dist);
+    s.camera.lookAt(0, TOWN3D.MAX_H * 0.36, 0);
+    s.renderer.render(s.scene, s.camera);
+    s.raf = requestAnimationFrame(town3dFrame);
+  }
+  function town3dResize() {
+    const s = TOWN3D.s;
+    if (!s) return;
+    const c = s.renderer.domElement, w = c.clientWidth || 320, h = c.clientHeight || 300;
+    s.renderer.setSize(w, h, false);
+    s.camera.aspect = w / h;
+    s.camera.updateProjectionMatrix();
+  }
+
+  // 左右拖曳旋轉(上下滑仍然捲動頁面);點樓層看那筆買進、點金幣看配息
+  function town3dBindControls(canvas) {
+    let p = null;
+    const ray = new THREE.Raycaster(), v2 = new THREE.Vector2();
+    canvas.addEventListener('pointerdown', (e) => { p = { x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, drag: false }; });
+    canvas.addEventListener('pointermove', (e) => {
+      if (!p || !TOWN3D.s) return;
+      if (!p.drag && Math.abs(e.clientX - p.sx) > 8 && Math.abs(e.clientX - p.sx) > Math.abs(e.clientY - p.sy)) p.drag = true;
+      if (p.drag) {
+        TOWN3D.s.cam.theta += (e.clientX - p.x) * 0.009;
+        TOWN3D.s.lastTouch = performance.now();
+      }
+      p.x = e.clientX; p.y = e.clientY;
+    });
+    canvas.addEventListener('pointerup', (e) => {
+      const s = TOWN3D.s;
+      if (p && s && Math.abs(e.clientX - p.sx) + Math.abs(e.clientY - p.sy) < 8) {
+        const r = canvas.getBoundingClientRect();
+        v2.set((e.clientX - r.left) / r.width * 2 - 1, -(e.clientY - r.top) / r.height * 2 + 1);
+        ray.setFromCamera(v2, s.camera);
+        const hit = ray.intersectObjects(s.picks.filter(o => o.visible), false)[0];
+        town3dShow(hit ? hit.object.userData : null);
+        s.lastTouch = performance.now();
+      }
+      p = null;
+    });
+    canvas.addEventListener('pointercancel', () => { p = null; });
+  }
+
+  function town3dShow(d) {
+    const s = TOWN3D.s;
+    const box = $('#town-readout');
+    if (d && d.kind === 'floor') {
+      const f = d.f;
+      const info = (STATE.data.symbols || []).find(x => x.symbol === d.sym) || {};
+      box.innerHTML = `<b>${escapeHtml(d.sym)}</b> ${escapeHtml(info.name || '')}・第 ${d.floor} 層(共 ${d.total} 層)<br>` +
+        `${f.date.replace(/-/g, '/')} 買進 ${fmt.money(f.shares)} 股・<span class="town-num">${fmt.money(f.money)} 元</span>`;
+      return;
+    }
+    if (d && d.kind === 'coins') {
+      const last = (STATE.data.dividends || []).filter(r => r.person === STATE.defaultPerson)
+        .sort((a, b) => String(a.date) < String(b.date) ? 1 : -1)[0];
+      box.innerHTML = `💰 累積配息 <span class="town-num">${fmt.money(s.div)} 元</span>` +
+        (last ? `<br>最近一次:${String(last.date).slice(0, 10).replace(/-/g, '/')} ${escapeHtml(last.symbol)} <span class="town-num">${fmt.money(Number(last.total) || 0)} 元</span>` : '');
+      return;
+    }
+    box.innerHTML = s.summary || '';
+  }
+
+  // 由 town.js 的 renderTown 呼叫。回傳 true = 3D 接手畫;false = 用平面圖(還在載入或不支援)
+  function town3dRender(person, items) {
+    if (TOWN3D.failed) return false;
+    if (!window.THREE) {
+      town3dLoadThree().then(() => renderTown(STATE.defaultPerson)).catch(() => { TOWN3D.failed = true; });
+      return false;
+    }
+    const wrap = $('#town-scene');
+    if (!TOWN3D.s) {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.id = 'town3d-canvas';
+        town3dInit(canvas);
+        window.addEventListener('resize', town3dResize);
+      } catch (e) {
+        TOWN3D.failed = true;
+        return false;
+      }
+    }
+    const s = TOWN3D.s;
+    if (!wrap.querySelector('#town3d-stage')) {
+      wrap.innerHTML = `<div id="town3d-stage" class="town3d-stage">
+        <div class="town3d-hud small" id="town3d-hud"></div>
+        <div class="town3d-years small" id="town3d-years"></div></div>`;
+      $('#town3d-stage').prepend(s.renderer.domElement);
+      TOWN3D.grow = true;
+    }
+    town3dResize();
+    const total = items.reduce((a, it) => a + it.value, 0);
+    const cost = items.reduce((a, it) => a + it.cost, 0);
+    const sig = [person, TOWN.mode, (STATE.data.purchases || []).length, (STATE.data.dividends || []).length, items.map(it => it.sym + it.value + it.chg).join()].join('|');
+    if (sig !== TOWN3D.sig || TOWN3D.grow) {
+      TOWN3D.sig = sig;
+      town3dBuild(person, items);
+    }
+    $('#town3d-hud').innerHTML =
+      `總市值 <b class="town-num">${fmt.money(total)}</b><br>` +
+      `持有成本 <span class="town-num">${fmt.money(cost)}</span><br>` +
+      `累積配息 <span class="town-num">${fmt.money(s.div)}</span>`;
+    $('#town3d-years').innerHTML = s.years.map(y => `<i style="background:${s.yearColor(y)}"></i>${y}`).join('');
+    s.summary = `${escapeHtml(getPersonLabel(person))}的小鎮:${items.length} 棟大樓、共 ${s.floors.length} 層(一筆買進一層)。點樓層看那筆買進,點中間金幣看配息;左右滑動可以旋轉。`;
+    town3dShow(null);
+    town3dStart();
+    return true;
+  }
+
+  // 換到首頁或 APP 回到前景時,把停掉的繪圖接回來
+  setInterval(() => { if (TOWN3D.s && !TOWN3D.s.raf && town3dVisible()) town3dStart(); }, 800);

@@ -946,11 +946,10 @@ th { color: var(--muted); font-weight: 600; font-size: .8rem; }
 .article-content table { width: 100%; border-collapse: collapse; font-size: .9rem; }
 .article-content td, .article-content th { border: 1px solid var(--border); padding: 4px 6px; }
 
-/* === 3D 台股群島 === */
-.i3-stage { position: relative; height: min(56vh, 380px, 80vw); border-radius: 12px; overflow: hidden; background: var(--bar-bg); }
-#i3-canvas { width: 100%; height: 100%; display: block; touch-action: pan-y; cursor: grab; }
-.i3-hud { position: absolute; left: 10px; top: 10px; padding: 5px 10px; border-radius: 10px; background: rgba(255,255,255,.85); color: #2A3938; font-variant-numeric: tabular-nums; pointer-events: none; }
-.i3-legend { position: absolute; right: 10px; bottom: 10px; padding: 4px 8px; border-radius: 8px; background: rgba(30,42,42,.7); color: #fff; pointer-events: none; }
-.i3-legend i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin: 0 3px 0 6px; vertical-align: middle; }
-.i3-ctrl { display: flex; gap: 10px; align-items: center; margin-top: 8px; }
-.i3-ctrl input[type=range] { flex: 1; accent-color: var(--primary); }
+
+/* === 3D 持股小鎮 === */
+.town3d-stage { position: relative; height: min(60vh, 400px, 95vw); border-radius: 12px; overflow: hidden; background: var(--bar-bg); }
+#town3d-canvas { width: 100%; height: 100%; display: block; touch-action: pan-y; }
+.town3d-hud { position: absolute; left: 10px; top: 10px; padding: 6px 10px; border-radius: 10px; background: rgba(255,255,255,.86); color: #2A3938; line-height: 1.55; pointer-events: none; font-variant-numeric: tabular-nums; }
+.town3d-years { position: absolute; right: 10px; bottom: 10px; padding: 3px 8px; border-radius: 8px; background: rgba(30,42,42,.7); color: #fff; pointer-events: none; }
+.town3d-years i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin: 0 3px 0 6px; vertical-align: -1px; }
