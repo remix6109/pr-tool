@@ -236,14 +236,14 @@
     if (rows.length === 0) { wrap.classList.add('hidden'); return; }
 
     const css    = getComputedStyle(document.documentElement);
-    const green  = css.getPropertyValue('--green').trim()  || '#22c55e';
-    const red    = css.getPropertyValue('--red').trim()    || '#ef4444';
+    const up     = css.getPropertyValue('--up').trim()    || '#ef4444';   // 台股習慣:紅漲綠跌
+    const down   = css.getPropertyValue('--down').trim()  || '#22c55e';
     const muted  = css.getPropertyValue('--muted').trim()  || '#94a3b8';
     const border = css.getPropertyValue('--border').trim() || 'rgba(0,0,0,.08)';
 
     const labels = rows.map(r => r.symbol);
     const values = rows.map(r => +(Number(r.change_pct) || 0).toFixed(2));
-    const colors = values.map(v => v > 0 ? green : v < 0 ? red : muted);
+    const colors = values.map(v => v > 0 ? up : v < 0 ? down : muted);
 
     _charts.dayBar = new Chart(wrap.querySelector('canvas'), {
       type: 'bar',

@@ -130,7 +130,7 @@
   const mFmt = (v, d = 2) => v === null || v === undefined ? '—' : Number(v).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
   const mPct = (v) => v === null || v === undefined ? '—' : (v > 0 ? '+' : '') + v.toFixed(2) + '%';
   const mCls = (v) => v > 0 ? 'gain' : v < 0 ? 'loss' : 'muted';
-  const mColor = (v) => v > 0 ? 'var(--green)' : v < 0 ? 'var(--red)' : 'var(--muted)';
+  const mColor = (v) => v > 0 ? 'var(--up)' : v < 0 ? 'var(--down)' : 'var(--muted)';   // 台股習慣:紅漲綠跌
   const twHourNow = () => { const d = new Date(Date.now() + 8 * 3600e3); return d.getUTCHours() + d.getUTCMinutes() / 60; };
   const isNightSession = () => { const h = twHourNow(); return h >= 15 || h < 5; };
 
@@ -140,7 +140,7 @@
     const min = Math.min(...vals), max = Math.max(...vals), span = (max - min) || 1;
     const d = vals.map((v, i) => `${(i / (vals.length - 1) * w).toFixed(1)},${(h - 2 - (v - min) / span * (h - 4)).toFixed(1)}`).join(' ');
     const up = vals[vals.length - 1] >= vals[0];
-    return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" aria-hidden="true"><polyline points="${d}" fill="none" stroke="${up ? 'var(--green)' : 'var(--red)'}" stroke-width="1.5"/></svg>`;
+    return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" aria-hidden="true"><polyline points="${d}" fill="none" stroke="${up ? 'var(--up)' : 'var(--down)'}" stroke-width="1.5"/></svg>`;
   }
 
   // ---------- 台股群島 ----------

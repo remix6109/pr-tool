@@ -54,7 +54,7 @@
   function townRoofColor(it) {
     if (TOWN.mode === 'chg') {
       if (it.chg === null) return 'var(--border)';
-      return it.chg > 0 ? 'var(--green)' : it.chg < 0 ? 'var(--red)' : 'var(--muted)';
+      return it.chg > 0 ? 'var(--up)' : it.chg < 0 ? 'var(--down)' : 'var(--muted)';
     }
     if (!it.yld) return 'var(--border)';
     return it.yld >= 6 ? 'var(--primary)' : it.yld >= 3 ? 'var(--time)' : 'var(--muted)';

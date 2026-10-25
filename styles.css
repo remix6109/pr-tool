@@ -1,5 +1,12 @@
 /* === 基礎 === */
 * { box-sizing: border-box; }
+/* 漲跌/損益一律用台股習慣:紅漲(賺)、綠跌(賠)。收入/支出(銀行收支)不是漲跌,維持原本的綠收紅支 */
+html {
+  --up: var(--red);
+  --down: var(--green);
+  --up-bg: var(--loss-bg);
+  --down-bg: var(--gain-bg);
+}
 :root {
   /* 顏色:質感耐看 — 沉靜大地色系(青 + 橄欖 + 米) */
   --bg: #F2F1F0;
@@ -172,8 +179,8 @@ html, body {
 .person-card .stat .label { color: var(--muted); }
 .person-card .stat .val { font-weight: 600; font-variant-numeric: tabular-nums; }
 .person-card .stat .val small { font-weight: 500; font-size: .8em; margin-left: 4px; }
-.person-card .stat .val small.gain { color: var(--green); }
-.person-card .stat .val small.loss { color: var(--red); }
+.person-card .stat .val small.gain { color: var(--up); }
+.person-card .stat .val small.loss { color: var(--down); }
 
 /* === Charts === */
 .chart-wrap {
@@ -190,8 +197,8 @@ th, td { padding: 8px 6px; text-align: right; border-bottom: 1px solid var(--bor
 th:first-child, td:first-child { text-align: left; }
 .ph-table td:nth-child(2) { text-align: left; }  /* 漲跌表：名稱欄靠左 */
 th { color: var(--muted); font-weight: 600; font-size: .8rem; }
-.gain { color: var(--green); }
-.loss { color: var(--red); }
+.gain { color: var(--up); }
+.loss { color: var(--down); }
 
 /* === Bottom nav === */
 .bottom-nav {
@@ -316,8 +323,8 @@ th { color: var(--muted); font-weight: 600; font-size: .8rem; }
 }
 .stat-card .lbl { color: var(--muted); font-size: .75rem; margin-bottom: 4px; }
 .stat-card .val { font-weight: 700; font-size: 1.05rem; font-variant-numeric: tabular-nums; }
-.stat-card .val.gain { color: var(--green); }
-.stat-card .val.loss { color: var(--red); }
+.stat-card .val.gain { color: var(--up); }
+.stat-card .val.loss { color: var(--down); }
 .breakdown-title { font-size: .85rem; color: var(--muted); font-weight: 600; margin: 4px 0 8px; }
 .breakdown-toggle { margin-top: 4px; }
 .breakdown-toggle > summary {
@@ -423,8 +430,8 @@ th { color: var(--muted); font-weight: 600; font-size: .8rem; }
   width: 112px;
 }
 /* 統計模式：期間漲跌幅正負色 */
-.ph-stat-positive { color: var(--green); font-weight: 700; }
-.ph-stat-negative { color: var(--red);   font-weight: 700; }
+.ph-stat-positive { color: var(--up); font-weight: 700; }
+.ph-stat-negative { color: var(--down); font-weight: 700; }
 /* 每日橫條圖 */
 .ph-day-chart-btn { padding: 1px 7px !important; font-size: .72rem !important; line-height: 1.6; }
 .ph-day-chart-wrap { position: relative; height: 180px; padding: 0 8px 8px; }
@@ -732,16 +739,16 @@ th { color: var(--muted); font-weight: 600; font-size: .8rem; }
   background: var(--neutral-bg); border-radius: 8px;
   font-weight: 600; text-align: center;
 }
-.cmp-line.gain { background: var(--gain-bg); color: var(--green); }
-.cmp-line.loss { background: var(--loss-bg); color: var(--red); }
+.cmp-line.gain { background: var(--up-bg); color: var(--up); }
+.cmp-line.loss { background: var(--down-bg); color: var(--down); }
 
 .eta-line {
   margin-top: 6px; padding: 8px 12px;
   background: var(--neutral-bg); border-radius: 8px;
   font-size: .85rem; text-align: center; color: var(--muted);
 }
-.eta-line.gain { color: var(--green); }
-.eta-line.loss { color: var(--red); }
+.eta-line.gain { color: var(--up); }
+.eta-line.loss { color: var(--down); }
 
 /* === Holdings totals row === */
 #holdings-table .totals-row {

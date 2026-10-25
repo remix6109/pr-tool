@@ -44,8 +44,8 @@ html[data-fx="full"] #home-loading {
 }
 
 /* ---------- 漲跌閃爍(更新現價後數字變動) ---------- */
-@keyframes fxFlashUp   { from { background: var(--gain-bg); box-shadow: 0 0 0 4px var(--gain-bg); } to { background: transparent; box-shadow: 0 0 0 4px transparent; } }
-@keyframes fxFlashDown { from { background: var(--loss-bg); box-shadow: 0 0 0 4px var(--loss-bg); } to { background: transparent; box-shadow: 0 0 0 4px transparent; } }
+@keyframes fxFlashUp   { from { background: var(--up-bg); box-shadow: 0 0 0 4px var(--up-bg); } to { background: transparent; box-shadow: 0 0 0 4px transparent; } }
+@keyframes fxFlashDown { from { background: var(--down-bg); box-shadow: 0 0 0 4px var(--down-bg); } to { background: transparent; box-shadow: 0 0 0 4px transparent; } }
 .val.flash-up   { animation: fxFlashUp   1.1s ease-out; border-radius: 6px; }
 .val.flash-down { animation: fxFlashDown 1.1s ease-out; border-radius: 6px; }
 html[data-fx="off"] .val.flash-up, html[data-fx="off"] .val.flash-down { animation: none; }
@@ -94,8 +94,8 @@ html[data-palette="cyber"][data-theme="dark"] .person-card {
 html[data-palette="cyber"][data-theme="dark"][data-fx="full"] .person-card .stat .val {
   text-shadow: 0 0 10px rgba(0, 229, 255, .35);
 }
-html[data-palette="cyber"][data-theme="dark"][data-fx="full"] :is(.gain, .val.gain) { text-shadow: 0 0 8px rgba(0, 255, 157, .45); }
-html[data-palette="cyber"][data-theme="dark"][data-fx="full"] :is(.loss, .val.loss) { text-shadow: 0 0 8px rgba(255, 61, 113, .45); }
+html[data-palette="cyber"][data-theme="dark"][data-fx="full"] :is(.gain, .val.gain) { text-shadow: 0 0 8px rgba(255, 61, 113, .45); }
+html[data-palette="cyber"][data-theme="dark"][data-fx="full"] :is(.loss, .val.loss) { text-shadow: 0 0 8px rgba(0, 255, 157, .45); }
 html[data-palette="cyber"][data-theme="dark"] .card-title { letter-spacing: .06em; }
 /* 亮色霓虹底的按鈕改深色字,維持對比 */
 html[data-palette="cyber"][data-theme="dark"] :is(.btn.primary, .big-btn.primary, .big-btn.green, .big-btn.purple, .big-btn.slate, .big-btn.dividend, .chip.active) {
