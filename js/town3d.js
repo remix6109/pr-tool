@@ -172,7 +172,7 @@
     const slabGeo = new THREE.BoxGeometry(1.72, 0.07, 1.72), slabMat = flat('#7D6A55');
     const chgColor = (it) => {
       if (!it) return '#9AA5A4';
-      if (TOWN.mode === 'chg') return it.chg === null ? '#9AA5A4' : it.chg > 0 ? '#3E9B54' : it.chg < 0 ? '#D2533F' : '#9AA5A4';
+      if (TOWN.mode === 'chg') return it.chg === null ? '#9AA5A4' : it.chg > 0 ? '#D2533F' : it.chg < 0 ? '#3E9B54' : '#9AA5A4'   /* 台股習慣:紅漲綠跌 */;
       return !it.yld ? '#9AA5A4' : it.yld >= 6 ? '#3F7373' : it.yld >= 3 ? '#6E9AA0' : '#9AA5A4';
     };
     order.forEach((sym, i) => {
@@ -443,7 +443,7 @@
     const priv = typeof isPrivate === 'function' && isPrivate();
     if (e.kind === 'buy' && g) {
       const at = new THREE.Vector3(g.position.x, g.position.y + Math.max(0.6, g.userData.roof.position.y - 0.9), g.position.z);   // 從樓身浮到樓頂,避開看板
-      town3dPopup(`+${fmt.money(e.amount)} 股`, '#2F8A45', at, t);
+      town3dPopup(`+${fmt.money(e.amount)} 股`, '#2F5F66', at, t);   // 買進不代表賺賠,用中性色
     } else if (e.kind === 'div') {
       town3dPopup(priv ? '+配息' : `+${fmt.money(e.amount)}`, '#B07800', new THREE.Vector3(0, s.TOP + 1.4, 0), t);
     }
@@ -516,11 +516,11 @@
       const g = s.bldg[it.sym];
       if (!g) return;
       const top = g.userData.top;
-      // 賺賠光環:綠 = 賺、紅 = 賠,越亮報酬率越高(和屋頂的「今日漲跌」不同,這是買進到現在的總報酬)
+      // 賺賠光環:紅 = 賺、綠 = 賠(台股習慣),越亮報酬率越高(和屋頂的「今日漲跌」不同,這是買進到現在的總報酬)
       if (it.cost > 0) {
         const ret = (it.value - it.cost) / it.cost;
         const halo = new THREE.Mesh(new THREE.TorusGeometry(0.95, 0.07, 8, 36),
-          new THREE.MeshBasicMaterial({ color: ret >= 0 ? '#45D16A' : '#FF5A47', transparent: true, opacity: Math.min(0.95, 0.3 + Math.abs(ret) * 2.2), depthWrite: false }));
+          new THREE.MeshBasicMaterial({ color: ret >= 0 ? '#FF5A47' : '#45D16A', transparent: true, opacity: Math.min(0.95, 0.3 + Math.abs(ret) * 2.2), depthWrite: false }));
         halo.rotation.x = Math.PI / 2;
         halo.position.y = top + 0.55;
         g.add(halo);
