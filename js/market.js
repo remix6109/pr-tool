@@ -69,7 +69,12 @@
       }
       if (kind === 'news') {
         if (force || now - (MKT.newsAt || 0) > 10 * 60 * 1000) {
-          MKT.news = await marketGet('/news?cat=tech,tw,us,world,quick&limit=30');
+          const fresh = await marketGet('/news?cat=tech,tw,us,world,quick&limit=30');
+          // 保留點分類才載入的新聞(遊戲、時事…),不然整包換掉後那些分類會一直停在「讀取中」
+          const old = (MKT.news && MKT.news.cats) || {};
+          fresh.cats = fresh.cats || {};
+          Object.keys(old).forEach(c => { if (!(c in fresh.cats)) fresh.cats[c] = old[c]; });
+          MKT.news = fresh;
           MKT.newsAt = Date.now();
         }
       }
@@ -480,7 +485,8 @@
   async function loadNewsCat(cat, force) {
     MKT.newsCatAt = MKT.newsCatAt || {};
     if (NEWS_BASE.includes(cat) || cat === 'mine') return;
-    if (!force && Date.now() - (MKT.newsCatAt[cat] || 0) < 20 * 60 * 1000) return;
+    const have = MKT.news && MKT.news.cats && MKT.news.cats[cat];
+    if (!force && have && Date.now() - (MKT.newsCatAt[cat] || 0) < 20 * 60 * 1000) return;   // 手上沒有這類資料就不等,直接抓
     if (MKT.newsLoading && MKT.newsLoading[cat]) return;
     MKT.newsLoading = MKT.newsLoading || {};
     MKT.newsLoading[cat] = true;
