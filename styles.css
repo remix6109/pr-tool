@@ -1019,3 +1019,4 @@ th { color: var(--muted); font-weight: 600; font-size: .8rem; }
 .ex-new { font-size: .72rem; padding: 1px 6px; border-radius: 6px; background: rgba(210,83,63,.15); color: #C8432F; font-weight: 700; }
 .ex-review-btn { border-color: var(--primary); }
 .ex-rv-lesson { margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px dashed var(--border); }
+.ex-update { display: block; margin-bottom: 10px; padding: 10px 12px; border-radius: 12px; background: rgba(232,162,58,.16); border: 1px solid #E8A23A; color: var(--text); text-decoration: none; line-height: 1.6; font-weight: 600; }

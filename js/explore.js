@@ -383,13 +383,15 @@
     if (!def) {
       const answered = ALL_LESSON_SETS().reduce((a, [, L]) => a + L.filter(l => learnProgress()[l.id]).reduce((b, l) => b + l.quiz.length, 0), 0);
       const wrongN = ALL_LESSON_SETS().reduce((a, [, L]) => a + L.reduce((b, l) => b + ((learnProgress()[l.id] || {}).wrong || []).length, 0), 0);
-      box.innerHTML = `<button type="button" class="ex-item ex-review-btn" id="ex-review"><span class="ex-ico">📝</span><span><b>複習題庫</b>${wrongN ? ` <span class="ex-new">錯題 ${wrongN}</span>` : ''}<br>
+      box.innerHTML = `<a class="ex-update hidden" id="ex-update" target="_blank" rel="noopener noreferrer"></a>
+        <button type="button" class="ex-item ex-review-btn" id="ex-review"><span class="ex-ico">📝</span><span><b>複習題庫</b>${wrongN ? ` <span class="ex-new">錯題 ${wrongN}</span>` : ''}<br>
         <span class="muted small">${answered ? `上過的課共 ${answered} 題,可以只看答錯的` : '上完任何一堂課後,題目會收進這裡'}</span></span></button>
         <div class="card-title" style="margin-top:12px;">🗺️ 群島地圖 <small class="muted" style="font-weight:500;font-size:.75em;">(點地圖上的島,或點下面的清單)</small></div>
         <div class="ex-list">${EXPLORE_ISLANDS.map(d => `<button type="button" class="ex-item" data-isle="${d.id}">
           <span class="ex-ico">${d.icon}</span><span><b>${escapeHtml(d.name)}</b>${d.soon ? ' <span class="ex-soon">即將推出</span>' : ''}<br><span class="muted small">${escapeHtml(d.desc)}</span></span></button>`).join('')}</div>`;
       box.querySelectorAll('[data-isle]').forEach(b => { b.onclick = () => exploreSelect(b.dataset.isle); });
       $('#ex-review').onclick = () => exploreSelect('review');
+      exploreRenderUpdateBanner();
       return;
     }
     let body = '';
@@ -403,6 +405,32 @@
     if (L && L.length) bindLessonUi(box);
     if (def.id === 'ai-tools') bindToolsUi(box);
     if (EXPLORE_EMBED[def.id]) exploreEmbed(def.id);
+  }
+
+  // ---------- 內容更新提醒:每 10 天的雲端更新會在 GitHub 開「內容更新」的待審核 PR ----------
+  // 讀公開專案的 PR 清單(不需登入;30 分鐘內用快取,避免 GitHub 每小時 60 次的限制)
+  const EXPLORE_REPO = 'remix6109/pr-tool';
+  async function exploreCheckUpdates() {
+    let c = null;
+    try { c = JSON.parse(localStorage.getItem('pr.contentPR') || 'null'); } catch (_) {}
+    if (c && Date.now() - c.at < 30 * 60 * 1000) return c.list;
+    try {
+      const res = await fetch(`https://api.github.com/repos/${EXPLORE_REPO}/pulls?state=open&per_page=10`);
+      if (!res.ok) return c ? c.list : [];
+      const list = (await res.json()).filter(p => /內容更新/.test(p.title || '')).map(p => ({ title: p.title, url: p.html_url }));
+      try { localStorage.setItem('pr.contentPR', JSON.stringify({ at: Date.now(), list })); } catch (_) {}
+      return list;
+    } catch (_) { return c ? c.list : []; }
+  }
+  async function exploreRenderUpdateBanner() {
+    const list = await exploreCheckUpdates();
+    const el = $('#ex-update');
+    if (!el) return;
+    if (!list.length) { el.classList.add('hidden'); return; }
+    const url = list.length === 1 ? list[0].url : `https://github.com/${EXPLORE_REPO}/pulls`;
+    el.innerHTML = `📬 有 ${list.length} 個內容更新等你確認 <span class="muted small">(點這裡到 GitHub 看說明、按 Merge 才會上線)</span>`;
+    el.href = url.startsWith('https://github.com/') ? url : '#';
+    el.classList.remove('hidden');
   }
 
   // ---------- 複習題庫:所有上過的課的題目,可只看答錯的 ----------
