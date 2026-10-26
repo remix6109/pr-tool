@@ -592,7 +592,7 @@
           <span class="news-meta">${escapeHtml(n.source || '')}・${timeAgo(n.time)}</span>
         </span>
       </a>`).join('') + (ext
-        ? `<div class="muted small" style="margin-top:6px;">新聞來源:${escapeHtml(items[0].n.source || '')}。點新聞在 APP 內閱讀,內文下方有原文連結。</div>`
+        ? `<div class="muted small" style="margin-top:6px;">新聞來源:${escapeHtml([...new Set(items.map(x => x.n.source).filter(Boolean))].join('、'))}。點新聞在 APP 內閱讀,內文下方有原文連結。</div>`
         : '<div class="muted small" style="margin-top:6px;">新聞來源:鉅亨網。點新聞在 APP 內閱讀,內文下方有原文連結。「與我持股相關」是比對新聞標註的相關股票與標題,可能漏掉或多抓。</div>');
   }
 
