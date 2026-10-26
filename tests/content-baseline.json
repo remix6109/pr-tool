@@ -24,7 +24,9 @@
   "fin-yield": 1,
   "ai-scam": 2,
   "auto-billing": 2,
-  "fin-tax-compare": 2
+  "fin-tax-compare": 2,
+  "ai-injection": 2,
+  "fin-equalization": 2
  },
  "tools": [
   "chatgpt",
