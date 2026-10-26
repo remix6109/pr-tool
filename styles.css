@@ -1003,3 +1003,14 @@ th { color: var(--muted); font-weight: 600; font-size: .8rem; }
 .ex-crow { padding: 10px 0; border-bottom: 1px solid var(--border); line-height: 1.6; }
 .ex-pick { display: inline-block; margin: 3px 4px 3px 0; padding: 1px 8px; border-radius: 8px; background: var(--neutral-bg); color: var(--primary); font-weight: 600; font-size: .85rem; }
 .ex-tool a { color: var(--primary); font-weight: 600; }
+.ex-meta { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+.ex-meta span { font-size: .8rem; padding: 2px 8px; border-radius: 8px; background: var(--neutral-bg); }
+.ex-flow { display: flex; flex-direction: column; align-items: stretch; }
+.ex-step { padding: 8px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface); line-height: 1.6; }
+.ex-step b { display: block; } .ex-step span { font-size: .9em; color: var(--muted); }
+.ex-arrow { text-align: center; color: var(--primary); font-weight: 700; line-height: 1.4; }
+.ex-calc { margin-top: 14px; padding: 10px 12px; border-radius: 12px; border: 1px dashed var(--primary); }
+.ex-table { width: 100%; border-collapse: collapse; margin-top: 6px; font-size: .9rem; }
+.ex-table th, .ex-table td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--border); }
+.ex-auto { margin-bottom: 10px; }
+.ex-auto summary { cursor: pointer; padding: 8px 0; }

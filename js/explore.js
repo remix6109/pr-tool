@@ -8,11 +8,11 @@
   const EXPLORE_ISLANDS = [
     { id: 'ai-intro', name: 'AI 入門島', icon: '🤖', desc: 'AI 是什麼、會錯在哪、怎麼問才問得好', x: -7.5, z: -3, kind: 'robot', land: '#9DC88A' },
     { id: 'ai-tools', name: 'AI 工具島', icon: '🧰', desc: '各家 AI 工具的強項、價格與實用度', x: 0.5, z: -7.5, kind: 'tools', land: '#A9C98C' },
-    { id: 'auto', name: '自動化工坊島', icon: '⚙️', desc: '把 AI 串起來自動做事', x: 8, z: -3, kind: 'gears', land: '#B9BFA0', soon: true },
+    { id: 'auto', name: '自動化工坊島', icon: '⚙️', desc: '把 AI 串起來自動做事', x: 8, z: -3, kind: 'gears', land: '#B9BFA0' },
     { id: 'town', name: '小鎮島', icon: '🏙️', desc: '你的 3D 持股小鎮', x: -3.5, z: 4.5, kind: 'town', land: '#8DB86E' },
     { id: 'dividend', name: '配息島', icon: '💰', desc: '待確認配息與配息行事曆', x: 4.5, z: 5, kind: 'coins', land: '#D8C48E' },
     { id: 'market', name: '市場島', icon: '🌊', desc: '三大法人、夜盤與國際市場', x: 11, z: 5.5, kind: 'lighthouse', land: '#9DC88A' },
-    { id: 'finance', name: '理財知識島', icon: '📚', desc: '除息、填息、補充保費一次搞懂', x: -11, z: 5, kind: 'books', land: '#A9C98C', soon: true }
+    { id: 'finance', name: '理財知識島', icon: '📚', desc: '除息、填息、補充保費一次搞懂', x: -11, z: 5, kind: 'books', land: '#A9C98C' }
   ];
 
   // ---------- 學習進度(存在這台裝置) ----------
@@ -20,7 +20,10 @@
     try { return JSON.parse(localStorage.getItem('pr.learn') || '{}'); } catch (_) { return {}; }
   }
   function learnSave(p) { try { localStorage.setItem('pr.learn', JSON.stringify(p)); } catch (_) {} }
-  const learnDoneCount = () => AI_LESSONS.filter(l => learnProgress()[l.id]).length;
+  // 有課程的島 → 課程清單(定義在 explore-data.js)
+  const islandLessons = (id) => ({ 'ai-intro': AI_LESSONS, auto: typeof AUTO_LESSONS !== 'undefined' ? AUTO_LESSONS : [], finance: typeof FIN_LESSONS !== 'undefined' ? FIN_LESSONS : [] })[id] || null;
+  const curLessons = () => islandLessons(EXPLORE.sel) || [];
+  const learnDoneCount = (list) => list.filter(l => learnProgress()[l.id]).length;
 
   // ---------- 3D 場景 ----------
   function exploreLabel(lines, w = 300, h = 120, scale = 4.6) {
@@ -161,6 +164,28 @@
       return { def, g, label };
     });
 
+    // 島上散步的小人(每座島 2~3 個,沿著島邊走、偶爾停下來)
+    const SHIRTS = ['#3F7373', '#D2533F', '#E8A23A', '#5C8C7D', '#7B6BB0', '#4F8FD8'];
+    const walkers = [];
+    islands.forEach((it, i) => {
+      const n = 2 + (i % 2);
+      for (let k = 0; k < n; k++) {
+        const man = explorePerson(SHIRTS[(i * 3 + k) % SHIRTS.length], it.def.kind === 'coins');
+        it.g.add(man);
+        walkers.push({ man, a: k / n * Math.PI * 2 + i, r: 1.45 + (k % 2) * 0.35, speed: (k % 2 ? -1 : 1) * (0.35 + 0.1 * k), pause: 0, phase: i + k });
+      }
+    });
+
+    // 渡輪:載著小人在島之間來回(停靠一下再開往下一座)
+    const ferry = new THREE.Group();
+    const fHull = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.35, 0.8), flat('#F4F1EA'));
+    const fCabin = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.4, 0.6), flat('#4F8FD8')); fCabin.position.set(-0.4, 0.37, 0);
+    ferry.add(fHull, fCabin);
+    [0.25, 0.65].forEach((x, k) => { const p = explorePerson(SHIRTS[k + 2]); p.position.set(x, 0.17, k ? 0.15 : -0.15); p.scale.setScalar(0.85); ferry.add(p); });
+    ferry.children.forEach(c => { c.castShadow = true; });
+    scene.add(ferry);
+    const route = [0, 3, 4, 5, 2, 1].map(i => islands[i].def);
+
     // 一艘繞著群島的小船
     const boat = new THREE.Group();
     const hull = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.3, 0.45), flat('#7A5432')); hull.position.y = 0.0;
@@ -169,15 +194,32 @@
     scene.add(boat);
 
     EXPLORE.s = {
-      renderer, scene, camera, islands, spin, boat, raf: 0, prev: 0, t: 0, lastTouch: 0,
+      renderer, scene, camera, islands, spin, boat, walkers, ferry, route, leg: 0, legT: 0, raf: 0, prev: 0, t: 0, lastTouch: 0,
       cam: { theta: Math.PI / 2, phi: 0.92, dist: 32 },
       target: new THREE.Vector3(0, 0, 0), want: { x: 0, z: 0, dist: 32 }
     };
     exploreBindControls(canvas);
   }
 
+  // 低多邊形小人(身體+頭,可選頭頂金幣)
+  function explorePerson(shirt, coin) {
+    const m = new THREE.Group();
+    const std = (c) => new THREE.MeshStandardMaterial({ color: c, flatShading: true, roughness: 0.8 });
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.14, 0.34, 8), std(shirt)); body.position.y = 0.17;
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.11, 10, 8), std('#F2D2B0')); head.position.y = 0.44;
+    m.add(body, head);
+    if (coin) {
+      const c = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 0.05, 12), new THREE.MeshStandardMaterial({ color: '#FFD447', metalness: 0.35, roughness: 0.3, emissive: '#B07800', emissiveIntensity: 0.4 }));
+      c.position.y = 0.6; m.add(c);
+    }
+    m.children.forEach(c => { c.castShadow = true; });
+    m.scale.setScalar(1.25);
+    return m;
+  }
+
   function exploreLabelLines(def) {
-    const sub = def.soon ? '即將推出' : def.id === 'ai-intro' ? `已完成 ${learnDoneCount()}/${AI_LESSONS.length} 課` : def.desc.slice(0, 11);
+    const L = islandLessons(def.id);
+    const sub = def.soon ? '即將推出' : L && L.length ? `已完成 ${learnDoneCount(L)}/${L.length} 課` : def.desc.slice(0, 11);
     return [{ text: `${def.icon} ${def.name}`, bold: true, size: 38 }, { text: sub, size: 26, color: def.soon ? '#B07800' : '#5C6B6A' }];
   }
 
@@ -203,6 +245,26 @@
     s.boat.rotation.y = -a;
     // 島輕輕上下浮動
     s.islands.forEach((it, i) => { it.g.position.y = Math.sin(s.t * 0.9 + i) * 0.06; });
+    // 小人散步:沿著島邊走,走一陣子停一下
+    s.walkers.forEach(w => {
+      if (w.pause > 0) w.pause -= dt;
+      else {
+        w.a += w.speed * dt / w.r;
+        if (Math.random() < dt * 0.15) w.pause = 1 + Math.random() * 2;
+      }
+      const moving = w.pause <= 0;
+      w.man.position.set(Math.cos(w.a) * w.r, 0.48 + (moving ? Math.abs(Math.sin(s.t * 8 + w.phase)) * 0.05 : 0), Math.sin(w.a) * w.r);
+      w.man.rotation.y = -w.a + (w.speed > 0 ? Math.PI : 0);
+    });
+    // 渡輪:開 6 秒到下一座島,停 2 秒
+    s.legT += dt;
+    const from = s.route[s.leg % s.route.length], to = s.route[(s.leg + 1) % s.route.length];
+    const p = Math.min(1, s.legT / 6), e = p * p * (3 - 2 * p);
+    const off = (d) => { const l = Math.hypot(d.x, d.z) || 1; return { x: d.x + d.x / l * 3.6, z: d.z + d.z / l * 3.6 }; };   // 停在島外側的碼頭
+    const A = off(from), B = off(to);
+    s.ferry.position.set(A.x + (B.x - A.x) * e, -0.18 + Math.sin(s.t * 2.2) * 0.04, A.z + (B.z - A.z) * e);
+    s.ferry.rotation.y = -Math.atan2(B.z - A.z, B.x - A.x);
+    if (s.legT > 8) { s.leg++; s.legT = 0; }
     // 鏡頭:飛向選中的島(或回到全景),沒在操作時慢慢繞
     s.target.x += (s.want.x - s.target.x) * Math.min(1, dt * 2.5);
     s.target.z += (s.want.z - s.target.z) * Math.min(1, dt * 2.5);
@@ -260,6 +322,8 @@
     EXPLORE.lesson = null;
     const s = EXPLORE.s, def = EXPLORE_ISLANDS.find(d => d.id === id);
     if (s && def) { s.want = { x: def.x, z: def.z, dist: 11 }; s.lastTouch = 0; }
+    // 拉近時選中那座島的看板縮小、放低,才不會擋住畫面
+    if (s) s.islands.forEach(it => { const k = it.def.id === id ? 0.55 : 1; it.label.scale.set(4.6 * k, 4.6 * k * 120 / 300, 1); it.label.position.y = it.def.id === id ? 3.6 : 5.0; });
     if (s && !def) s.want = { x: 0, z: 0, dist: 32 };
     $('#explore-back').classList.toggle('hidden', !def);
     renderExplorePanel();
@@ -296,7 +360,8 @@
       return;
     }
     let body = '';
-    if (def.id === 'ai-intro') body = EXPLORE.lesson ? renderLesson(EXPLORE.lesson) : renderLessonList();
+    const L = islandLessons(def.id);
+    if (L && L.length) body = (def.id === 'auto' && !EXPLORE.lesson ? renderAutoIntro() : '') + (EXPLORE.lesson ? renderLesson(EXPLORE.lesson) : renderLessonList());
     else if (def.id === 'ai-tools') body = renderTools();
     else if (def.id === 'town') body = `<p>你的持股小鎮在首頁:一筆買進一層樓,展開時會從第一筆自動播到今天。</p><button type="button" class="btn primary wide" data-go="town">🏙️ 前往我的小鎮</button>`;
     else if (def.id === 'dividend') body = `<p>待確認配息、配息行事曆都在首頁。</p><button type="button" class="btn primary wide" data-go="dividend">💰 看配息行事曆</button>`;
@@ -314,15 +379,16 @@
         else goPage('market');
       };
     });
-    if (def.id === 'ai-intro') bindLessonUi(box);
+    if (L && L.length) bindLessonUi(box);
     if (def.id === 'ai-tools') bindToolsUi(box);
   }
 
   // ---------- AI 入門島:課程 ----------
   function renderLessonList() {
     const prog = learnProgress();
-    return `<p class="muted small">${AI_LESSONS.length} 堂短課,每堂約 3 分鐘,最後有小測驗。進度存在這台裝置。</p>
-      <div class="ex-list">${AI_LESSONS.map((l, i) => {
+    const L = curLessons();
+    return `<p class="muted small">${L.length} 堂短課,每堂約 3 分鐘,最後有小測驗。進度存在這台裝置。</p>
+      <div class="ex-list">${L.map((l, i) => {
         const p = prog[l.id];
         return `<button type="button" class="ex-item" data-lesson="${l.id}"><span class="ex-ico">${l.icon}</span>
           <span><b>第 ${i + 1} 課 ${escapeHtml(l.title)}</b>${p ? ` <span class="ex-done">✓ ${p.score}/${p.total}</span>` : ''}<br><span class="muted small">${escapeHtml(l.intro)}</span></span></button>`;
@@ -330,12 +396,16 @@
   }
 
   function renderLesson(id) {
-    const l = AI_LESSONS.find(x => x.id === id);
-    const idx = AI_LESSONS.indexOf(l);
+    const L = curLessons();
+    const l = L.find(x => x.id === id);
+    const idx = L.indexOf(l);
     return `<div class="ex-lesson">
       <h3>${l.icon} 第 ${idx + 1} 課 ${escapeHtml(l.title)}</h3>
       <p class="muted">${escapeHtml(l.intro)}</p>
+      ${l.meta ? `<div class="ex-meta">${l.meta.map(m => `<span>${escapeHtml(m)}</span>`).join('')}</div>` : ''}
       ${l.sections.map(sec => `<h4>${escapeHtml(sec.h)}</h4><p>${escapeHtml(sec.p)}</p>`).join('')}
+      ${l.flow ? `<h4>🔁 流程圖</h4><div class="ex-flow">${l.flow.map((st, i) => `<div class="ex-step"><b>${i + 1}. ${escapeHtml(st.t)}</b><span>${escapeHtml(st.d)}</span></div>`).join('<div class="ex-arrow">↓</div>')}</div>` : ''}
+      ${l.calc && EXPLORE_CALC[l.calc] ? `<div class="ex-calc"><b>🧮 用你的持股算算看(${escapeHtml(getPersonLabel(STATE.defaultPerson))})</b>${EXPLORE_CALC[l.calc]()}</div>` : ''}
       ${l.example ? `<div class="ex-example"><b>📝 ${escapeHtml(l.example.title)}</b>
         <div class="ex-bad"><span>✗ 普通問法</span>${escapeHtml(l.example.bad)}</div>
         <div class="ex-good"><span>✓ 更好的問法</span>${escapeHtml(l.example.good)}</div></div>` : ''}
@@ -350,7 +420,8 @@
   function bindLessonUi(box) {
     box.querySelectorAll('[data-lesson]').forEach(b => { b.onclick = () => { EXPLORE.lesson = b.dataset.lesson; renderExplorePanel(); $('#explore-panel').scrollIntoView({ behavior: 'smooth', block: 'start' }); }; });
     if (!EXPLORE.lesson) return;
-    const l = AI_LESSONS.find(x => x.id === EXPLORE.lesson);
+    const L = curLessons();
+    const l = L.find(x => x.id === EXPLORE.lesson);
     const answers = {};
     box.querySelectorAll('.ex-q').forEach(qEl => {
       const qi = +qEl.dataset.q, q = l.quiz[qi];
@@ -374,7 +445,7 @@
             prog[l.id] = { score, total: l.quiz.length, at: autodivYmd(new Date()) };
             learnSave(prog);
             exploreRefreshLabels();
-            const next = AI_LESSONS[AI_LESSONS.indexOf(l) + 1];
+            const next = L[L.indexOf(l) + 1];
             const res = $('#ex-result');
             res.innerHTML = `<b>${score === l.quiz.length ? '🎉 全對!' : `答對 ${score}/${l.quiz.length} 題`}</b> 這堂課完成了。
               ${next ? `<button type="button" class="btn primary small" id="ex-next">下一課:${escapeHtml(next.title)} →</button>` : '<span>🏆 所有課程都上完了!</span>'}`;
@@ -384,6 +455,73 @@
         };
       });
     });
+  }
+
+  // ---------- 理財知識島:用你的持股試算 ----------
+  const fmtD = (ymd) => ymd ? ymd.slice(5).replace('-', '/') : '';
+  const EXPLORE_CALC = {
+    // 接下來的除息與最晚買進日
+    exdiv() {
+      if (!Array.isArray(_exDiv.list)) return '<p class="muted small">除權息資料讀取中,稍後再打開這一課。</p>';
+      const today = autodivYmd(new Date());
+      const ev = computePayoutEvents(STATE.defaultPerson, today, autodivAddDays(today, 120)).events
+        .filter(e => e.exDate >= today).sort((a, b) => a.exDate < b.exDate ? -1 : 1).slice(0, 5);
+      if (!ev.length) return '<p class="muted small">未來 4 個月內查不到你持股的除息日。</p>';
+      return `<table class="ex-table"><tr><th>代號</th><th>除息日</th><th>最晚買進日</th><th>每股約</th></tr>${ev.map(e =>
+        `<tr><td>${escapeHtml(e.symbol)}</td><td>${fmtD(e.exDate)}${e.kind === 'est' ? '(估)' : ''}</td><td>${fmtD(autodivBizDaysBefore(e.exDate, 1))}</td><td>${e.perShare.toFixed(2)}</td></tr>`).join('')}</table>
+        <p class="muted small">最晚買進日 = 除息日的前一個營業日(只略過週末,遇國定假日要再往前)。「(估)」是依過去週期推估的日期。</p>`;
+    },
+    // 近一年每筆配息是否達補充保費門檻
+    nhi() {
+      const since = autodivAddDays(autodivYmd(new Date()), -365);
+      const rows = (STATE.data.dividends || []).filter(r => r.person === STATE.defaultPerson && String(r.date || '').slice(0, 10) >= since)
+        .sort((a, b) => String(a.date) < String(b.date) ? 1 : -1);
+      const pend = computePendingDividends();
+      if (!rows.length && !pend.length) return '<p class="muted small">近一年沒有配息記錄。</p>';
+      const line = (sym, date, amt, tag) => `<tr><td>${escapeHtml(sym)}</td><td>${fmtD(date)}${tag || ''}</td><td class="town-num">${fmt.money(amt)}</td><td>${amt >= 20000 ? '<b>可能要扣</b>' : '不用'}</td></tr>`;
+      return `<table class="ex-table"><tr><th>代號</th><th>日期</th><th>金額</th><th>補充保費</th></tr>
+        ${pend.map(p => line(p.symbol, p.payDate, p.gross, '(待入帳)')).join('')}
+        ${rows.slice(0, 8).map(r => line(r.symbol, String(r.date).slice(0, 10), Number(r.total) || 0)).join('')}</table>
+        <p class="muted small">判斷用的是「單次發放金額」,不是全年加總。實際扣多少,要看這次配息裡「股利所得」占多少(收益平準金、資本利得不扣),以入帳金額為準。</p>`;
+    },
+    // 交易成本:已付手續費、現在全部賣出要付的證交稅與手續費
+    cost() {
+      const mine = (STATE.data.purchases || []).filter(r => r.person === STATE.defaultPerson);
+      const fees = mine.reduce((a, r) => a + (Number(r.fee) || 0), 0);
+      const buys = mine.filter(r => Number(r.shares) > 0).length;
+      const items = townItems(STATE.defaultPerson);
+      const value = items.reduce((a, it) => a + it.value, 0);
+      return `<table class="ex-table"><tr><td>買賣筆數</td><td>${mine.length} 筆(買進 ${buys} 筆)</td></tr>
+        <tr><td>已付手續費合計</td><td class="town-num">${fmt.money(fees)} 元</td></tr>
+        <tr><td>目前市值</td><td class="town-num">${fmt.money(value)} 元</td></tr>
+        <tr><td>若現在全部賣出:證交稅(ETF 0.1%)</td><td class="town-num">約 ${fmt.money(value * 0.001)} 元</td></tr>
+        <tr><td>若現在全部賣出:手續費(0.1425%,未打折)</td><td class="town-num">約 ${fmt.money(value * 0.001425)} 元</td></tr></table>
+        <p class="muted small">證交稅以 ETF 的 0.1% 估算(個股是 0.3%);手續費多數券商電子下單有折扣,實際以券商為準。</p>`;
+    },
+    // 每檔的殖利率(以成本計)
+    yield() {
+      const items = townItems(STATE.defaultPerson);
+      if (!items.length) return '<p class="muted small">目前沒有持股。</p>';
+      return `<table class="ex-table"><tr><th>代號</th><th>持有成本</th><th>近一年配息</th><th>殖利率(成本)</th></tr>${items.map(it => {
+        const t12 = trailing12Dividends(STATE.defaultPerson).bySym[it.sym] || 0;
+        return `<tr><td>${escapeHtml(it.sym)}</td><td class="town-num">${fmt.money(it.cost)}</td><td class="town-num">${fmt.money(t12)}</td><td>${it.yld ? it.yld.toFixed(2) + '%' : '—'}</td></tr>`;
+      }).join('')}</table><p class="muted small">「殖利率(成本)」= 近一年實際領到的配息 ÷ 你的買進成本。持有不滿一年的,數字會偏低。</p>`;
+    }
+  };
+
+  // ---------- 自動化工坊島:工具一覽(放在課程清單上方) ----------
+  function renderAutoIntro() {
+    if (typeof AUTO_TOOLS === 'undefined' || !AUTO_TOOLS.tools.length) return '';
+    return `<details class="ex-auto"><summary><b>🧰 串接工具一覽</b> <span class="muted small">(點開比較,查證日期 ${escapeHtml(AUTO_TOOLS.checkedDate)})</span></summary>
+      ${AUTO_TOOLS.tools.map(t => `<div class="ex-tool"><div class="ex-thead"><b>${escapeHtml(t.name)}</b>
+        <span class="ex-stars" title="上手難度 ${t.difficulty}/5">難度 ${'●'.repeat(t.difficulty)}${'○'.repeat(5 - t.difficulty)}</span></div>
+        <div>${escapeHtml(t.what)}</div>
+        <div class="ex-tags">${t.strengths.map(x => `<span class="ex-tag">💪 ${escapeHtml(x)}</span>`).join('')}</div>
+        <div class="small"><b>適合:</b>${escapeHtml(t.bestFor)}</div>
+        <div class="small"><b>免費:</b>${escapeHtml(t.free)}</div>
+        <div class="small"><b>付費:</b>${escapeHtml(t.paid)}</div>
+        ${/^https:\/\//.test(t.url) ? `<a class="small" href="${escapeHtml(t.url)}" target="_blank" rel="noopener noreferrer">官方網站 ↗</a>` : ''}</div>`).join('')}
+    </details>`;
   }
 
   // ---------- AI 工具島:工具卡 ----------
