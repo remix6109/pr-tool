@@ -335,21 +335,44 @@
     EXPLORE.s.islands.forEach(it => it.label.draw(exploreLabelLines(it.def)));
   }
 
-  function goPage(page) {
-    const b = document.querySelector(`.nav-btn[data-page="${page}"]`);
-    if (b) b.click();
+  // 小鎮/配息/市場島:直接把原本頁面上的卡片「搬」進島的面板(同一張卡片,功能完全一樣);
+  // 換島、回地圖或離開探索頁時搬回原位。
+  const EXPLORE_EMBED = {
+    town: ['#card-town'],
+    dividend: ['#card-pending-div', '[data-collapse="payout"]'],
+    market: ['#card-islands', '#card-intl']
+  };
+  const _embedded = [];   // [{ el, ph }] ph = 原位置的記號
+  function exploreRestore() {
+    while (_embedded.length) {
+      const { el, ph } = _embedded.pop();
+      ph.replaceWith(el);
+    }
   }
-  function goHomeCard(sel) {
-    goPage('home');
-    setTimeout(() => {
-      const card = $(sel);
-      if (!card) return;
-      if (card.classList.contains('collapsed')) { const t = card.querySelector('.card-title'); if (t) t.click(); }
-      card.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, 120);
+  function exploreEmbed(id) {
+    const box = $('#ex-embed');
+    if (!box) return;
+    EXPLORE_EMBED[id].forEach(sel => {
+      const el = $(sel);
+      if (!el) return;
+      const ph = document.createComment('explore:' + sel);
+      el.before(ph);
+      _embedded.push({ el, ph });
+      box.appendChild(el);
+      if (el.classList.contains('collapsed')) { const t = el.querySelector('.card-title'); if (t) t.click(); }
+    });
+    if (id === 'town') { if (typeof TOWN3D !== 'undefined') TOWN3D.grow = true; renderTown(STATE.defaultPerson); }
+    if (id === 'market') marketTick();
+    if (id === 'dividend' && $('#card-pending-div').classList.contains('hidden')) {
+      const empty = $('#ex-embed-empty');
+      empty.textContent = '目前沒有待確認的配息。';
+      empty.classList.remove('hidden');
+      box.prepend(empty);
+    }
   }
 
   function renderExplorePanel() {
+    exploreRestore();                 // 先把搬進來的卡片放回原位,再重畫面板
     const box = $('#explore-panel');
     const def = EXPLORE_ISLANDS.find(d => d.id === EXPLORE.sel);
     if (!def) {
@@ -363,24 +386,13 @@
     const L = islandLessons(def.id);
     if (L && L.length) body = (def.id === 'auto' && !EXPLORE.lesson ? renderAutoIntro() : '') + (EXPLORE.lesson ? renderLesson(EXPLORE.lesson) : renderLessonList());
     else if (def.id === 'ai-tools') body = renderTools();
-    else if (def.id === 'town') body = `<p>你的持股小鎮在首頁:一筆買進一層樓,展開時會從第一筆自動播到今天。</p><button type="button" class="btn primary wide" data-go="town">🏙️ 前往我的小鎮</button>`;
-    else if (def.id === 'dividend') body = `<p>待確認配息、配息行事曆都在首頁。</p><button type="button" class="btn primary wide" data-go="dividend">💰 看配息行事曆</button>`;
-    else if (def.id === 'market') body = `<p>三大法人買進/賣出、台指期夜盤、國際市場與財經新聞。</p><button type="button" class="btn primary wide" data-go="market">🌊 前往市場頁</button>`;
-    else if (def.id === 'auto') body = `<p class="muted">這座島正在建設中,預計會有:</p><ul class="ex-ul"><li>n8n、Make、Zapier、Apple 捷徑是什麼、怎麼選</li><li>AI 代理人(agent)與 MCP 的白話說明</li><li>實作範例:每天自動整理新聞傳到 LINE、YouTube 影片自動做筆記、拍收據自動記帳</li></ul>`;
-    else if (def.id === 'finance') body = `<p class="muted">這座島正在建設中,預計會有:</p><ul class="ex-ul"><li>除息、填息、殖利率是什麼</li><li>補充保費怎麼算、什麼時候會扣</li><li>ETF 成分股、月配與季配的差別(用你自己的持股當例子)</li></ul>`;
+    else if (EXPLORE_EMBED[def.id]) body = '<div id="ex-embed" class="ex-embed"></div><div id="ex-embed-empty" class="muted small hidden"></div>';
     box.innerHTML = `<div class="ex-head"><div class="card-title" style="margin:0;">${def.icon} ${escapeHtml(def.name)}</div>
       <button type="button" class="btn ghost small" id="ex-back2">← 地圖</button></div>${body}`;
     $('#ex-back2').onclick = () => (EXPLORE.lesson ? (EXPLORE.lesson = null, renderExplorePanel()) : exploreSelect(null));
-    box.querySelectorAll('[data-go]').forEach(b => {
-      b.onclick = () => {
-        const go = b.dataset.go;
-        if (go === 'town') { if (typeof TOWN3D !== 'undefined') TOWN3D.grow = true; goHomeCard('#card-town'); }
-        else if (go === 'dividend') goHomeCard('[data-collapse="payout"]');
-        else goPage('market');
-      };
-    });
     if (L && L.length) bindLessonUi(box);
     if (def.id === 'ai-tools') bindToolsUi(box);
+    if (EXPLORE_EMBED[def.id]) exploreEmbed(def.id);
   }
 
   // ---------- AI 入門島:課程 ----------

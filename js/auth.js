@@ -97,6 +97,7 @@
     $$('.nav-btn').forEach(btn => {
       btn.onclick = () => {
         const page = btn.dataset.page;
+        if (page !== 'explore') exploreRestore();   // 探索頁借走的卡片放回原本的頁面
         $$('.nav-btn').forEach(b => b.classList.toggle('active', b === btn));
         $$('.page').forEach(p => p.classList.toggle('active', p.id === 'page-' + page));
         if (page === 'history') renderHistory();

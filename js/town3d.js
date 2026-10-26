@@ -673,7 +673,8 @@
   // ---------- 繪圖迴圈 ----------
   function town3dVisible() {
     const card = $('#card-town');
-    return !!(TOWN3D.s && card && !card.classList.contains('collapsed') && $('#page-home').classList.contains('active') && document.visibilityState === 'visible');
+    // 卡片真的顯示在畫面上才畫(在首頁,或被搬進探索頁的小鎮島)
+    return !!(TOWN3D.s && card && !card.classList.contains('collapsed') && card.offsetParent !== null && document.visibilityState === 'visible');
   }
   function town3dStart() {
     const s = TOWN3D.s;

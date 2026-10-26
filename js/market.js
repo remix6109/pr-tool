@@ -592,9 +592,9 @@
 
   // ---------- 排程與綁定 ----------
   function marketActive() {
-    const open = (id) => { const c = $(id); return c && !c.classList.contains('collapsed'); };
-    const onPage = $('#page-market') && $('#page-market').classList.contains('active');
-    return document.visibilityState === 'visible' && onPage && (open('#card-news') || open('#card-islands') || open('#card-intl') || open('#card-lookthrough'));
+    // 卡片展開且真的顯示在畫面上(在市場頁,或被搬進探索頁的市場島)才更新
+    const open = (id) => { const c = $(id); return c && !c.classList.contains('collapsed') && c.offsetParent !== null; };
+    return document.visibilityState === 'visible' && (open('#card-news') || open('#card-islands') || open('#card-intl') || open('#card-lookthrough'));
   }
 
   async function marketTick(force) {

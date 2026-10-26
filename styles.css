@@ -1014,3 +1014,5 @@ th { color: var(--muted); font-weight: 600; font-size: .8rem; }
 .ex-table th, .ex-table td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--border); }
 .ex-auto { margin-bottom: 10px; }
 .ex-auto summary { cursor: pointer; padding: 8px 0; }
+.ex-embed > .card { margin: 0 0 12px; border: 1px solid var(--border); box-shadow: none; }
+.ex-embed > #ex-embed-empty { margin-bottom: 10px; }
