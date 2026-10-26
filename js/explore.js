@@ -24,6 +24,9 @@
   const islandLessons = (id) => ({ 'ai-intro': AI_LESSONS, auto: typeof AUTO_LESSONS !== 'undefined' ? AUTO_LESSONS : [], finance: typeof FIN_LESSONS !== 'undefined' ? FIN_LESSONS : [] })[id] || null;
   const curLessons = () => islandLessons(EXPLORE.sel) || [];
   const learnDoneCount = (list) => list.filter(l => learnProgress()[l.id]).length;
+  // 定期更新新增的課程會帶 added 日期,10 天內標 NEW
+  const isNewLesson = (l) => !!l.added && autodivDaysBetween(l.added, autodivYmd(new Date())) <= 10;
+  const ALL_LESSON_SETS = () => [['🤖 AI 入門島', AI_LESSONS], ['⚙️ 自動化工坊島', typeof AUTO_LESSONS !== 'undefined' ? AUTO_LESSONS : []], ['📚 理財知識島', typeof FIN_LESSONS !== 'undefined' ? FIN_LESSONS : []]];
 
   // ---------- 3D 場景 ----------
   function exploreLabel(lines, w = 300, h = 120, scale = 4.6) {
@@ -219,7 +222,8 @@
 
   function exploreLabelLines(def) {
     const L = islandLessons(def.id);
-    const sub = def.soon ? '即將推出' : L && L.length ? `已完成 ${learnDoneCount(L)}/${L.length} 課` : def.desc.slice(0, 11);
+    const nNew = L ? L.filter(isNewLesson).length : 0;
+    const sub = def.soon ? '即將推出' : L && L.length ? `已完成 ${learnDoneCount(L)}/${L.length} 課${nNew ? `・新 ${nNew} 課` : ''}` : def.desc.slice(0, 11);
     return [{ text: `${def.icon} ${def.name}`, bold: true, size: 38 }, { text: sub, size: 26, color: def.soon ? '#B07800' : '#5C6B6A' }];
   }
 
@@ -324,7 +328,7 @@
     if (s && def) { s.want = { x: def.x, z: def.z, dist: 11 }; s.lastTouch = 0; }
     // 拉近時選中那座島的看板縮小、放低,才不會擋住畫面
     if (s) s.islands.forEach(it => { const k = it.def.id === id ? 0.55 : 1; it.label.scale.set(4.6 * k, 4.6 * k * 120 / 300, 1); it.label.position.y = it.def.id === id ? 3.6 : 5.0; });
-    if (s && !def) s.want = { x: 0, z: 0, dist: 32 };
+    if (s && !def) s.want = { x: 0, z: 0, dist: 32 };   // 回全景(複習題庫也停在全景)
     $('#explore-back').classList.toggle('hidden', !def);
     renderExplorePanel();
     if (def) $('#explore-panel').scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -375,11 +379,17 @@
     exploreRestore();                 // 先把搬進來的卡片放回原位,再重畫面板
     const box = $('#explore-panel');
     const def = EXPLORE_ISLANDS.find(d => d.id === EXPLORE.sel);
+    if (EXPLORE.sel === 'review') { renderReview(box); return; }
     if (!def) {
-      box.innerHTML = `<div class="card-title">🗺️ 群島地圖 <small class="muted" style="font-weight:500;font-size:.75em;">(點地圖上的島,或點下面的清單)</small></div>
+      const answered = ALL_LESSON_SETS().reduce((a, [, L]) => a + L.filter(l => learnProgress()[l.id]).reduce((b, l) => b + l.quiz.length, 0), 0);
+      const wrongN = ALL_LESSON_SETS().reduce((a, [, L]) => a + L.reduce((b, l) => b + ((learnProgress()[l.id] || {}).wrong || []).length, 0), 0);
+      box.innerHTML = `<button type="button" class="ex-item ex-review-btn" id="ex-review"><span class="ex-ico">📝</span><span><b>複習題庫</b>${wrongN ? ` <span class="ex-new">錯題 ${wrongN}</span>` : ''}<br>
+        <span class="muted small">${answered ? `上過的課共 ${answered} 題,可以只看答錯的` : '上完任何一堂課後,題目會收進這裡'}</span></span></button>
+        <div class="card-title" style="margin-top:12px;">🗺️ 群島地圖 <small class="muted" style="font-weight:500;font-size:.75em;">(點地圖上的島,或點下面的清單)</small></div>
         <div class="ex-list">${EXPLORE_ISLANDS.map(d => `<button type="button" class="ex-item" data-isle="${d.id}">
           <span class="ex-ico">${d.icon}</span><span><b>${escapeHtml(d.name)}</b>${d.soon ? ' <span class="ex-soon">即將推出</span>' : ''}<br><span class="muted small">${escapeHtml(d.desc)}</span></span></button>`).join('')}</div>`;
       box.querySelectorAll('[data-isle]').forEach(b => { b.onclick = () => exploreSelect(b.dataset.isle); });
+      $('#ex-review').onclick = () => exploreSelect('review');
       return;
     }
     let body = '';
@@ -395,6 +405,48 @@
     if (EXPLORE_EMBED[def.id]) exploreEmbed(def.id);
   }
 
+  // ---------- 複習題庫:所有上過的課的題目,可只看答錯的 ----------
+  function renderReview(box) {
+    const prog = learnProgress();
+    const onlyWrong = EXPLORE.reviewWrong !== false;
+    const groups = ALL_LESSON_SETS().map(([name, L]) => [name, L.filter(l => prog[l.id]).map(l => ({ l, qs: l.quiz.map((q, qi) => ({ q, qi, wrong: (prog[l.id].wrong || []).includes(qi) })).filter(x => !onlyWrong || x.wrong) })).filter(g => g.qs.length)]).filter(([, ls]) => ls.length);
+    const total = groups.reduce((a, [, ls]) => a + ls.reduce((b, g) => b + g.qs.length, 0), 0);
+    box.innerHTML = `<div class="ex-head"><div class="card-title" style="margin:0;">📝 複習題庫</div><button type="button" class="btn ghost small" id="ex-back2">← 地圖</button></div>
+      <div class="ex-chips"><button type="button" class="chip${onlyWrong ? ' active' : ''}" data-rv="wrong">只看答錯的</button><button type="button" class="chip${onlyWrong ? '' : ' active'}" data-rv="all">全部題目</button></div>
+      <p class="muted small">${total ? `共 ${total} 題。答對的會從錯題本移除,答錯的會加進去。` : onlyWrong ? '目前沒有答錯的題目 🎉 可以切到「全部題目」複習。' : '還沒有上過任何一堂課。'}</p>
+      ${groups.map(([name, ls]) => `<h4>${name}</h4>${ls.map(g => `<div class="ex-rv-lesson"><div class="muted small">${g.l.icon} ${escapeHtml(g.l.title)}</div>${g.qs.map(x => `
+        <div class="ex-q" data-l="${g.l.id}" data-q="${x.qi}"><div class="ex-qt">${x.wrong ? '❗ ' : ''}${escapeHtml(x.q.q)}</div>
+        ${x.q.options.map((o, oi) => `<button type="button" class="ex-opt" data-opt="${oi}">${escapeHtml(o)}</button>`).join('')}<div class="ex-why hidden"></div></div>`).join('')}</div>`).join('')}`).join('')}`;
+    $('#ex-back2').onclick = () => exploreSelect(null);
+    box.querySelectorAll('[data-rv]').forEach(b => { b.onclick = () => { EXPLORE.reviewWrong = b.dataset.rv === 'wrong'; renderReview(box); }; });
+    const lessonById = {};
+    ALL_LESSON_SETS().forEach(([, L]) => L.forEach(l => { lessonById[l.id] = l; }));
+    box.querySelectorAll('.ex-q').forEach(qEl => {
+      const l = lessonById[qEl.dataset.l], qi = +qEl.dataset.q, q = l.quiz[qi];
+      qEl.querySelectorAll('.ex-opt').forEach(btn => {
+        btn.onclick = () => {
+          if (qEl.dataset.done) return;
+          qEl.dataset.done = '1';
+          const oi = +btn.dataset.opt, ok = oi === q.answer;
+          qEl.querySelectorAll('.ex-opt').forEach(b2 => {
+            const k = +b2.dataset.opt;
+            b2.classList.toggle('right', k === q.answer);
+            b2.classList.toggle('wrong', k === oi && !ok);
+            b2.disabled = true;
+          });
+          const why = qEl.querySelector('.ex-why');
+          why.innerHTML = `${ok ? '✅ 答對了!' : '❌ 再想想。'}${escapeHtml(q.why)}`;
+          why.classList.remove('hidden');
+          const p = learnProgress(), rec = p[l.id];
+          const w = new Set(rec.wrong || []);
+          if (ok) w.delete(qi); else w.add(qi);
+          rec.wrong = [...w].sort((a, b) => a - b);
+          learnSave(p);
+        };
+      });
+    });
+  }
+
   // ---------- AI 入門島:課程 ----------
   function renderLessonList() {
     const prog = learnProgress();
@@ -403,7 +455,7 @@
       <div class="ex-list">${L.map((l, i) => {
         const p = prog[l.id];
         return `<button type="button" class="ex-item" data-lesson="${l.id}"><span class="ex-ico">${l.icon}</span>
-          <span><b>第 ${i + 1} 課 ${escapeHtml(l.title)}</b>${p ? ` <span class="ex-done">✓ ${p.score}/${p.total}</span>` : ''}<br><span class="muted small">${escapeHtml(l.intro)}</span></span></button>`;
+          <span><b>第 ${i + 1} 課 ${escapeHtml(l.title)}</b>${isNewLesson(l) ? ' <span class="ex-new">NEW</span>' : ''}${p ? ` <span class="ex-done">✓ ${p.score}/${p.total}</span>` : ''}<br><span class="muted small">${escapeHtml(l.intro)}</span></span></button>`;
       }).join('')}</div>`;
   }
 
@@ -454,7 +506,7 @@
           if (Object.keys(answers).length === l.quiz.length) {
             const score = Object.values(answers).filter(Boolean).length;
             const prog = learnProgress();
-            prog[l.id] = { score, total: l.quiz.length, at: autodivYmd(new Date()) };
+            prog[l.id] = { score, total: l.quiz.length, at: autodivYmd(new Date()), wrong: Object.keys(answers).filter(k => !answers[k]).map(Number) };
             learnSave(prog);
             exploreRefreshLabels();
             const next = L[L.indexOf(l) + 1];

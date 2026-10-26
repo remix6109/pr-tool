@@ -1016,3 +1016,6 @@ th { color: var(--muted); font-weight: 600; font-size: .8rem; }
 .ex-auto summary { cursor: pointer; padding: 8px 0; }
 .ex-embed > .card { margin: 0 0 12px; border: 1px solid var(--border); box-shadow: none; }
 .ex-embed > #ex-embed-empty { margin-bottom: 10px; }
+.ex-new { font-size: .72rem; padding: 1px 6px; border-radius: 6px; background: rgba(210,83,63,.15); color: #C8432F; font-weight: 700; }
+.ex-review-btn { border-color: var(--primary); }
+.ex-rv-lesson { margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px dashed var(--border); }
