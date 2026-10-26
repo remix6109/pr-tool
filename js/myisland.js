@@ -1,4 +1,4 @@
-/* 我的島 — 參考「HEART 政策島」的玩法做的個人版:16 塊等大六邊形拼成一顆心。
+/* 我的島 — 參考「HEART 政策島」的玩法做的個人版:14 格六邊形加 2 塊空地拼成一顆心。
  * 作品區 = 做過、正在做的東西;家區 = 黃與蘇的真實記錄;未來區 = 跟著資料長大的目標。
  * 點一格:鏡頭飛過去、下方顯示細項與協作關係;看法可切 全景/清單/時間。
  * 金額只放在下方文字(隱私模式會模糊),3D 看板上不放金額。
@@ -32,8 +32,8 @@
         { t: '劇本「討伐董卓」:玩董卓這邊', when: '10/26' },
         { t: '自動流程測試 2000 多項', when: '持續' }
       ] },
-    { id: 'workshop', no: '03', zone: 'work', icon: '🗿', name: '3D 模型工坊', kind: 'workshop', land: '#D7D2C4',
-      quote: 'AI 生出模型,Blender 切割、縮面、畫圖示,一把一把歸檔。',
+    { id: 'workshop', no: '03', zone: 'work', icon: '🗿', name: '三國 3D 工坊', kind: 'workshop', land: '#D7D2C4',
+      quote: '三國遊戲裡的專武和武將公仔,都在這裡用 AI 生成 3D 模型,再用 Blender 整理好放進遊戲。',
       tags: ['Tripo', 'Blender'],
       items: [
         { t: '蜀魏吳 36 把專武模型', when: '10/25' },
@@ -41,25 +41,7 @@
         { t: '群雄五星公仔 4 隻', when: '10/25' },
         { t: '武將頁專武 3D 旋轉展示', when: '10/25' }
       ] },
-    { id: 'tcg', no: '04', zone: 'work', icon: '🃏', name: '卡牌店中文化', kind: 'shop', land: '#E3D3BF',
-      quote: '想玩的遊戲沒有中文,那就自己做。',
-      tags: ['MOD', '翻譯', '插件'],
-      items: [
-        { t: 'TCG Card Shop Simulator 的 MOD 介面繁中化', when: '10/12' },
-        { t: '自製中文字型插件', when: '10/12' },
-        { t: '寶可夢名稱字典 1107 條', when: '10/12' },
-        { t: '卡冊近看卡片時的中文資訊面板', when: '10 月' }
-      ] },
-    { id: 'farm', no: '05', zone: 'work', icon: '🌱', name: '小花瓜種田', kind: 'farm', land: '#C9DDA8',
-      quote: '一覺醒來變成種植小花瓜:收成像開盲盒,天氣 × 機率 × 變異。',
-      tags: ['規劃中', '休閒', '掛機'],
-      items: [
-        { t: '休閒種田、可以一天玩很久的節奏', when: '構想' },
-        { t: '一張作物圖 + 特效圖層疊加,省下大部分美術', when: '構想' },
-        { t: '星光、月光、琥珀等稀有變異', when: '構想' },
-        { t: '還沒開工,島上正在搭鷹架', when: '施工中' }
-      ] },
-    { id: 'learnisle', no: '06', zone: 'work', icon: '🧭', name: '探索學習', kind: 'learn', land: '#C6DCE6',
+    { id: 'learnisle', no: '04', zone: 'work', icon: '🧭', name: '探索學習', kind: 'learn', land: '#C6DCE6',
       quote: '不只記帳,也要看懂 AI 和理財在做什麼。',
       tags: ['AI', '理財知識', '自動更新'],
       items: [
@@ -68,50 +50,50 @@
         { t: '複習題庫與錯題本', when: '10/26' },
         { t: '雲端每 10 天自動加新課', when: '11/1 起' }
       ] },
-    { id: 'ai', no: '07', zone: 'work', icon: '🤖', name: 'AI 工作室', kind: 'ai', land: '#D9D4EE',
+    { id: 'ai', no: '05', zone: 'work', icon: '🤖', name: 'AI 工作室', kind: 'ai', land: '#D9D4EE',
       quote: '想法是自己的,程式和模型交給 AI 一起做。',
       tags: ['Claude', '生圖', '3D 生成'],
       items: [
-        { t: '用 Claude 寫這個 APP、三國遊戲和 MOD 插件', when: '持續' },
+        { t: '用 Claude 寫這個 APP 和三國遊戲', when: '持續' },
         { t: 'AI 生卡面、技能切入圖,再由 AI 歸檔改名', when: '10 月' },
         { t: 'AI 轉 3D 模型,再用 Blender 腳本整理', when: '10 月' },
         { t: '雲端排程:每 10 天自動更新課程', when: '10/26' }
       ] },
-    { id: 'home', no: '08', zone: 'home', icon: '🏠', name: '黃與蘇的家', kind: 'home', land: '#F2D6D6',
+    { id: 'home', no: '06', zone: 'home', icon: '🏠', name: '黃與蘇的家', kind: 'home', land: '#F2D6D6',
       quote: '兩個人的存股,合在一起就是這個家的底氣。', tags: ['真實資料'] },
-    { id: 'huang', no: '09', zone: 'home', person: 0, icon: '🟡', name: '的房間', kind: 'room', land: '#F3E3B5', roof: '#E0A82E',
+    { id: 'huang', no: '07', zone: 'home', person: 0, icon: '🟡', name: '的房間', kind: 'room', land: '#F3E3B5', roof: '#E0A82E',
       quote: '每一次買進,都是一層樓。', tags: ['真實資料'] },
-    { id: 'su', no: '10', zone: 'home', person: 1, icon: '🔵', name: '的房間', kind: 'room', land: '#D5E2F2', roof: '#4F7FC8',
+    { id: 'su', no: '08', zone: 'home', person: 1, icon: '🔵', name: '的房間', kind: 'room', land: '#D5E2F2', roof: '#4F7FC8',
       quote: '每一次買進,都是一層樓。', tags: ['真實資料'] },
-    { id: 'vault', no: '11', zone: 'home', icon: '💰', name: '配息小金庫', kind: 'vault', land: '#EFE2B8',
+    { id: 'vault', no: '09', zone: 'home', icon: '💰', name: '配息小金庫', kind: 'vault', land: '#EFE2B8',
       quote: '不用賣股票,錢自己會來。', tags: ['真實資料'] },
-    { id: 'piggy', no: '12', zone: 'home', icon: '🐷', name: '月存撲滿', kind: 'piggy', land: '#F4DCE2',
+    { id: 'piggy', no: '10', zone: 'home', icon: '🐷', name: '月存撲滿', kind: 'piggy', land: '#F4DCE2',
       quote: '每個月存一點,撲滿會越來越重。', tags: ['真實資料'] },
-    { id: 'wealth', no: '13', zone: 'future', icon: '🏗️', name: '資產里程碑', kind: 'tower', land: '#D3E4EE',
+    { id: 'wealth', no: '11', zone: 'future', icon: '🏗️', name: '資產里程碑', kind: 'tower', land: '#D3E4EE',
       quote: '下一站在哪裡,蓋到哪一層。', tags: ['會長大'] },
-    { id: 'income', no: '14', zone: 'future', icon: '⛲', name: '被動收入', kind: 'fountain', land: '#CFE6E8',
+    { id: 'income', no: '12', zone: 'future', icon: '⛲', name: '被動收入', kind: 'fountain', land: '#CFE6E8',
       quote: '從月領一千開始,一站一站往上。', tags: ['會長大'] },
-    { id: 'study', no: '15', zone: 'future', icon: '🌳', name: '學習之樹', kind: 'tree', land: '#D2E6C8',
+    { id: 'study', no: '13', zone: 'future', icon: '🌳', name: '學習之樹', kind: 'tree', land: '#D2E6C8',
       quote: '上完一堂課,樹就長大一點。', tags: ['會長大'] },
-    { id: 'next', no: '16', zone: 'future', icon: '🪧', name: '下一步', kind: 'sign', land: '#DDE3EA',
+    { id: 'next', no: '14', zone: 'future', icon: '🪧', name: '下一步', kind: 'sign', land: '#DDE3EA',
       quote: '接下來想做的事,都插在這塊路牌上。', tags: ['待辦'],
       items: [
         { t: '三國:吳魏新武將(二喬、甄姬、魯肅、許褚)的卡面與專武', when: '進行中' },
         { t: '三國:200 小時以上的長線養成規劃', when: '規劃' },
-        { t: '小花瓜:開工寫第一個原型', when: '還沒開始' },
         { t: '理財 APP:第一次自動內容更新', when: '11/1' }
       ] }
   ];
   // 拼成愛心的位置:x 以六邊形寬為單位(奇數列錯開半格),r 是第幾列;上面兩個圓弧、尖端朝向鏡頭
   const MYI_LAYOUT = {
     sanguo: [0.5, -1], app: [3.5, -1],
-    workshop: [0, 0], tcg: [1, 0], learnisle: [3, 0], ai: [4, 0],
-    farm: [0.5, 1], huang: [1.5, 1], su: [2.5, 1], piggy: [3.5, 1],
+    workshop: [0, 0], learnisle: [3, 0], ai: [4, 0],
+    huang: [1.5, 1], su: [2.5, 1], piggy: [3.5, 1],
     vault: [1, 2], home: [2, 2], wealth: [3, 2],
     income: [1.5, 3], study: [2.5, 3],
     next: [2, 4]
   };
   MYI_TILES.forEach(t => { [t.x, t.r] = MYI_LAYOUT[t.id]; });
+  const MYI_LOTS = [[1, 0], [0.5, 1]];   // 空地:只有草地和花,不能點
   // 協作關係:哪兩格互相支援
   const MYI_LINKS = [
     ['workshop', 'sanguo', '48 把專武與群雄公仔的 3D 模型'],
@@ -130,16 +112,12 @@
     ['ai', 'app', '用 Claude 寫程式、雲端排程更新課程'],
     ['ai', 'sanguo', '一起設計玩法、寫自動測試'],
     ['ai', 'workshop', 'AI 生圖、轉 3D 模型'],
-    ['ai', 'tcg', '一起寫 MOD 插件'],
     ['huang', 'piggy', '每個月存一點'],
     ['su', 'piggy', '每個月存一點'],
-    ['piggy', 'wealth', '存下來的錢也算底氣'],
-    ['farm', 'next', '開工寫第一個原型']
+    ['piggy', 'wealth', '存下來的錢也算底氣']
   ];
   const MYI_EVENTS = [
     { d: '2026-04-30', t: '理財 APP 第一版上線', tile: 'app' },
-    { d: '2026-10-12', t: 'TCG 卡牌店 MOD 繁中化完成', tile: 'tcg' },
-    { d: '2026-10-16', t: '想到種田遊戲「一覺醒來變成種植小花瓜」', tile: 'farm' },
     { d: '2026-10-17', t: '三國遊戲第一個水墨剪影戰鬥原型', tile: 'sanguo' },
     { d: '2026-10-25', t: '持股小鎮改成 3D、新增市場頁', tile: 'app' },
     { d: '2026-10-25', t: '48 把專武 3D 模型全部完成', tile: 'workshop' },
@@ -282,7 +260,7 @@
           </div>`
       };
     }
-    return { sub: t.id === 'farm' ? '🚧 施工中' : MYI_ZONES[t.zone].name, grow: 0.5, html: '' };
+    return { sub: MYI_ZONES[t.zone].name, grow: 0.5, html: '' };
   }
 
   // 時間軸:固定的里程碑 + 從資料算出來的(第一次買進、累計投入突破、第一次領配息)
@@ -389,18 +367,6 @@
         spin.push({ m: st, axis: 'y', speed: 0.8 });
         box(0.9, 0.35, 0.45, '#8A6A4A', -0.6, 0.7);
         [[0.7, -0.5], [0.85, 0.35]].forEach(([x, z]) => { const w = box(0.08, 0.9, 0.08, '#9AA5AD', x, z); w.rotation.z = 0.35; });
-      } else if (t.kind === 'shop') {
-        box(1.2, 0.75, 0.8, '#F2E6D2', 0, -0.2);
-        for (let i = 0; i < 6; i++) box(0.2, 0.06, 0.45, i % 2 ? '#F4F1EA' : '#D2533F', -0.5 + i * 0.2, 0.38, T + 0.62);
-        ['#E85D5D', '#4F8FD8', '#F2B33D', '#58B368'].forEach((c, i) => box(0.22, 0.04 + i * 0.03, 0.3, c, -0.45 + i * 0.3, 0.8));
-      } else if (t.kind === 'farm') {
-        for (let i = 0; i < 3; i++) {
-          box(1.4, 0.1, 0.25, '#8A5A3A', -0.1, -0.6 + i * 0.45);
-          for (let k = 0; k < 4; k++) add(new THREE.ConeGeometry(0.08, 0.22, 5), '#5FAE4A', -0.6 + k * 0.33, T + 0.21, -0.6 + i * 0.45);
-        }
-        [[0.85, -0.3], [0.85, 0.5], [1.15, -0.3], [1.15, 0.5]].forEach(([x, z]) => cyl(0.03, 1.2, '#C8A060', x - 0.15, z, T, 6));
-        box(0.4, 0.04, 0.9, '#B8864A', 0.85, 0.1, T + 0.8);
-        box(0.4, 0.04, 0.9, '#B8864A', 0.85, 0.1, T + 0.4);
       } else if (t.kind === 'learn') {
         ['#4F8FD8', '#E8A23A', '#58B368'].forEach((c, i) => { const b = box(0.9 - i * 0.1, 0.18, 0.6, c, -0.2, 0, T + i * 0.18); b.rotation.y = i * 0.25; });
         const ring = new THREE.Mesh(new THREE.TorusGeometry(0.75, 0.04, 8, 36), new THREE.MeshBasicMaterial({ color: '#7FD8FF', transparent: true, opacity: 0.85 }));
@@ -503,6 +469,27 @@
       label.position.set(0, 3.2, 0);
       g.add(label);
       tiles.push({ t, g, label, base, sub: live.sub });
+    });
+
+    MYI_LOTS.forEach(([lx, lr], i) => {
+      const p = myiPos({ x: lx, r: lr });
+      const g = new THREE.Group();
+      g.position.set(p.x, 0, p.z);
+      const base = new THREE.Mesh(new THREE.CylinderGeometry(MYI_R * 0.95, MYI_R * 0.98, 0.6, 6), flat('#B9C9A8'));
+      base.position.y = -0.1; base.receiveShadow = true;
+      const top = new THREE.Mesh(new THREE.CylinderGeometry(MYI_R * 0.88, MYI_R * 0.9, 0.14, 6), flat('#A9CF8E'));
+      top.position.y = 0.27; top.receiveShadow = true;
+      g.add(base, top);
+      [[-0.6, -0.4], [0.5, 0.5], [0.2, -0.7]].forEach(([x, z], k) => {
+        const tr = new THREE.Mesh(new THREE.ConeGeometry(0.28, 0.8, 6), flat('#5E9A5A'));
+        tr.position.set(x + i * 0.2, 0.74, z); tr.castShadow = true; g.add(tr);
+        void k;
+      });
+      ['#F28AA0', '#FFD447', '#FFFFFF', '#B9A8FF', '#F28AA0'].forEach((c, k) => {
+        const f = new THREE.Mesh(new THREE.SphereGeometry(0.07, 6, 5), flat(c));
+        f.position.set(-0.2 + Math.cos(k * 1.3) * 0.7, 0.4, 0.3 + Math.sin(k * 1.3) * 0.5); g.add(f);
+      });
+      scene.add(g);
     });
 
     // 協作線:兩格之間的拱形管子,選到其中一格時變亮,還有光點流動
@@ -659,7 +646,7 @@
     box.innerHTML = t ? myiDetailHtml(t, D) : `<div class="myi-sheet">
       <div class="myi-kicker">HELLO / 我的島</div>
       <div class="myi-title">每一格,都是你的一部分</div>
-      <div class="muted small" style="margin:6px 0 10px;">16 塊等大的六邊形拼成一顆心。點一格(或下面的清單)看細項,粉紅色的線是格子之間的協作關係。家和未來區用的是 APP 裡的真實記錄,會跟著長大。</div>
+      <div class="muted small" style="margin:6px 0 10px;">14 格六邊形加 2 塊空地拼成一顆心(空地留給之後的新作品)。點一格(或下面的清單)看細項,粉紅色的線是格子之間的協作關係。家和未來區用的是 APP 裡的真實記錄,會跟著長大。</div>
       <div class="myi-zones">${Object.values(MYI_ZONES).map(z => `<div class="myi-zone" style="--zone:${z.color}"><b>${z.name}</b><span class="muted small">${z.desc}</span></div>`).join('')}</div>
     </div>`;
     box.querySelectorAll('[data-myi]').forEach(b => { b.onclick = () => { MYI.sel = null; myiSelect(b.dataset.myi); }; });
