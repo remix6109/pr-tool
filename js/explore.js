@@ -12,7 +12,8 @@
     { id: 'town', name: '小鎮島', icon: '🏙️', desc: '你的 3D 持股小鎮', x: -3.5, z: 4.5, kind: 'town', land: '#8DB86E' },
     { id: 'dividend', name: '配息島', icon: '💰', desc: '待確認配息與配息行事曆', x: 4.5, z: 5, kind: 'coins', land: '#D8C48E' },
     { id: 'market', name: '市場島', icon: '🌊', desc: '三大法人、夜盤與國際市場', x: 11, z: 5.5, kind: 'lighthouse', land: '#9DC88A' },
-    { id: 'finance', name: '理財知識島', icon: '📚', desc: '除息、填息、補充保費一次搞懂', x: -11, z: 5, kind: 'books', land: '#A9C98C' }
+    { id: 'finance', name: '理財知識島', icon: '📚', desc: '除息、填息、補充保費一次搞懂', x: -11, z: 5, kind: 'books', land: '#A9C98C' },
+    { id: 'me', name: '我的島', icon: '💗', desc: '作品・家・未來,拼成一顆心', x: -6, z: -11, kind: 'heart', land: '#E9C3C8' }
   ];
 
   // ---------- 學習進度(存在這台裝置) ----------
@@ -150,6 +151,11 @@
         beam.geometry.translate(0, -2.5, 0); beam.rotation.z = Math.PI / 2;
         const pivot = new THREE.Group(); pivot.position.y = T + 2.75; pivot.add(beam); g.add(pivot);
         spin.push({ m: pivot, axis: 'y', speed: 0.9 });
+      } else if (def.kind === 'heart') {
+        const h = new THREE.Mesh(myiHeartGeo(0.9, 0.35), flat('#E5486A', { emissive: '#B0203A', emissiveIntensity: 0.3 }));
+        h.position.y = T + 1.5; h.castShadow = true; g.add(h);
+        spin.push({ m: h, axis: 'y', speed: 0.7 });
+        [[-1.1, 0.6, '#E0A82E'], [1.1, 0.6, '#4F7FC8']].forEach(([x, z, c]) => { box(0.6, 0.5, 0.6, '#F7EDE4', x, z); box(0.66, 0.12, 0.66, c, x, z, T + 0.5); });
       } else if (def.kind === 'books') {
         ['#3F7373', '#B85042', '#E8A23A', '#5C8C7D', '#7D6A55'].forEach((c, i) => {
           const b = box(1.5 - i * 0.12, 0.28, 1.0, c, 0, 0, T + i * 0.28); b.rotation.y = i * 0.18;
@@ -228,7 +234,7 @@
   }
 
   function exploreVisible() {
-    return !!(EXPLORE.s && $('#page-explore').classList.contains('active') && document.visibilityState === 'visible');
+    return !!(EXPLORE.s && $('#page-explore').classList.contains('active') && !$('#explore-stage').classList.contains('hidden') && document.visibilityState === 'visible');
   }
   function exploreStart() {
     const s = EXPLORE.s;
@@ -330,6 +336,7 @@
     if (s) s.islands.forEach(it => { const k = it.def.id === id ? 0.55 : 1; it.label.scale.set(4.6 * k, 4.6 * k * 120 / 300, 1); it.label.position.y = it.def.id === id ? 3.6 : 5.0; });
     if (s && !def) s.want = { x: 0, z: 0, dist: 32 };   // 回全景(複習題庫也停在全景)
     $('#explore-back').classList.toggle('hidden', !def);
+    if (!EXPLORE.failed) $('#explore-stage').classList.toggle('hidden', id === 'me');   // 我的島有自己的 3D 畫面,地圖先收起來
     renderExplorePanel();
     if (def) $('#explore-panel').scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
@@ -399,12 +406,14 @@
     if (L && L.length) body = (def.id === 'auto' && !EXPLORE.lesson ? renderAutoIntro() : '') + (EXPLORE.lesson ? renderLesson(EXPLORE.lesson) : renderLessonList());
     else if (def.id === 'ai-tools') body = renderTools();
     else if (EXPLORE_EMBED[def.id]) body = '<div id="ex-embed" class="ex-embed"></div><div id="ex-embed-empty" class="muted small hidden"></div>';
+    else if (def.id === 'me') body = myIslandHtml();
     box.innerHTML = `<div class="ex-head"><div class="card-title" style="margin:0;">${def.icon} ${escapeHtml(def.name)}</div>
       <button type="button" class="btn ghost small" id="ex-back2">← 地圖</button></div>${body}`;
     $('#ex-back2').onclick = () => (EXPLORE.lesson ? (EXPLORE.lesson = null, renderExplorePanel()) : exploreSelect(null));
     if (L && L.length) bindLessonUi(box);
     if (def.id === 'ai-tools') bindToolsUi(box);
     if (EXPLORE_EMBED[def.id]) exploreEmbed(def.id);
+    if (def.id === 'me') myIslandMount();
   }
 
   // ---------- 內容更新提醒:每 10 天的雲端更新會在 GitHub 開「內容更新」的待審核 PR ----------
