@@ -472,7 +472,25 @@
   }
 
   // ---------- 財經新聞 ----------
-  const NEWS_TABS = ['mine', 'tech', 'tw', 'us', 'world'];
+  const NEWS_TABS = ['mine', 'tech', 'tw', 'us', 'world', 'headline', 'etf', 'twmacro', 'wdmacro', 'forex', 'fund', 'crypto', 'energy',
+    'politics', 'social', 'intl', 'life', 'game', 'sport', 'ent'];
+  const NEWS_BASE = ['tech', 'tw', 'us', 'world', 'quick'];   // 一開始就載入(「與我持股相關」要比對這幾類)
+  // 其他分類點到才載入,各自 20 分鐘內不重抓
+  async function loadNewsCat(cat) {
+    MKT.newsCatAt = MKT.newsCatAt || {};
+    if (NEWS_BASE.includes(cat) || cat === 'mine' || Date.now() - (MKT.newsCatAt[cat] || 0) < 20 * 60 * 1000) return;
+    MKT.newsCatAt[cat] = Date.now();
+    try {
+      const r = await marketGet('/news?cat=' + cat + '&limit=25');
+      MKT.news = MKT.news || { cats: {} };
+      MKT.news.cats[cat] = r.cats[cat];
+    } catch (e) {
+      MKT.newsCatAt[cat] = 0;
+      MKT.news = MKT.news || { cats: {} };
+      MKT.news.cats[cat] = { error: e.message };
+    }
+    renderNews();
+  }
   function newsTab() {
     let t = null;
     try { t = localStorage.getItem('pr.newsTab'); } catch (_) {}
@@ -537,41 +555,48 @@
     const card = $('#card-news');
     if (!card || card.classList.contains('collapsed')) return;
     const tab = newsTab();
-    $$('#news-tabs [data-news-tab]').forEach(b => {
+    $$('#news-tabs [data-news-tab], #news-tabs-2 [data-news-tab]').forEach(b => {
       b.classList.toggle('active', b.dataset.newsTab === tab);
       b.onclick = () => { try { localStorage.setItem('pr.newsTab', b.dataset.newsTab); } catch (_) {} renderNews(); };
     });
+    loadNewsCat(tab);
     const box = $('#news-list');
     if (!MKT.news) { box.innerHTML = `<div class="muted small">${MKT.error ? '讀取失敗:' + escapeHtml(MKT.error) : '新聞讀取中…'}</div>`; return; }
     if (tab === 'mine' && !MKT.holdings) { box.innerHTML = '<div class="muted small">正在讀取你的成分股,用來比對相關新聞…</div>'; return; }
+    const raw = (MKT.news.cats || {})[tab];
+    if (tab !== 'mine' && !NEWS_BASE.includes(tab) && !raw) { box.innerHTML = '<div class="muted small">新聞讀取中…</div>'; return; }
+    if (raw && raw.error) { box.innerHTML = `<div class="muted small">讀取失敗:${escapeHtml(raw.error)}</div>`; return; }
     const items = newsItems(tab).slice(0, 30);
     if (!items.length) {
       box.innerHTML = `<div class="muted small">${tab === 'mine' ? '最近的新聞裡沒有提到你持有的 ETF 或主要成分股。' : '目前沒有新聞。'}</div>`;
       return;
     }
-    box.innerHTML = items.map(({ n, why, cat }) => `<a class="news-item" href="${escapeHtml(n.url)}" data-news-id="${n.id}" data-news-cat="${cat}" target="_blank" rel="noopener noreferrer">
+    const ext = items.some(x => x.n.external);
+    box.innerHTML = items.map(({ n, why, cat }) => `<a class="news-item" href="${escapeHtml(n.url)}" ${n.external ? (n.reader ? 'data-news-ext="1"' : '') : `data-news-id="${escapeHtml(String(n.id))}" data-news-cat="${escapeHtml(cat)}"`} target="_blank" rel="noopener noreferrer">
         ${n.image ? `<img class="news-img" src="${escapeHtml(n.image)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : '<span class="news-img"></span>'}
         <span class="news-body">
           <span class="news-title">${escapeHtml(n.title)}</span>
           ${why ? `<span class="news-why">相關:${escapeHtml(why)}</span>` : ''}
           <span class="news-meta">${escapeHtml(n.source || '')}・${timeAgo(n.time)}</span>
         </span>
-      </a>`).join('') + '<div class="muted small" style="margin-top:6px;">新聞來源:鉅亨網。點新聞在 APP 內閱讀,內文下方有原文連結。「與我持股相關」是比對新聞標註的相關股票與標題,可能漏掉或多抓。</div>';
+      </a>`).join('') + (ext
+        ? `<div class="muted small" style="margin-top:6px;">新聞來源:${escapeHtml(items[0].n.source || '')}。點新聞在 APP 內閱讀,內文下方有原文連結。</div>`
+        : '<div class="muted small" style="margin-top:6px;">新聞來源:鉅亨網。點新聞在 APP 內閱讀,內文下方有原文連結。「與我持股相關」是比對新聞標註的相關股票與標題,可能漏掉或多抓。</div>');
   }
 
   // 在 APP 內閱讀:中繼站取出那一篇、清理成安全格式後顯示
-  async function openArticle(id, cat, fallbackUrl) {
+  async function openArticle(id, cat, fallbackUrl, extUrl) {
     const body = $('#article-body');
     $('#article-origin').href = fallbackUrl;
     body.innerHTML = '<div class="muted">讀取中…</div>';
     openModal('modal-article');
     try {
-      const a = await marketGet('/article?id=' + encodeURIComponent(id) + '&cat=' + encodeURIComponent(cat));
+      const a = await marketGet(extUrl ? '/article?url=' + encodeURIComponent(extUrl) : '/article?id=' + encodeURIComponent(id) + '&cat=' + encodeURIComponent(cat));
       body.innerHTML = `<h2 class="article-title">${escapeHtml(a.title)}</h2>
         <div class="muted small">${escapeHtml(a.source)}・${a.time ? new Date(a.time).toLocaleString('zh-TW', { hour12: false }) : ''}</div>
         ${a.image ? `<img class="article-cover" src="${escapeHtml(a.image)}" alt="" referrerpolicy="no-referrer">` : ''}
         <div class="article-content">${a.html}</div>
-        <div class="muted small" style="margin-top:12px;">本文出自鉅亨網,版權屬原作者與鉅亨網所有。</div>`;
+        <div class="muted small" style="margin-top:12px;">本文出自${escapeHtml(a.source || '鉅亨網')},版權屬原作者與${escapeHtml(a.source || '鉅亨網')}所有。</div>`;
       body.querySelectorAll('img').forEach(img => img.setAttribute('referrerpolicy', 'no-referrer'));
       body.scrollTop = 0;
     } catch (e) {
@@ -584,9 +609,10 @@
     list._bound = true;
     list.addEventListener('click', (e) => {
       const a = e.target.closest('a.news-item');
-      if (!a || !a.dataset.newsId) return;
+      if (!a || (!a.dataset.newsId && !a.dataset.newsExt)) return;
       e.preventDefault();
-      openArticle(a.dataset.newsId, a.dataset.newsCat, a.href);
+      if (a.dataset.newsExt) openArticle(null, null, a.href, a.href);   // 中央社/巴哈:由中繼站抓正文
+      else openArticle(a.dataset.newsId, a.dataset.newsCat, a.href);
     });
   }
 

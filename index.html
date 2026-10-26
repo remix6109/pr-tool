@@ -175,13 +175,32 @@
     <!-- 市場:新聞、台股群島、國際市場、我的成分股 -->
     <div class="page" id="page-market">
       <div class="card" id="card-news" data-collapse="news">
-        <div class="card-title">財經新聞 <small class="muted" style="font-weight:500;font-size:.75em;">(鉅亨網,點標題開原文)</small></div>
+        <div class="card-title">新聞 <small class="muted" style="font-weight:500;font-size:.75em;">(財經:鉅亨網・時事:中央社・遊戲:巴哈姆特)</small></div>
         <div class="news-tabs" id="news-tabs">
+          <span class="news-group">💰 財經</span>
           <button type="button" class="chip" data-news-tab="mine">與我持股相關</button>
+          <button type="button" class="chip" data-news-tab="headline">頭條</button>
           <button type="button" class="chip" data-news-tab="tech">AI/科技</button>
           <button type="button" class="chip" data-news-tab="tw">台股</button>
           <button type="button" class="chip" data-news-tab="us">美股</button>
           <button type="button" class="chip" data-news-tab="world">國際</button>
+          <button type="button" class="chip" data-news-tab="etf">ETF</button>
+          <button type="button" class="chip" data-news-tab="twmacro">台灣總經</button>
+          <button type="button" class="chip" data-news-tab="wdmacro">國際總經</button>
+          <button type="button" class="chip" data-news-tab="forex">外匯</button>
+          <button type="button" class="chip" data-news-tab="fund">基金</button>
+          <button type="button" class="chip" data-news-tab="crypto">加密貨幣</button>
+          <button type="button" class="chip" data-news-tab="energy">能源</button>
+        </div>
+        <div class="news-tabs" id="news-tabs-2">
+          <span class="news-group">🌏 生活時事</span>
+          <button type="button" class="chip" data-news-tab="politics">時事</button>
+          <button type="button" class="chip" data-news-tab="social">社會</button>
+          <button type="button" class="chip" data-news-tab="intl">國際時事</button>
+          <button type="button" class="chip" data-news-tab="life">生活</button>
+          <button type="button" class="chip" data-news-tab="game">遊戲</button>
+          <button type="button" class="chip" data-news-tab="sport">體育</button>
+          <button type="button" class="chip" data-news-tab="ent">娛樂</button>
         </div>
         <div id="news-list"></div>
       </div>
@@ -653,7 +672,7 @@
   <div class="modal-box wide article-box">
     <div id="article-body"></div>
     <div class="modal-actions">
-      <a class="btn ghost" id="article-origin" href="#" target="_blank" rel="noopener noreferrer">到鉅亨網看原文</a>
+      <a class="btn ghost" id="article-origin" href="#" target="_blank" rel="noopener noreferrer">到原網站看原文</a>
       <button class="btn primary" data-close>關閉</button>
     </div>
   </div>
