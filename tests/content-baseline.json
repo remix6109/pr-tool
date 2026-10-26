@@ -21,7 +21,10 @@
   "fin-nhi": 2,
   "fin-tax": 1,
   "fin-cost": 1,
-  "fin-yield": 1
+  "fin-yield": 1,
+  "ai-scam": 2,
+  "auto-billing": 2,
+  "fin-tax-compare": 2
  },
  "tools": [
   "chatgpt",
