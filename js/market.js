@@ -476,18 +476,26 @@
     'politics', 'social', 'intl', 'life', 'game', 'sport', 'ent'];
   const NEWS_BASE = ['tech', 'tw', 'us', 'world', 'quick'];   // 一開始就載入(「與我持股相關」要比對這幾類)
   // 其他分類點到才載入,各自 20 分鐘內不重抓
-  async function loadNewsCat(cat) {
+  // 讀取失敗時 1 分鐘後才自動重試(避免一直重抓);按「重新整理」可以立刻重抓
+  async function loadNewsCat(cat, force) {
     MKT.newsCatAt = MKT.newsCatAt || {};
-    if (NEWS_BASE.includes(cat) || cat === 'mine' || Date.now() - (MKT.newsCatAt[cat] || 0) < 20 * 60 * 1000) return;
+    if (NEWS_BASE.includes(cat) || cat === 'mine') return;
+    if (!force && Date.now() - (MKT.newsCatAt[cat] || 0) < 20 * 60 * 1000) return;
+    if (MKT.newsLoading && MKT.newsLoading[cat]) return;
+    MKT.newsLoading = MKT.newsLoading || {};
+    MKT.newsLoading[cat] = true;
     MKT.newsCatAt[cat] = Date.now();
+    MKT.news = MKT.news || { cats: {} };
+    const retryLater = () => { MKT.newsCatAt[cat] = Date.now() - 19 * 60 * 1000; };
     try {
-      const r = await marketGet('/news?cat=' + cat + '&limit=25');
-      MKT.news = MKT.news || { cats: {} };
+      const r = await marketGet('/news?cat=' + cat + '&limit=25' + (force ? '&_=' + Date.now() : ''));
       MKT.news.cats[cat] = r.cats[cat];
+      if (!Array.isArray(r.cats[cat])) retryLater();
     } catch (e) {
-      MKT.newsCatAt[cat] = 0;
-      MKT.news = MKT.news || { cats: {} };
       MKT.news.cats[cat] = { error: e.message };
+      retryLater();
+    } finally {
+      MKT.newsLoading[cat] = false;
     }
     renderNews();
   }
@@ -565,7 +573,11 @@
     if (tab === 'mine' && !MKT.holdings) { box.innerHTML = '<div class="muted small">正在讀取你的成分股,用來比對相關新聞…</div>'; return; }
     const raw = (MKT.news.cats || {})[tab];
     if (tab !== 'mine' && !NEWS_BASE.includes(tab) && !raw) { box.innerHTML = '<div class="muted small">新聞讀取中…</div>'; return; }
-    if (raw && raw.error) { box.innerHTML = `<div class="muted small">讀取失敗:${escapeHtml(raw.error)}</div>`; return; }
+    if (raw && raw.error) {
+      box.innerHTML = `<div class="muted small">讀取失敗:${escapeHtml(raw.error)}</div><button type="button" class="btn ghost small" id="news-retry" style="margin-top:8px;">🔄 重新整理</button>`;
+      $('#news-retry').onclick = () => { MKT.news.cats[tab] = null; renderNews(); loadNewsCat(tab, true); };
+      return;
+    }
     const items = newsItems(tab).slice(0, 30);
     if (!items.length) {
       box.innerHTML = `<div class="muted small">${tab === 'mine' ? '最近的新聞裡沒有提到你持有的 ETF 或主要成分股。' : '目前沒有新聞。'}</div>`;
