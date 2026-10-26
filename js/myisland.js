@@ -166,14 +166,20 @@
   function myiLessons() {
     const sets = typeof ALL_LESSON_SETS === 'function' ? ALL_LESSON_SETS() : [];
     const prog = typeof learnProgress === 'function' ? learnProgress() : {};
-    let total = 0, done = 0, quiz = 0, answered = 0, right = 0;
-    const per = sets.map(([name, L]) => {
+    const isles = ['ai-intro', 'auto', 'finance'];   // 跟 ALL_LESSON_SETS 的順序一樣
+    let total = 0, done = 0, quiz = 0, answered = 0, right = 0, wrong = 0, next = null;
+    const per = sets.map(([name, L], i) => {
       const d = L.filter(l => prog[l.id]).length;
       total += L.length; done += d;
-      L.forEach(l => { quiz += (l.quiz || []).length; const p = prog[l.id]; if (p) { answered += p.total || 0; right += p.score || 0; } });
+      L.forEach(l => {
+        quiz += (l.quiz || []).length;
+        const p = prog[l.id];
+        if (p) { answered += p.total || 0; right += p.score || 0; wrong += (p.wrong || []).length; }
+        else if (!next) next = { isle: isles[i], id: l.id, title: l.title, icon: l.icon };   // 下一堂還沒上的課
+      });
       return { name, done: d, total: L.length };
     });
-    return { total, done, quiz, answered, right, per };
+    return { total, done, quiz, answered, right, wrong, next, per };
   }
   function myiData() {
     if (!STATE.data) return null;
@@ -266,9 +272,14 @@
     if (t.id === 'study') {
       const L = D.lessons, p = L.total ? L.done / L.total : 0;
       return {
-        sub: `完成 ${L.done}/${L.total} 課`, grow: p,
+        sub: `完成 ${L.done}/${L.total} 課${L.wrong ? `・🏮 ${L.wrong}` : ''}`, grow: p, lanterns: L.wrong,
         html: `${bar(p)}<div class="myi-stats">${L.per.map(x => stat(x.name, `${x.done}/${x.total}`)).join('')}</div>
-          ${L.answered ? `<div class="muted small">答對 ${L.right}/${L.answered} 題(${Math.round(L.right / L.answered * 100)}%)</div>` : '<div class="muted small">還沒上過課,到探索群島的課程島試試看。</div>'}`
+          ${L.answered ? `<div class="muted small">答對 ${L.right}/${L.answered} 題(${Math.round(L.right / L.answered * 100)}%)${L.wrong ? `・樹上掛著 ${L.wrong} 盞錯題燈籠,複習答對就會熄掉` : ''}</div>` : '<div class="muted small">還沒上過課,按「繼續上課」從第一堂開始。</div>'}
+          <div class="myi-acts">
+            ${L.next ? `<button type="button" class="btn small" data-myi-go="lesson">📖 繼續上課<span class="muted small">${L.next.icon} ${escapeHtml(L.next.title)}</span></button>`
+              : '<button type="button" class="btn small" disabled>🎉 全部上完了<span class="muted small">新課每 10 天會自動加進來</span></button>'}
+            <button type="button" class="btn ghost small" data-myi-go="review"${L.wrong ? '' : ' disabled'}>📝 複習錯題<span class="muted small">${L.wrong ? `${L.wrong} 題待複習` : '目前沒有錯題'}</span></button>
+          </div>`
       };
     }
     return { sub: t.id === 'farm' ? '🚧 施工中' : MYI_ZONES[t.zone].name, grow: 0.5, html: '' };
@@ -467,6 +478,22 @@
         cyl(0.12 * k + 0.05, 0.9 * k, '#8A5A3A', 0, 0, T, 8);
         [[0, 1.05, 0, 0.55], [-0.3, 0.85, 0.15, 0.4], [0.3, 0.9, -0.1, 0.42]].forEach(([x, y, z, r]) => add(new THREE.IcosahedronGeometry(r * k, 0), '#5FA84A', x * k, T + y * k, z * k));
         if (grow >= 1) add(new THREE.SphereGeometry(0.12, 8, 6), '#E5486A', 0.25, T + 1.25 * k, 0.3);
+        // 錯題燈籠:一題一盞(最多 12 盞),掛在樹冠外圍輕輕晃;複習答對後重畫就少一盞
+        const n = Math.min(12, live.lanterns || 0);
+        for (let i = 0; i < n; i++) {
+          const a = i / n * Math.PI * 2 + 0.4, rr = (0.55 + (i % 2) * 0.12) * k + 0.1, y = T + (0.75 + (i % 3) * 0.18) * k;
+          const lan = new THREE.Group();
+          lan.position.set(Math.cos(a) * rr, y, Math.sin(a) * rr);
+          const str = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.16, 4), flat('#5A4A3A'));
+          str.position.y = -0.08;
+          const body = new THREE.Mesh(new THREE.SphereGeometry(0.11, 10, 8), new THREE.MeshStandardMaterial({ color: '#FF6A3D', emissive: '#FF4A1A', emissiveIntensity: 0.9 }));
+          body.scale.set(1, 1.25, 1); body.position.y = -0.24;
+          const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.04, 8), flat('#C89A3A'));
+          cap.position.y = -0.12;
+          lan.add(str, cap, body);
+          g.add(lan);
+          spin.push({ m: lan, sway: true, phase: i * 1.7 });
+        }
       } else if (t.kind === 'sign') {
         cyl(0.06, 1.4, '#7A5A3A', 0, 0, T, 8);
         [[1.15, 0.5, '#E8875B'], [0.85, -0.6, '#3E93C2'], [0.55, 0.9, '#D9607E']].forEach(([y, a, c]) => { const b = box(0.85, 0.2, 0.06, c, 0, 0, T + y); b.rotation.y = a; b.position.x = Math.cos(-a) * 0.3; b.position.z = Math.sin(-a) * 0.3; });
@@ -532,6 +559,7 @@
     s.prev = now; s.t += dt;
     s.spin.forEach(x => {
       if (x.wave) x.m.rotation.y = x.base + Math.sin(s.t * 3 + x.m.position.x) * 0.25;
+      else if (x.sway) { x.m.rotation.z = Math.sin(s.t * 1.6 + x.phase) * 0.18; x.m.rotation.x = Math.cos(s.t * 1.3 + x.phase) * 0.12; }
       else if (x.rise) {
         const p = (s.t * 0.35 + x.phase) % 1;
         x.m.position.set(Math.cos(x.a + p * 3) * x.r, x.low + (x.top - x.low) * p, Math.sin(x.a + p * 3) * x.r);
@@ -635,6 +663,21 @@
       <div class="myi-zones">${Object.values(MYI_ZONES).map(z => `<div class="myi-zone" style="--zone:${z.color}"><b>${z.name}</b><span class="muted small">${z.desc}</span></div>`).join('')}</div>
     </div>`;
     box.querySelectorAll('[data-myi]').forEach(b => { b.onclick = () => { MYI.sel = null; myiSelect(b.dataset.myi); }; });
+    // 學習之樹:直接開下一堂課,或打開錯題本(只看答錯的)
+    box.querySelectorAll('[data-myi-go]').forEach(b => {
+      b.onclick = () => {
+        const L = myiLessons();
+        if (b.dataset.myiGo === 'lesson' && L.next) {
+          exploreSelect(L.next.isle);
+          EXPLORE.lesson = L.next.id;
+          renderExplorePanel();
+        } else if (b.dataset.myiGo === 'review') {
+          EXPLORE.reviewWrong = true;
+          exploreSelect('review');
+        }
+        $('#explore-panel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      };
+    });
   }
 
   function myiRenderList(box, D) {
