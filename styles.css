@@ -967,3 +967,39 @@ th { color: var(--muted); font-weight: 600; font-size: .8rem; }
 .town3d-banner.year { font-size: 3.4rem; letter-spacing: .08em; color: rgba(255,255,255,.95); }
 .town3d-banner.show { animation: town3dBanner 1.8s ease-out forwards; }
 @keyframes town3dBanner { 0% { opacity: 0; transform: translate(-50%, -30%) scale(.8); } 15% { opacity: 1; transform: translate(-50%, -50%) scale(1.05); } 70% { opacity: 1; transform: translate(-50%, -55%) scale(1); } 100% { opacity: 0; transform: translate(-50%, -70%) scale(1); } }
+
+/* === 探索:群島地圖 === */
+.explore-stage { position: relative; height: min(52vh, 420px, 100vw); border-radius: 14px; overflow: hidden; background: var(--bar-bg); margin-bottom: 12px; }
+#explore-canvas { width: 100%; height: 100%; display: block; touch-action: pan-y; }
+.explore-back { position: absolute; left: 10px; top: 10px; z-index: 2; background: rgba(255,255,255,.9); color: #2A3938; }
+.explore-hint { position: absolute; right: 10px; bottom: 8px; padding: 3px 8px; border-radius: 8px; background: rgba(30,42,42,.65); color: #fff; pointer-events: none; }
+.ex-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.ex-list { display: flex; flex-direction: column; gap: 8px; }
+.ex-item { display: flex; gap: 10px; align-items: flex-start; text-align: left; width: 100%; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--border); background: var(--surface); color: var(--text); cursor: pointer; line-height: 1.5; }
+.ex-ico { font-size: 1.6rem; line-height: 1.2; }
+.ex-soon { font-size: .72rem; padding: 1px 6px; border-radius: 6px; background: rgba(232,162,58,.18); color: #B07800; }
+.ex-done { font-size: .75rem; padding: 1px 6px; border-radius: 6px; background: var(--neutral-bg); color: var(--primary); }
+.ex-ul { padding-left: 1.2em; line-height: 1.8; }
+.ex-lesson h3 { margin: 0 0 4px; font-size: 1.1rem; }
+.ex-lesson h4 { margin: 14px 0 4px; }
+.ex-lesson p { line-height: 1.8; margin: 0; }
+.ex-example { margin-top: 14px; padding: 10px 12px; border-radius: 12px; background: var(--neutral-bg); line-height: 1.7; }
+.ex-bad, .ex-good { margin-top: 6px; padding: 6px 10px; border-radius: 8px; background: var(--surface); }
+.ex-bad span, .ex-good span { display: block; font-size: .75rem; font-weight: 700; }
+.ex-bad span { color: var(--muted); } .ex-good span { color: var(--primary); }
+.ex-q { margin-top: 10px; }
+.ex-qt { font-weight: 600; margin-bottom: 6px; line-height: 1.6; }
+.ex-opt { display: block; width: 100%; text-align: left; margin: 4px 0; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface); color: var(--text); cursor: pointer; line-height: 1.5; }
+.ex-opt.right { border-color: #2F8A45; background: rgba(47,138,69,.12); }
+.ex-opt.wrong { border-color: #C8432F; background: rgba(200,67,47,.10); }
+.ex-why { margin-top: 4px; font-size: .9em; line-height: 1.7; color: var(--text); }
+.ex-result { margin-top: 14px; padding: 10px 12px; border-radius: 12px; background: var(--neutral-bg); display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.ex-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.ex-tool { padding: 12px; border-radius: 12px; border: 1px solid var(--border); margin-bottom: 10px; display: flex; flex-direction: column; gap: 5px; line-height: 1.6; }
+.ex-thead { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.ex-stars { color: #E8A23A; white-space: nowrap; letter-spacing: 1px; }
+.ex-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+.ex-tag { font-size: .8rem; padding: 2px 8px; border-radius: 8px; background: var(--neutral-bg); }
+.ex-crow { padding: 10px 0; border-bottom: 1px solid var(--border); line-height: 1.6; }
+.ex-pick { display: inline-block; margin: 3px 4px 3px 0; padding: 1px 8px; border-radius: 8px; background: var(--neutral-bg); color: var(--primary); font-weight: 600; font-size: .85rem; }
+.ex-tool a { color: var(--primary); font-weight: 600; }

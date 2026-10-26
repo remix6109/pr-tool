@@ -251,6 +251,15 @@
     </div>
 
     <!-- 歷史 -->
+    <!-- 探索:3D 群島地圖 -->
+    <div class="page" id="page-explore">
+      <div class="explore-stage" id="explore-stage">
+        <button type="button" class="btn ghost small explore-back hidden" id="explore-back">← 回地圖</button>
+        <div class="explore-hint small">點一座島看看・左右滑動旋轉</div>
+      </div>
+      <div class="card" id="explore-panel"></div>
+    </div>
+
     <div class="page" id="page-history">
       <div class="seg">
         <button class="seg-btn active" data-tab="purchases">買賣</button>
@@ -306,6 +315,7 @@
     <button class="nav-btn active" data-page="home"><div>🏠</div><div>首頁</div></button>
     <button class="nav-btn" data-page="market"><div>📈</div><div>市場</div></button>
     <button class="nav-btn" data-page="add"><div>➕</div><div>新增</div></button>
+    <button class="nav-btn" data-page="explore"><div>🧭</div><div>探索</div></button>
     <button class="nav-btn" data-page="history"><div>📋</div><div>歷史</div></button>
   </nav>
 </section>
@@ -726,6 +736,8 @@
 <script src="js/datacheck.js"></script>
 <script src="js/town.js"></script>
 <script src="js/town3d.js"></script>
+<script src="js/explore-data.js"></script>
+<script src="js/explore.js"></script>
 <script src="js/market.js"></script>
 <script src="js/fx.js"></script>
 <script src="js/main.js"></script>

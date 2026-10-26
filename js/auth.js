@@ -101,6 +101,7 @@
         $$('.page').forEach(p => p.classList.toggle('active', p.id === 'page-' + page));
         if (page === 'history') renderHistory();
         if (page === 'market') marketTick();
+        if (page === 'explore') exploreShow();
         window.scrollTo(0, 0);
       };
     });
