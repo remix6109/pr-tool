@@ -260,12 +260,118 @@
           </div>`
       };
     }
+    if (myiEditable(t)) {
+      const items = myiItems(t);
+      return { sub: t.id === 'next' ? `${items.filter(x => !x.done).length} 項待辦` : `${items.filter(x => x.done).length}/${items.length} 完成`, grow: 0.5, html: '' };
+    }
     return { sub: MYI_ZONES[t.zone].name, grow: 0.5, html: '' };
   }
 
   // 時間軸:固定的里程碑 + 從資料算出來的(第一次買進、累計投入突破、第一次領配息)
+  // ---------- 進度:作品區與下一步可以自己打勾、新增、刪除 ----------
+  // 存在試算表 _island:內建細項用 note 'ref:<格子>:<序號>' 記完成日(date 空白 = 沒完成)、'hide:<格子>:<序號>' = 刪掉;
+  // note 空白的是自己新增的細項。改動先更新畫面再送後端,失敗就還原。
+  const myiEditable = (t) => t.zone === 'work' || t.id === 'next';
+  const myiDefaultDone = (when) => /^\d{1,2}\/\d{1,2}$|月$/.test(when || '');   // 內建細項寫了日期的 = 已經做完
+  const myiIsYmd = (d) => /^\d{4}-\d{2}-\d{2}$/.test(d || '');
+  function myiRows() { return STATE.data && Array.isArray(STATE.data.island) ? STATE.data.island : []; }
+  function myiItems(t) {
+    const rows = myiRows().filter(r => String(r.tile) === t.id);
+    const out = [];
+    (t.items || []).forEach((x, i) => {
+      const key = t.id + ':' + i;
+      if (rows.some(r => r.note === 'hide:' + key)) return;
+      const ref = rows.find(r => r.note === 'ref:' + key);
+      const done = ref ? (ref.date ? String(ref.date).slice(0, 10) : '') : (t.zone === 'work' && myiDefaultDone(x.when) ? x.when : '');   // 下一步的項目預設都還沒做
+      out.push({ key, text: x.t, when: x.when || '', done, ref });
+    });
+    rows.filter(r => !r.note).sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')))
+      .forEach(r => out.push({ key: 'u:' + r.id, text: String(r.text || ''), when: '', done: r.date ? String(r.date).slice(0, 10) : '', row: r }));
+    return out;
+  }
+  async function myiSave(apply, send) {
+    if (MYI.saving) return;
+    MYI.saving = true;
+    const undo = apply();
+    myiAfterEdit();
+    try {
+      await send();
+      localStorage.setItem(KEY.cache, JSON.stringify(STATE.data));
+      myiAfterEdit();   // 新增的那筆拿到正式 id 後重畫,按鈕才會對到它
+    } catch (e) {
+      undo();
+      myiAfterEdit();
+      alert('儲存失敗:' + e.message + '\n已還原這次修改,建議稍後再試或按「重新載入」同步');
+    } finally {
+      MYI.saving = false;
+    }
+  }
+  function myiNewRow(t, text, date, note) {
+    return { id: 'tmp-' + Date.now(), tile: t.id, text, date, note, created_at: new Date().toISOString() };
+  }
+  function myiPush(row) {
+    const arr = STATE.data.island || (STATE.data.island = []);
+    return [() => { arr.push(row); return () => { const i = arr.indexOf(row); if (i >= 0) arr.splice(i, 1); }; },
+      async () => { const r = await API.addIsland({ tile: row.tile, text: row.text, date: row.date, note: row.note, created_by: STATE.defaultPerson }); row.id = r.id; }];
+  }
+  function myiToggle(t, key) {
+    const it = myiItems(t).find(x => x.key === key);
+    if (!it || !STATE.data) return;
+    const next = it.done ? '' : autodivYmd(new Date());
+    const row = it.row || it.ref;
+    if (row) {
+      const prev = row.date;
+      myiSave(() => { row.date = next; return () => { row.date = prev; }; }, () => API.updateRecord('_island', row.id, { date: next }));
+    } else {
+      myiSave(...myiPush(myiNewRow(t, it.text, next, 'ref:' + key)));
+    }
+  }
+  function myiDelete(t, key) {
+    const it = myiItems(t).find(x => x.key === key);
+    if (!it || !STATE.data || !confirm(`刪除「${it.text}」?`)) return;
+    if (it.row) {
+      const arr = STATE.data.island, row = it.row;
+      let at = -1;
+      myiSave(() => { at = arr.indexOf(row); arr.splice(at, 1); return () => arr.splice(at, 0, row); }, () => API.deleteRecord('_island', row.id));
+    } else {
+      myiSave(...myiPush(myiNewRow(t, it.text, '', 'hide:' + key)));   // 內建細項:記一筆「隱藏」
+    }
+  }
+  function myiAdd(t, text) {
+    text = String(text || '').trim().slice(0, 80);
+    if (!text || !STATE.data) return;
+    myiSave(...myiPush(myiNewRow(t, text, '', '')));
+  }
+  // 改完:重畫細節、更新那一格的看板
+  function myiAfterEdit() {
+    const t = MYI_TILES.find(x => x.id === MYI.sel);
+    if (MYI.s && t) {
+      const x = MYI.s.tiles.find(y => y.t.id === t.id);
+      if (x) x.sub = myiLive(t, myiData()).sub;
+      myiHighlight();
+    }
+    myiRenderDetail();
+  }
+  function myiItemsHtml(t) {
+    const items = myiItems(t), edit = myiEditable(t);
+    if (!items.length && !edit) return '';
+    const fmtDone = (d) => myiIsYmd(d) ? `✓ ${+d.slice(5, 7)}/${+d.slice(8)}` : `✓ ${d}`;
+    return `<div class="myi-sub">${t.id === 'next' ? '待辦' : '細項'}${edit ? ' <span class="muted small" style="font-weight:400;">・點圓圈打勾,完成的會記到時間軸</span>' : ''}</div>
+      <ul class="myi-items${edit ? ' edit' : ''}${t.id === 'next' ? ' todo' : ''}">${items.map(x => `<li class="${x.done ? 'done' : ''}">
+        ${edit ? `<button type="button" class="myi-chk" data-chk="${escapeHtml(x.key)}" aria-label="${x.done ? '取消完成' : '標記完成'}">${x.done ? '✓' : ''}</button>` : ''}
+        <span class="myi-it">${escapeHtml(x.text)}</span>
+        <span class="muted small myi-when">${escapeHtml(x.done ? fmtDone(x.done) : x.when)}</span>
+        ${edit ? `<button type="button" class="myi-del" data-del="${escapeHtml(x.key)}" aria-label="刪除">✕</button>` : ''}
+      </li>`).join('')}${!items.length ? '<li class="muted small">還沒有項目,在下面新增第一項。</li>' : ''}</ul>
+      ${edit ? `<form class="myi-add"><input type="text" maxlength="80" placeholder="${t.id === 'next' ? '新增一件想做的事…' : '新增一項進度…'}" aria-label="新增項目"><button type="submit" class="btn small">＋ 新增</button></form>` : ''}`;
+  }
+
   function myiTimeline(D) {
     const ev = MYI_EVENTS.map(e => Object.assign({}, e));
+    // 自己打勾完成的細項(內建或自己新增的)記到完成那天
+    MYI_TILES.filter(myiEditable).forEach(t => myiItems(t).forEach(x => {
+      if ((x.row || x.ref) && myiIsYmd(x.done)) ev.push({ d: x.done, t: '✓ ' + x.text, tile: t.id });
+    }));
     if (D) {
       D.P.forEach((p, i) => { if (D.per[p].first) ev.push({ d: D.per[p].first, t: `${D.per[p].label}第一次買進`, tile: i ? 'su' : 'huang' }); });
       let cum = 0;
@@ -631,7 +737,7 @@
       <div class="myi-quote">「${escapeHtml(t.quote)}」</div>
       <div class="myi-chips">${(t.tags || []).map(x => `<span class="myi-chip">${escapeHtml(x)}</span>`).join('')}<span class="myi-chip">${links.length} 條協作</span></div>
       ${live.html ? `<div class="myi-live">${live.html}</div>` : ''}
-      ${t.items ? `<div class="myi-sub">細項</div><ul class="myi-items">${t.items.map(x => `<li><span>${escapeHtml(x.t)}</span><span class="muted small">${escapeHtml(x.when || '')}</span></li>`).join('')}</ul>` : ''}
+      ${myiItemsHtml(t)}
       ${links.length ? `<div class="myi-sub">協作關係</div><div class="myi-links">${links.map(l => {
         const o = MYI_TILES.find(x => x.id === (l[0] === t.id ? l[1] : l[0]));
         return `<button type="button" class="myi-link" data-myi="${o.id}"><b>${o.icon} ${escapeHtml(myiTileName(o))}</b><span class="muted small">${escapeHtml(l[2])}</span></button>`;
@@ -650,6 +756,12 @@
       <div class="myi-zones">${Object.values(MYI_ZONES).map(z => `<div class="myi-zone" style="--zone:${z.color}"><b>${z.name}</b><span class="muted small">${z.desc}</span></div>`).join('')}</div>
     </div>`;
     box.querySelectorAll('[data-myi]').forEach(b => { b.onclick = () => { MYI.sel = null; myiSelect(b.dataset.myi); }; });
+    if (t && myiEditable(t)) {
+      box.querySelectorAll('[data-chk]').forEach(b => { b.onclick = () => myiToggle(t, b.dataset.chk); });
+      box.querySelectorAll('[data-del]').forEach(b => { b.onclick = () => myiDelete(t, b.dataset.del); });
+      const f = box.querySelector('.myi-add');
+      if (f) f.onsubmit = (e) => { e.preventDefault(); myiAdd(t, f.querySelector('input').value); };
+    }
     // 學習之樹:直接開下一堂課,或打開錯題本(只看答錯的)
     box.querySelectorAll('[data-myi-go]').forEach(b => {
       b.onclick = () => {

@@ -1057,3 +1057,12 @@ th { color: var(--muted); font-weight: 600; font-size: .8rem; }
 .myi-acts { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
 .myi-acts .btn { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; flex: 1 1 140px; }
 .myi-acts .btn[disabled] { opacity: .55; cursor: default; }
+.myi-items.edit li { align-items: center; }
+.myi-items.edit li > .myi-it { flex: 1; }
+.myi-items .myi-when { white-space: nowrap; }
+.myi-chk { flex: 0 0 auto; width: 24px; height: 24px; border-radius: 50%; border: 2px solid var(--zone); background: transparent; color: #fff; font-weight: 800; font-size: .8rem; line-height: 1; cursor: pointer; padding: 0; }
+.myi-items li.done .myi-chk { background: var(--zone); }
+.myi-items.todo li.done .myi-it { text-decoration: line-through; opacity: .65; }
+.myi-del { flex: 0 0 auto; border: 0; background: transparent; color: var(--muted); cursor: pointer; padding: 2px 4px; font-size: .85rem; }
+.myi-add { display: flex; gap: 6px; margin-top: 8px; }
+.myi-add input { flex: 1; min-width: 0; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); }
