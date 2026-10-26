@@ -138,6 +138,35 @@
   const mColor = (v) => v > 0 ? 'var(--up)' : v < 0 ? 'var(--down)' : 'var(--muted)';   // 台股習慣:紅漲綠跌
   const twHourNow = () => { const d = new Date(Date.now() + 8 * 3600e3); return d.getUTCHours() + d.getUTCMinutes() / 60; };
   const isNightSession = () => { const h = twHourNow(); return h >= 15 || h < 5; };
+  // 日期標示:'2026-10-22' → '10/22(四)';夜盤從開盤那天 15:00 到隔天 05:00(期交所的日期是開盤那天)
+  const twToday = () => new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10);
+  const mDay = (iso, week = true) => {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || '');
+    if (!m) return '';
+    return `${+m[2]}/${+m[3]}` + (week ? `(${'日一二三四五六'[new Date(Date.UTC(+m[1], m[2] - 1, +m[3])).getUTCDay()]})` : '');
+  };
+  const mNextDay = (iso) => new Date(Date.parse(iso + 'T00:00:00Z') + 86400e3).toISOString().slice(0, 10);
+  const nightRange = (start) => start ? `${mDay(start, false)} 15:00–${mDay(mNextDay(start), false)} 05:00` : '';
+  // 每個報價是哪個時間點的:盤中顯示時間,收盤顯示日期
+  function quoteWhen(kind, x) {
+    if (!x || !x.date) return '';
+    const hm = String(x.time || '').slice(0, 5);
+    if (kind === 'night') return x.trading ? `夜盤交易中 ${hm}` : `夜盤 ${nightRange(x.date)}`;
+    if (kind === 'fut') return x.trading ? `盤中 ${hm}` : `${mDay(x.date)} 收盤`;
+    return x.date === twToday() && x.time && x.time < '13:30:00' ? `盤中 ${hm}` : `${mDay(x.date)} 收盤`;   // 現貨 13:30 收盤
+  }
+  // 市場狀態:交易中 / 已收盤 / 尚未開盤 / 休市
+  function marketStatus(q) {
+    if (!q) return '';
+    if (q.txfDay && q.txfDay.trading) return '🟢 日盤交易中';
+    if (q.txfNight && q.txfNight.trading) return '🌙 夜盤交易中';
+    const last = (q.taiex && q.taiex.date) || (q.txfDay && q.txfDay.date);
+    if (!last) return '';
+    if (last === twToday()) return '⏸ 今日已收盤';
+    const wd = new Date(Date.now() + 8 * 3600e3).getUTCDay();
+    if (wd >= 1 && wd <= 5 && twHourNow() < 8.75) return `⏸ 尚未開盤・上個交易日 ${mDay(last)}`;
+    return `⛔ 休市中・最後交易日 ${mDay(last)}`;
+  }
 
   function sparkline(points, w = 96, h = 26) {
     if (!points || points.length < 2) return '';
@@ -200,6 +229,10 @@
     s += `<circle cx="${cx}" cy="${cy - 40}" r="9" fill="${tx ? mColor(tx.chgPct) : 'var(--muted)'}"/>`;
     s += `<text x="${cx}" y="${cy + 22}" text-anchor="middle" font-size="11" fill="var(--muted)">${night ? '台指期夜盤' : '台指期'}</text>`;
     s += `<text x="${cx}" y="${cy + 38}" text-anchor="middle" font-size="13" font-weight="700" fill="${tx ? mColor(tx.chgPct) : 'var(--muted)'}">${tx && tx.price ? fmt.money(tx.price) + ' ' + mPct(tx.chgPct) : '—'}</text>`;
+    if (tx && tx.price) s += `<text x="${cx}" y="${cy + 54}" text-anchor="middle" font-size="10" fill="var(--muted)">${escapeHtml(night ? (tx.trading ? '交易中 ' + String(tx.time || '').slice(0, 5) : nightRange(tx.date)) : quoteWhen('fut', tx))}</text>`;
+    // 左上角:島上的籌碼是哪一天
+    const chipDay = cash.date || fut.date;
+    if (chipDay) s += `<text x="12" y="20" font-size="11" fill="var(--muted)">籌碼 ${mDay(chipDay)} 盤後</text>`;
     s += '</svg>';
     return s;
   }
@@ -210,14 +243,17 @@
     const q = MKT.quote, d = MKT.daily;
     // 即時列
     const strip = [];
-    if (q && q.taiex) strip.push(`加權 <b class="${mCls(q.taiex.chgPct)}">${mFmt(q.taiex.price)} ${mPct(q.taiex.chgPct)}</b>`);
-    if (q && q.txfDay) strip.push(`台指期 <b class="${mCls(q.txfDay.chgPct)}">${fmt.money(q.txfDay.price)} ${mPct(q.txfDay.chgPct)}</b>`);
-    if (q && q.txfNight && q.txfNight.price) strip.push(`夜盤 <b class="${mCls(q.txfNight.chgPct)}">${fmt.money(q.txfNight.price)} ${mPct(q.txfNight.chgPct)}</b>`);
-    $('#islands-live').innerHTML = strip.length ? strip.join('・') + `<span class="muted small">・更新 ${new Date(MKT.quoteAt).toLocaleTimeString('zh-TW', { hour12: false })}</span>`
+    const when = (t) => t ? ` <span class="muted small" style="white-space:nowrap;">${escapeHtml(t)}</span>` : '';
+    if (q && q.taiex) strip.push(`加權 <b class="${mCls(q.taiex.chgPct)}">${mFmt(q.taiex.price)} ${mPct(q.taiex.chgPct)}</b>${when(quoteWhen('spot', q.taiex))}`);
+    if (q && q.txfDay) strip.push(`台指期 <b class="${mCls(q.txfDay.chgPct)}">${fmt.money(q.txfDay.price)} ${mPct(q.txfDay.chgPct)}</b>${when(quoteWhen('fut', q.txfDay))}`);
+    if (q && q.txfNight && q.txfNight.price) strip.push(`夜盤 <b class="${mCls(q.txfNight.chgPct)}">${fmt.money(q.txfNight.price)} ${mPct(q.txfNight.chgPct)}</b>${when(quoteWhen('night', q.txfNight).replace(/^夜盤 ?/, ''))}`);
+    const status = marketStatus(q);
+    $('#islands-live').innerHTML = strip.length ? (status ? `<span class="mk-status">${escapeHtml(status)}</span>` : '') + strip.join('・') + `<span class="muted small">・APP 更新 ${new Date(MKT.quoteAt).toLocaleTimeString('zh-TW', { hour12: false })}</span>`
       : `<span class="muted small">${MKT.error ? '讀取失敗:' + escapeHtml(MKT.error) : '讀取中…'}</span>`;
     // 你的持股即時
-    const mine = q ? marketPersonCodes().map(c => q.stocks[c] ? `${c} <span class="${mCls(q.stocks[c].chgPct)}">${mFmt(q.stocks[c].price)} ${mPct(q.stocks[c].chgPct)}</span>` : null).filter(Boolean) : [];
-    $('#islands-mine').innerHTML = mine.length ? escapeHtml(personName()) + '的持股:' + mine.join('・') : '';
+    const myCodes = q ? marketPersonCodes().filter(c => q.stocks[c]) : [];
+    const mine = myCodes.map(c => `${c} <span class="${mCls(q.stocks[c].chgPct)}">${mFmt(q.stocks[c].price)} ${mPct(q.stocks[c].chgPct)}</span>`);
+    $('#islands-mine').innerHTML = mine.length ? escapeHtml(personName()) + '的持股' + when(quoteWhen('spot', q.stocks[myCodes[0]])) + ':' + mine.join('・') : '';
 
     const hist = d && Array.isArray(d.history) ? d.history : [];
     const latest = { cash: (hist.filter(h => h.cash).slice(-1)[0] || {}).cash, fut: (hist.filter(h => h.fut).slice(-1)[0] || {}).fut };
@@ -240,14 +276,19 @@
         return `<span title="${h.date} ${mFmt(v, 1)} 億" style="height:${ht}px;background:${mColor(v)}"></span>`;
       }).join('') + '</div>';
     })() : '';
+    // 盤後夜盤:期交所盤後資料裡的夜盤,是「前一個交易日 15:00 到這天 05:00」那一場
+    const prevWeekday = (iso) => { let t = Date.parse(iso + 'T00:00:00Z'); do { t -= 86400e3; } while ([0, 6].includes(new Date(t).getUTCDay())); return new Date(t).toISOString().slice(0, 10); };
+    const nightStart = f.date ? (hist.map(h => h.date).filter(dt => dt < f.date).slice(-1)[0] || prevWeekday(f.date)) : '';   // 歷史不夠時用前一個平日
+    const chipHead = c.date && f.date && c.date !== f.date ? `現貨 ${mDay(c.date)}、期貨 ${mDay(f.date)}` : mDay(c.date || f.date);
     $('#islands-detail').innerHTML = `
+      ${chipHead ? `<div class="mk-row muted small">📅 以下是 ${chipHead} 的官方盤後籌碼</div>` : ''}
       <div class="mk-row"><b>外資</b> 現貨 <span class="${mCls(c.foreign)}">${mFmt(c.foreign, 1)} 億</span>${bs(c.foreignBuy, c.foreignSell)}・台指期 ${oi(f.txForeignNet)}</div>
       <div class="mk-row"><b>投信</b> 現貨 <span class="${mCls(c.trust)}">${mFmt(c.trust, 1)} 億</span>${bs(c.trustBuy, c.trustSell)}・台指期 ${oi(f.txTrustNet)}</div>
       <div class="mk-row"><b>自營商</b> 現貨 <span class="${mCls(c.dealer)}">${mFmt(c.dealer, 1)} 億</span>${bs(c.dealerBuy, c.dealerSell)}・台指期 ${oi(f.txDealerNet)}</div>
       <div class="mk-row"><b>散戶(小台)</b> ${oi(f.mtxRetailNet)}・多空比 <span class="${mCls(f.mtxRetailRatio)}">${f.mtxRetailRatio === null || f.mtxRetailRatio === undefined ? '—' : (f.mtxRetailRatio > 0 ? '偏多 ' : '偏空 ') + Math.abs(f.mtxRetailRatio).toFixed(1) + '%'}</span></div>
-      ${f.night ? `<div class="mk-row"><b>上一個夜盤收盤</b> ${fmt.money(f.night.close)} <span class="${mCls(f.night.chgPct)}">${mPct(f.night.chgPct)}</span></div>` : ''}
+      ${f.night ? `<div class="mk-row"><b>夜盤${nightStart ? ' ' + nightRange(nightStart) : ''}</b> 收盤 ${fmt.money(f.night.close)} <span class="${mCls(f.night.chgPct)}">${mPct(f.night.chgPct)}</span></div>` : ''}
       <div class="mk-row muted small">外資近 10 日現貨買賣超 ${bars}</div>
-      <div class="muted small">籌碼資料日期:現貨 ${c.date || '—'}、期貨 ${f.date || '—'}(官方盤後公布,非即時)</div>`;
+      <div class="muted small">籌碼資料日期:現貨 ${mDay(c.date) || '—'}、期貨 ${mDay(f.date) || '—'}(官方盤後公布,非即時,通常交易日下午公布當天資料)</div>`;
   }
 
   // ---------- 國際市場 + 連動度 ----------

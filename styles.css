@@ -1021,3 +1021,4 @@ th { color: var(--muted); font-weight: 600; font-size: .8rem; }
 .ex-rv-lesson { margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px dashed var(--border); }
 .ex-update { display: block; margin-bottom: 10px; padding: 10px 12px; border-radius: 12px; background: rgba(232,162,58,.16); border: 1px solid #E8A23A; color: var(--text); text-decoration: none; line-height: 1.6; font-weight: 600; }
 .news-group { flex: 0 0 auto; align-self: center; font-size: .78rem; color: var(--muted); font-weight: 700; padding-right: 2px; }
+.mk-status { display: inline-block; font-size: .78rem; font-weight: 700; padding: 1px 8px; margin-right: 6px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--border); }
