@@ -1,4 +1,4 @@
-/* 我的島 — 參考「HEART 政策島」的玩法做的個人版:一整塊愛心形的島,13 格(作品/家/未來)是地上的色塊,中間上方是主角大愛心。
+/* 我的島 — 參考「HEART 政策島」的玩法做的個人版:一整塊愛心形的島,13 格(作品/家/未來)是地上的色塊,中間上方是主角小豬吉祥物。
  * 作品區 = 做過、正在做的東西;家區 = 黃與蘇的真實記錄;未來區 = 跟著資料長大的目標。
  * 點一格:鏡頭飛過去、下方顯示細項與協作關係;看法可切 全景/清單/時間。兩指或滾輪縮放,右上角按鈕回全景。
  * 可以自己新增格子(先填空地,再往外長)和協作線,一樣存在試算表 _island。
@@ -712,6 +712,55 @@
     return renderer.capabilities.isWebGL2 && (navigator.hardwareConcurrency || 4) >= 4 && !(navigator.deviceMemory && navigator.deviceMemory < 4);
   }
 
+  // 小豬吉祥物:全部用多面體拼的(平面著色有切面感,跟島上其他東西同一個風格)
+  // 回傳要做動作的部位:body 呼吸、upper(頭和手)跟著起伏、head 轉頭、eyes 眨眼
+  function myiPig(flat, mat, dark) {
+    const g = new THREE.Group(), upper = new THREE.Group(), head = new THREE.Group();
+    const PINK = '#F6A3B8', DEEP = '#F08CA6', LIGHT = '#FCD5DE';
+    const put = (parent, geo, material, x, y, z) => { const m = new THREE.Mesh(geo, material); m.position.set(x, y, z); m.castShadow = true; parent.add(m); return m; };
+    const ico = (r) => new THREE.IcosahedronGeometry(r, 2);
+    [[-0.38, 0.3], [0.38, 0.3], [-0.38, -0.3], [0.38, -0.3]].forEach(([x, z]) => put(g, new THREE.CylinderGeometry(0.16, 0.18, 0.32, 10), flat(DEEP), x, 0.16, z));
+    const body = put(g, ico(0.85), flat(PINK), 0, 0.95, 0);
+    body.scale.set(0.96, 0.88, 0.92);
+    put(body, ico(0.6), flat(LIGHT), 0, -0.1, 0.48).scale.set(1, 0.95, 0.5);   // 肚子
+    put(g, new THREE.TorusGeometry(0.12, 0.035, 6, 14, Math.PI * 1.6), flat(DEEP), 0, 1.0, -0.82);   // 捲尾巴
+    g.add(upper);
+    [-1, 1].forEach(k => put(upper, ico(0.17), flat(PINK), k * 0.42, 1.12, 0.68));   // 兩隻手抱在胸前
+    const love = put(upper, myiHeartGeo(0.3, 0.16, true), new THREE.MeshStandardMaterial({ color: myiLin('#FF8DB0'), emissive: myiLin('#FF5A8C'), emissiveIntensity: dark ? 1.2 : 1.0, roughness: 0.3 }), 0, 1.22, 0.86);
+    love.castShadow = false;
+    const halo = (() => {
+      const cv = document.createElement('canvas'); cv.width = cv.height = 128;
+      const c = cv.getContext('2d'), gr = c.createRadialGradient(64, 64, 0, 64, 64, 64);
+      gr.addColorStop(0, 'rgba(255,190,215,.9)'); gr.addColorStop(0.4, 'rgba(255,170,205,.35)'); gr.addColorStop(1, 'rgba(255,170,205,0)');
+      c.fillStyle = gr; c.fillRect(0, 0, 128, 128);
+      const tex = new THREE.CanvasTexture(cv); tex.encoding = THREE.sRGBEncoding;
+      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: dark ? 0.95 : 0.7 }));
+      sp.scale.set(2.4, 2.4, 1); sp.position.set(0, 1.22, 1.0); return sp;
+    })();
+    upper.add(halo);
+    head.position.y = 2.02;
+    head.scale.setScalar(1.2);   // 頭大身體小,Q 版比例比較可愛
+    upper.add(head);
+    const skull = put(head, ico(0.66), flat(PINK), 0, 0, 0);
+    skull.scale.set(1, 0.92, 0.95);
+    const snout = put(head, new THREE.CylinderGeometry(0.24, 0.26, 0.2, 16), flat(DEEP), 0, -0.1, 0.62);
+    snout.rotation.x = Math.PI / 2;
+    const dot = mat(myiLin('#7A3A4A'), { roughness: 0.6 });
+    [-1, 1].forEach(k => put(head, new THREE.SphereGeometry(0.045, 8, 6), dot, k * 0.08, -0.1, 0.73));   // 鼻孔
+    const eyes = [-1, 1].map(k => {
+      const e = put(head, new THREE.SphereGeometry(0.085, 12, 10), mat(myiLin('#241C22'), { roughness: 0.25 }), k * 0.24, 0.1, 0.56);
+      put(e, new THREE.SphereGeometry(0.03, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffffff }), 0.03, 0.035, 0.07);   // 眼睛的反光點
+      return e;
+    });
+    [-1, 1].forEach(k => put(head, new THREE.SphereGeometry(0.11, 10, 8), flat('#FF8EA6', { emissive: '#FF6E8E', emissiveIntensity: 0.15 }), k * 0.42, -0.12, 0.46).scale.set(1, 0.6, 0.4));   // 腮紅
+    [-1, 1].forEach(k => { const ear = put(head, new THREE.ConeGeometry(0.2, 0.32, 5), flat(DEEP), k * 0.38, 0.5, 0.05); ear.rotation.set(-0.2, 0, -k * 0.5); });
+    put(head, new THREE.BoxGeometry(0.34, 0.05, 0.08), dot, 0, 0.6, -0.05);   // 撲滿的投幣口
+    const coin = put(head, new THREE.CylinderGeometry(0.2, 0.2, 0.05, 20), mat(myiLin('#FFD447'), { metalness: 0.4, roughness: 0.3, emissive: myiLin('#C08A00'), emissiveIntensity: 0.6 }), 0, 1.0, -0.05);
+    coin.rotation.x = Math.PI / 2;
+    g.scale.setScalar(1.15);
+    return { g, body, upper, head, eyes, coin };
+  }
+
   function myiBuild(canvas, D) {
     const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
     const hq = myiHighQuality(renderer);
@@ -980,34 +1029,26 @@
       else { const m = new THREE.Mesh(new THREE.DodecahedronGeometry(0.16 + rnd() * 0.12, 0), flat('#C9BFB6')); m.position.set(x, 0.38, z); m.castShadow = true; deco.add(m); }
     });
 
-    // 主角:島中間上方一顆會發光、慢慢轉的大愛心,站在奶油色台座上
+    // 主角:島中間上方的奶油色台座,上面站著小豬吉祥物
     const hp = myiPos({ x: 2, r: 0 });
     const hero = new THREE.Group();
     hero.position.set(hp.x, 0, hp.z - 0.3);
+    hero.scale.setScalar(1.45);   // 主角要夠大,全景一眼就看到
     scene.add(hero);
     [[1.15, 1.25, 0.3, 0.34, '#FFF3E6'], [0.85, 0.95, 0.35, 0.64, '#F9E2D6']].forEach(([r1, r2, h, y, c]) => {
       const m = new THREE.Mesh(new THREE.CylinderGeometry(r1, r2, h, 32), mat(myiLin(c), { roughness: 0.6 }));
       m.position.y = y + h / 2; m.castShadow = true; m.receiveShadow = true; hero.add(m);
     });
-    const heart = new THREE.Mesh(myiHeartGeo(1.45, 0.6, true), new THREE.MeshStandardMaterial({ color: myiLin('#F98BAE'), emissive: myiLin('#FF6A95'), emissiveIntensity: dark ? 0.9 : 0.75, roughness: 0.32, metalness: 0.05 }));
-    heart.position.y = 3.4; heart.castShadow = true;
-    hero.add(heart);
-    spin.push({ m: heart, axis: 'y', speed: 0.55, bob: 3.4 });
-    const halo = (() => {
-      const cv = document.createElement('canvas'); cv.width = cv.height = 128;
-      const g = cv.getContext('2d'), gr = g.createRadialGradient(64, 64, 0, 64, 64, 64);
-      gr.addColorStop(0, 'rgba(255,190,215,.85)'); gr.addColorStop(0.4, 'rgba(255,170,205,.3)'); gr.addColorStop(1, 'rgba(255,170,205,0)');
-      g.fillStyle = gr; g.fillRect(0, 0, 128, 128);
-      const tex = new THREE.CanvasTexture(cv); tex.encoding = THREE.sRGBEncoding;
-      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: dark ? 0.9 : 0.6 }));
-      sp.scale.set(7, 7, 1); sp.position.y = 3.4; return sp;
-    })();
-    hero.add(halo);
-    // 繞著愛心轉的小光點
+    // 小豬吉祥物站在台座上,抱著一顆發光的小愛心(會呼吸、眨眼、轉頭,動作在 myiFrame)
+    const pig = myiPig(flat, mat, dark);
+    pig.g.position.y = 0.99;
+    hero.add(pig.g);
+    s.pig = pig;
+    // 繞著小豬轉的小光點
     for (let i = 0; i < 14; i++) {
       const m = new THREE.Mesh(new THREE.SphereGeometry(0.05 + (i % 3) * 0.02, 8, 6), new THREE.MeshBasicMaterial({ color: myiLin(i % 2 ? '#FFF2B0' : '#FFFFFF') }));
       hero.add(m);
-      spin.push({ m, orbit: true, r: 1.5 + (i % 4) * 0.25, a: i * 0.9, y: 2.4 + (i % 5) * 0.3, speed: 0.35 + (i % 3) * 0.1 });
+      spin.push({ m, orbit: true, r: 1.7 + (i % 4) * 0.25, a: i * 0.9, y: 1.6 + (i % 5) * 0.35, speed: 0.35 + (i % 3) * 0.1 });
     }
     if (typeof explorePerson === 'function') [[-1.15, 0.7, '#E0A82E'], [1.15, 0.7, '#4F7FC8']].forEach(([x, z, c]) => { const m = explorePerson(c); m.position.set(x, 0.34, z); hero.add(m); });
 
@@ -1117,6 +1158,18 @@
       }
     });
     s.links.forEach(l => { if (l.dot.visible) l.dot.position.copy(l.curve.getPoint((s.t * 0.45) % 1)); });
+    // 小豬:肚子一鼓一鼓地呼吸、頭和手跟著起伏;頭慢慢左右看;每 3.6 秒眨一次眼;頭上的金幣轉圈
+    if (s.pig) {
+      const p = s.pig, br = Math.sin(s.t * 2.2);
+      p.body.scale.set(0.96 * (1 + br * 0.02), 0.88 * (1 + br * 0.035), 0.92 * (1 + br * 0.02));
+      p.upper.position.y = br * 0.03;
+      p.head.rotation.y = Math.sin(s.t * 0.45) * 0.4 + Math.sin(s.t * 1.3) * 0.05;
+      p.head.rotation.z = Math.sin(s.t * 0.7) * 0.06;
+      const ph = s.t % 3.6, open = ph < 0.18 ? Math.max(0.1, 1 - Math.sin(ph / 0.18 * Math.PI)) : 1;
+      p.eyes.forEach(e => { e.scale.y = open; });
+      p.coin.rotation.z += dt * 1.6;
+      p.coin.position.y = 1.0 + Math.sin(s.t * 1.8) * 0.08;
+    }
     // 鏡頭:飛向選中的格子,沒操作時左右輕輕擺動
     s.target.x += (s.want.x - s.target.x) * Math.min(1, dt * 2.5);
     s.target.z += (s.want.z - s.target.z) * Math.min(1, dt * 2.5);
