@@ -1,4 +1,4 @@
-/* 我的島 — 參考「HEART 政策島」的玩法做的個人版:13 格六邊形加 3 塊空地拼成一顆心。
+/* 我的島 — 參考「HEART 政策島」的玩法做的個人版:一整塊愛心形的島,13 格(作品/家/未來)是地上的色塊,中間上方是主角大愛心。
  * 作品區 = 做過、正在做的東西;家區 = 黃與蘇的真實記錄;未來區 = 跟著資料長大的目標。
  * 點一格:鏡頭飛過去、下方顯示細項與協作關係;看法可切 全景/清單/時間。兩指或滾輪縮放,右上角按鈕回全景。
  * 可以自己新增格子(先填空地,再往外長)和協作線,一樣存在試算表 _island。
@@ -382,7 +382,7 @@
     }
     const far = (p) => { const q = myiPos({ x: p[0], r: p[1] }); return Math.hypot(q.x, q.z * 0.9); };
     cells.sort((a, b) => far(a) - far(b));
-    myiSlotCache = MYI_LOTS.map(p => p.slice()).concat(cells, notch);
+    myiSlotCache = MYI_LOTS.map(p => p.slice()).concat(cells, notch.slice(1));   // [2,0] 是主角大愛心的位置,不放格子
     return myiSlotCache;
   }
   function myiCustomTiles() {
@@ -538,14 +538,14 @@
 
   // ---------- 3D ----------
   // 愛心形狀(探索地圖上的我的島也用這個)
-  function myiHeartGeo(k, depth) {
+  function myiHeartGeo(k, depth, smooth) {
     const s = new THREE.Shape();
     s.moveTo(0, -k * 0.9);
     s.bezierCurveTo(k * 0.2, -k * 0.6, k, -k * 0.3, k, k * 0.25);
     s.bezierCurveTo(k, k * 0.75, k * 0.45, k * 0.95, 0, k * 0.5);
     s.bezierCurveTo(-k * 0.45, k * 0.95, -k, k * 0.75, -k, k * 0.25);
     s.bezierCurveTo(-k, -k * 0.3, -k * 0.2, -k * 0.6, 0, -k * 0.9);
-    const g = new THREE.ExtrudeGeometry(s, { depth, bevelEnabled: true, bevelThickness: depth * 0.3, bevelSize: k * 0.08, bevelSegments: 2, curveSegments: 10 });
+    const g = new THREE.ExtrudeGeometry(s, { depth, bevelEnabled: true, bevelThickness: depth * 0.3, bevelSize: k * 0.08, bevelSegments: smooth ? 5 : 2, curveSegments: smooth ? 28 : 10 });
     g.center();
     return g;
   }
@@ -565,14 +565,164 @@
   const MYI_R = 1.7, MYI_W = Math.sqrt(3) * MYI_R;
   const myiPos = (t) => ({ x: (t.x - 2) * MYI_W, z: (t.r - 1.5) * 1.5 * MYI_R });
 
+  // ---------- 質感:一座島一個色系、整塊愛心島、光影後製 ----------
+  // 白天是粉彩黃昏,深色模式是粉彩夜晚;作品/家/未來三區只是地上不同顏色的色塊
+  const MYI_PAL = {
+    day: { skyTop: '#BDBDF0', skyMid: '#E8D3EE', skyLow: '#FBE0D4', sea: '#7CC3CC', shallow: '#A8E2DA', sand: '#F0D6A8', earth: '#D8B48C',
+      grass: '#BCDD9C', hemiSky: '#FFF4EC', hemiGround: '#B496A6', sun: '#FFE8D0', sunI: 1.6, hemiI: 0.36, work: '#F6B486', home: '#F39DB5', future: '#98C3EC', exposure: 1.0 },
+    night: { skyTop: '#1A1838', skyMid: '#2E2650', skyLow: '#4E3E66', sea: '#4A4060', shallow: '#6A6488', sand: '#B6A39C', earth: '#7A6070',
+      grass: '#5F7E6C', hemiSky: '#D2CAF2', hemiGround: '#3A2A44', sun: '#E2DAFF', sunI: 0.8, hemiI: 0.45, work: '#B9806A', home: '#B47590', future: '#6A8CB8', exposure: 1.15 }
+  };
+  const myiLin = (hex) => new THREE.Color(hex).convertSRGBToLinear();
+  // 道具顏色收斂成粉彩:降一點彩度、提一點亮度,整座島才會是同一個色系
+  function myiPastel(hex, dark) {
+    const c = new THREE.Color(hex), h = {};
+    c.getHSL(h);
+    c.setHSL(h.h, h.s * (dark ? 0.7 : 0.78), h.l + (1 - h.l) * (dark ? 0.02 : 0.14));
+    return c.convertSRGBToLinear();
+  }
+  // 島的外形:配合格子排法的胖愛心(尖端朝鏡頭);scale 放大就是沙灘、淺水。形狀座標 (x, y) = 世界 (x, -z)
+  function myiIslandShape(scale) {
+    const kx = 7.9 * scale, ky = 10.3 * scale, c = 0.6;
+    const P = (x, y) => [x * kx, y * ky + c];
+    const s = new THREE.Shape();
+    s.moveTo(...P(0, -0.9));
+    s.bezierCurveTo(...P(0.2, -0.6), ...P(1, -0.3), ...P(1, 0.25));
+    s.bezierCurveTo(...P(1, 0.75), ...P(0.45, 0.95), ...P(0, 0.5));
+    s.bezierCurveTo(...P(-0.45, 0.95), ...P(-1, 0.75), ...P(-1, 0.25));
+    s.bezierCurveTo(...P(-1, -0.3), ...P(-0.2, -0.6), ...P(0, -0.9));
+    return s;
+  }
+  let myiHeartPoly = null;
+  function myiInHeart(x, z) {   // 格子中心在不在大島裡(留一點邊),不在的就給它一座小離島
+    if (!myiHeartPoly) myiHeartPoly = myiIslandShape(0.9).getPoints(90);
+    const px = x, py = -z;
+    let inside = false;
+    for (let i = 0, j = myiHeartPoly.length - 1; i < myiHeartPoly.length; j = i++) {
+      const a = myiHeartPoly[i], b = myiHeartPoly[j];
+      if ((a.y > py) !== (b.y > py) && px < (b.x - a.x) * (py - a.y) / (b.y - a.y) + a.x) inside = !inside;
+    }
+    return inside;
+  }
+  const MYI_BOX = { minX: -8.6, maxX: 8.6, minY: -0.9 * 10.3 + 0.6 - 0.7, maxY: 0.95 * 10.3 + 0.6 + 0.7 };   // 地面貼圖涵蓋的範圍(形狀座標)
+  const myiRand = (seed) => () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; };
+  // 地面貼圖:底色 + 每一格一團不規則的區域色塊 + 細小雜點,看起來像手繪
+  function myiTerrainTex(all, P, size) {
+    const B = MYI_BOX, W = B.maxX - B.minX, H = B.maxY - B.minY;
+    const cv = document.createElement('canvas'); cv.width = cv.height = size;
+    const g = cv.getContext('2d');
+    g.fillStyle = P.grass; g.fillRect(0, 0, size, size);
+    const px = (x) => (x - B.minX) / W * size, py = (z) => (B.maxY + z) / H * size, ps = (r) => r / W * size;
+    const rgba = (hex, a) => { const c = new THREE.Color(hex); return `rgba(${c.r * 255 | 0},${c.g * 255 | 0},${c.b * 255 | 0},${a})`; };
+    const blob = (x, z, r, hex, a) => {
+      const gr = g.createRadialGradient(px(x), py(z), 0, px(x), py(z), ps(r));
+      gr.addColorStop(0, rgba(hex, a)); gr.addColorStop(0.55, rgba(hex, a)); gr.addColorStop(1, rgba(hex, 0));
+      g.fillStyle = gr; g.beginPath(); g.arc(px(x), py(z), ps(r), 0, Math.PI * 2); g.fill();
+    };
+    all.forEach((t, i) => {
+      const p = myiPos(t), rnd = myiRand(i * 97 + 13);
+      blob(p.x, p.z, 1.75, P[t.zone], 0.95);
+      for (let k = 0; k < 5; k++) { const a = rnd() * Math.PI * 2, d = 0.6 + rnd() * 0.7; blob(p.x + Math.cos(a) * d, p.z + Math.sin(a) * d, 0.7 + rnd() * 0.5, P[t.zone], 0.8); }
+    });
+    const rnd = myiRand(7);
+    for (let i = 0; i < 1600; i++) {
+      g.fillStyle = rnd() < 0.5 ? 'rgba(255,255,255,.10)' : 'rgba(60,40,40,.05)';
+      g.beginPath(); g.arc(rnd() * size, rnd() * size, 1 + rnd() * size / 300, 0, Math.PI * 2); g.fill();
+    }
+    const tex = new THREE.CanvasTexture(cv);
+    tex.encoding = THREE.sRGBEncoding;
+    tex.repeat.set(1 / W, 1 / H); tex.offset.set(-B.minX / W, -B.minY / H);
+    tex.anisotropy = 4;
+    return tex;
+  }
+  function myiSkyTex(P) {
+    const cv = document.createElement('canvas'); cv.width = 4; cv.height = 256;
+    const g = cv.getContext('2d'), gr = g.createLinearGradient(0, 0, 0, 256);
+    gr.addColorStop(0, P.skyTop); gr.addColorStop(0.55, P.skyMid); gr.addColorStop(1, P.skyLow);
+    g.fillStyle = gr; g.fillRect(0, 0, 4, 256);
+    const tex = new THREE.CanvasTexture(cv);
+    tex.encoding = THREE.sRGBEncoding;
+    return tex;
+  }
+
+  // 光影後製:亮的地方柔柔發光(bloom)、四周微暗;看板另外畫在最上層
+  const MYI_VS = 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0., 1.); }';
+  function myiPostInit(renderer) {
+    const type = renderer.extensions.has('EXT_color_buffer_float') ? THREE.HalfFloatType : THREE.UnsignedByteType;
+    const rt = (o) => new THREE.WebGLRenderTarget(1, 1, Object.assign({ type, depthBuffer: false }, o));
+    const mat = (frag, uniforms) => new THREE.ShaderMaterial({ vertexShader: MYI_VS, fragmentShader: frag, uniforms, depthTest: false, depthWrite: false });
+    const P = { main: rt({ samples: 4, depthBuffer: true }), a: rt(), b: rt(), scene: new THREE.Scene(), cam: new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1) };
+    P.bright = mat(`uniform sampler2D t; uniform float th; varying vec2 vUv;
+      void main(){ vec3 c = texture2D(t, vUv).rgb; float l = dot(c, vec3(.2126, .7152, .0722)); gl_FragColor = vec4(c * smoothstep(th, th + .6, l), 1.); }`,
+      { t: { value: null }, th: { value: 0.7 } });
+    P.blur = mat(`uniform sampler2D t; uniform vec2 d; varying vec2 vUv;
+      void main(){ vec3 c = texture2D(t, vUv).rgb * .227027;
+        c += (texture2D(t, vUv + d * 1.3846).rgb + texture2D(t, vUv - d * 1.3846).rgb) * .3162162;
+        c += (texture2D(t, vUv + d * 3.2308).rgb + texture2D(t, vUv - d * 3.2308).rgb) * .0702703;
+        gl_FragColor = vec4(c, 1.); }`, { t: { value: null }, d: { value: new THREE.Vector2() } });
+    // 這版 three.js 畫進暫存畫面時材質已經做過 ACES 色調,這裡只加柔光、暗角,再轉回 sRGB
+    P.comp = mat(`uniform sampler2D t; uniform sampler2D bl; uniform float k; varying vec2 vUv;
+      vec3 srgb(vec3 c){ return mix(pow(c, vec3(.41666)) * 1.055 - .055, c * 12.92, vec3(lessThanEqual(c, vec3(.0031308)))); }
+      void main(){
+        vec3 c = texture2D(t, vUv).rgb + texture2D(bl, vUv).rgb * k;
+        vec2 q = vUv - .5; c *= 1. - dot(q, q) * .45;
+        gl_FragColor = vec4(srgb(clamp(c, 0., 1.)), 1.); }`, { t: { value: null }, bl: { value: null }, k: { value: 0.5 } });
+    P.quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), P.comp);
+    P.quad.frustumCulled = false;
+    P.scene.add(P.quad);
+    return P;
+  }
+  function myiPostSize(P, w, h) {
+    P.main.setSize(w, h);
+    P.a.setSize(Math.max(1, w >> 1), Math.max(1, h >> 1));
+    P.b.setSize(Math.max(1, w >> 1), Math.max(1, h >> 1));
+  }
+  function myiRender(s) {
+    const r = s.renderer, P = s.post;
+    s.camera.layers.set(0);
+    if (P) {
+      const pass = (m, to) => { P.quad.material = m; r.setRenderTarget(to); r.render(P.scene, P.cam); };
+      r.setRenderTarget(P.main);
+      r.render(s.scene, s.camera);
+      P.bright.uniforms.t.value = P.main.texture; pass(P.bright, P.a);
+      for (let i = 1; i <= 2; i++) {
+        P.blur.uniforms.t.value = P.a.texture; P.blur.uniforms.d.value.set(i / P.a.width, 0); pass(P.blur, P.b);
+        P.blur.uniforms.t.value = P.b.texture; P.blur.uniforms.d.value.set(0, i / P.a.height); pass(P.blur, P.a);
+      }
+      P.comp.uniforms.t.value = P.main.texture; P.comp.uniforms.bl.value = P.a.texture;
+      pass(P.comp, null);
+    } else {
+      r.render(s.scene, s.camera);
+    }
+    // 看板(layer 1)最後直接畫上去:不被後製改顏色,也不會被房子擋住
+    const bg = s.scene.background;
+    s.scene.background = null;
+    r.autoClear = false; r.shadowMap.autoUpdate = false;
+    s.camera.layers.set(1);
+    r.render(s.scene, s.camera);
+    s.camera.layers.set(0);
+    r.autoClear = true; r.shadowMap.autoUpdate = true;
+    s.scene.background = bg;
+  }
+  // 舊手機:沒有 WebGL2、核心少或記憶體小,就不開後製;localStorage pr.myiFx = on/off 可以強制
+  function myiHighQuality(renderer) {
+    const force = localStorage.getItem('pr.myiFx');
+    if (force === 'on') return true;
+    if (force === 'off') return false;
+    return renderer.capabilities.isWebGL2 && (navigator.hardwareConcurrency || 4) >= 4 && !(navigator.deviceMemory && navigator.deviceMemory < 4);
+  }
+
   function myiBuild(canvas, D) {
     const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    const hq = myiHighQuality(renderer);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, hq ? 2 : 1.5));
     renderer.outputEncoding = THREE.sRGBEncoding;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;   // 材質直接做 ACES 色調(畫進後製的暫存畫面時也一樣)
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    const camera = new THREE.PerspectiveCamera(34, 1, 0.1, 300);
-    MYI.s = { renderer, camera, scene: null, tiles: [], links: [], spin: [], flows: [], raf: 0, prev: 0, t: 0, lastTouch: 0,
+    const camera = new THREE.PerspectiveCamera(32, 1, 0.1, 300);
+    MYI.s = { renderer, camera, scene: null, tiles: [], links: [], spin: [], flows: [], raf: 0, prev: 0, t: 0, lastTouch: 0, hq, post: hq ? myiPostInit(renderer) : null,
+      perf: { n: 0, sum: 0 }, ring: null,
       cam: { theta: Math.PI / 2, phi: 0.6, dist: 28 }, target: new THREE.Vector3(), want: { x: 0, z: 0, dist: 24 }, zoom: 1, ext: 1 };
     myiBindControls(canvas);
     myiFill(D);
@@ -581,37 +731,80 @@
   // 把場景內容(島、看板、協作線)依目前資料重做一次
   function myiFill(D) {
     const s = MYI.s;
+    if (s.scene && s.scene.background && s.scene.background.dispose) s.scene.background.dispose();
     if (s.scene) s.scene.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) [].concat(o.material).forEach(m => { if (m.map) m.map.dispose(); m.dispose(); }); });
     const scene = new THREE.Scene();
     const dark = document.documentElement.dataset.theme === 'dark';
-    const sky = new THREE.Color(dark ? '#1E2E38' : '#F6EDE6');
-    scene.background = sky;
-    scene.fog = new THREE.Fog(sky, 34, 80);
-    const sun = new THREE.DirectionalLight('#FFF4E0', dark ? 0.7 : 0.95);
-    sun.position.set(10, 24, 14);
+    const P = dark ? MYI_PAL.night : MYI_PAL.day;
+    s.renderer.toneMappingExposure = P.exposure;
+    scene.background = myiSkyTex(P);
+    const sun = new THREE.DirectionalLight(myiLin(P.sun), P.sunI);
+    sun.position.set(9, 22, 13);
     sun.castShadow = true;
-    sun.shadow.mapSize.set(1024, 1024);
-    Object.assign(sun.shadow.camera, { left: -14, right: 14, top: 14, bottom: -14, near: 1, far: 60 });
-    scene.add(new THREE.HemisphereLight('#FFFFFF', '#7A6A6A', dark ? 0.55 : 0.75), sun);
-    const flat = (color, extra) => new THREE.MeshStandardMaterial(Object.assign({ color, flatShading: true, roughness: 0.85 }, extra || {}));
-    const sea = new THREE.Mesh(new THREE.CircleGeometry(90, 48), flat(dark ? '#264656' : '#9CCFDC'));
-    sea.rotation.x = -Math.PI / 2; sea.position.y = -0.45; sea.receiveShadow = true;
+    sun.shadow.mapSize.set(s.hq ? 2048 : 1024, s.hq ? 2048 : 1024);
+    sun.shadow.bias = -0.0004;
+    Object.assign(sun.shadow.camera, { left: -15, right: 15, top: 15, bottom: -15, near: 1, far: 60 });
+    scene.add(new THREE.HemisphereLight(myiLin(P.hemiSky), myiLin(P.hemiGround), P.hemiI), sun);
+    const mat = (color, extra) => new THREE.MeshStandardMaterial(Object.assign({ color, roughness: 0.9 }, extra || {}));
+    const flat = (color, extra) => {   // 道具:粉彩化、平面著色(低多邊形的面感)
+      extra = Object.assign({}, extra || {});
+      if (typeof extra.emissive === 'string') extra.emissive = myiLin(extra.emissive);
+      return mat(myiPastel(color, dark), Object.assign({ flatShading: true, roughness: 0.82 }, extra));
+    };
+    // 海:中間一池水,往外淡出到背景的漸層(像漂在粉彩色的空間裡,沒有地平線)
+    const fade = (() => {
+      const cv = document.createElement('canvas'); cv.width = cv.height = 256;
+      const g = cv.getContext('2d'), gr = g.createRadialGradient(128, 128, 0, 128, 128, 128);
+      gr.addColorStop(0, '#fff'); gr.addColorStop(0.6, '#fff'); gr.addColorStop(0.85, '#555'); gr.addColorStop(1, '#000');
+      g.fillStyle = gr; g.fillRect(0, 0, 256, 256);
+      return new THREE.CanvasTexture(cv);
+    })();
+    const sea = new THREE.Mesh(new THREE.CircleGeometry(19, 64), mat(myiLin(P.sea), { roughness: 0.5, metalness: 0.05, transparent: true, alphaMap: fade, depthWrite: false }));
+    sea.rotation.x = -Math.PI / 2; sea.position.y = -0.95; sea.receiveShadow = true;
     scene.add(sea);
 
+    // 整塊愛心島:淺水 → 沙灘 → 草地(地面貼圖畫上三區色塊)
+    const flatShape = (sh, y, color, opacity) => {
+      const m = new THREE.Mesh(new THREE.ShapeGeometry(sh, 48), mat(myiLin(color), { transparent: opacity < 1, opacity, roughness: 0.5 }));
+      m.rotation.x = -Math.PI / 2; m.position.y = y; m.receiveShadow = true; scene.add(m); return m;
+    };
+    flatShape(myiIslandShape(1.28), -0.92, P.shallow, 0.35);
+    flatShape(myiIslandShape(1.16), -0.89, P.shallow, 0.5);
+    const slab = (sh, depth, bevel, size, top, mats) => {
+      const geo = new THREE.ExtrudeGeometry(sh, { depth, bevelEnabled: true, bevelThickness: bevel, bevelSize: size, bevelSegments: 4, curveSegments: 36 });
+      const m = new THREE.Mesh(geo, mats);
+      m.rotation.x = -Math.PI / 2; m.position.y = top - depth - bevel; m.receiveShadow = true; m.castShadow = true;
+      scene.add(m); return m;
+    };
+    slab(myiIslandShape(1.06), 1.0, 0.14, 0.45, 0.24, mat(myiLin(P.sand), { roughness: 1 }));
     const spin = [], tiles = [], all = myiAllTiles();
+    slab(myiIslandShape(0.985), 0.3, 0.08, 0.2, 0.34, [mat(0xffffff, { map: myiTerrainTex(all, P, s.hq ? 1024 : 512), roughness: 0.95 }), mat(myiLin(P.earth), { roughness: 1 })]);
+
     // 格子長到心形外面時,全景要拉遠一點才放得下
-    s.ext = Math.max(1, ...all.map(t => { const p = myiPos(t); return Math.max(Math.abs(p.x) + MYI_R, Math.abs(p.z) + MYI_R) / 8; }));
+    s.ext = Math.max(1, ...all.map(t => { const p = myiPos(t); return Math.max(Math.abs(p.x) + MYI_R, Math.abs(p.z) + MYI_R) / 8.1; }));
     all.forEach(t => {
       const p = myiPos(t), live = myiLive(t, D), zone = MYI_ZONES[t.zone];
       const g = new THREE.Group();
       g.position.set(p.x, 0, p.z);
       g.userData.tile = t;
       scene.add(g);
-      const base = new THREE.Mesh(new THREE.CylinderGeometry(MYI_R * 0.95, MYI_R * 0.98, 0.6, 6), flat(zone.color));
-      base.position.y = -0.1; base.receiveShadow = true;
-      const top = new THREE.Mesh(new THREE.CylinderGeometry(MYI_R * 0.88, MYI_R * 0.9, 0.14, 6), flat(t.land));
-      top.position.y = 0.27; top.receiveShadow = true;
-      g.add(base, top);
+      // 點擊用的隱形圓盤(看不到,但點得到)
+      const base = new THREE.Mesh(new THREE.CylinderGeometry(MYI_R * 0.9, MYI_R * 0.9, 0.3, 6), mat(0xffffff));
+      base.position.y = 0.3; base.visible = false;
+      g.add(base);
+      if (!myiInHeart(p.x, p.z)) {   // 大島放不下:自己一座圓圓的小離島
+        const isl = new THREE.Group();
+        isl.position.set(p.x, 0, p.z);
+        const sand = new THREE.Mesh(new THREE.CylinderGeometry(MYI_R * 1.12, MYI_R * 1.22, 1.2, 28), mat(myiLin(P.sand), { roughness: 1 }));
+        sand.position.y = -0.36;
+        const grass = new THREE.Mesh(new THREE.CylinderGeometry(MYI_R * 0.92, MYI_R * 0.98, 0.16, 28), mat(myiLin(P[t.zone]), { roughness: 0.95 }));
+        grass.position.y = 0.26;
+        const ring = new THREE.Mesh(new THREE.CircleGeometry(MYI_R * 1.6, 32), mat(myiLin(P.shallow), { transparent: true, opacity: 0.6, roughness: 0.5 }));
+        ring.rotation.x = -Math.PI / 2; ring.position.y = -0.9;
+        [sand, grass].forEach(m => { m.receiveShadow = true; m.castShadow = true; });
+        isl.add(sand, grass, ring);
+        scene.add(isl);
+      }
       const T = 0.34;
       const add = (geo, color, x, y, z, extra) => { const m = new THREE.Mesh(geo, flat(color, extra)); m.position.set(x, y, z); m.castShadow = true; g.add(m); return m; };
       const box = (w, h, d, color, x = 0, z = 0, y = T) => add(new THREE.BoxGeometry(w, h, d), color, x, y + h / 2, z);
@@ -748,31 +941,94 @@
       }
       const label = exploreLabel([{ text: `${t.no} ${t.icon} ${myiTileName(t)}`, bold: true, size: 32 }, { text: live.sub, size: 24, color: zone.color }], 440, 110, 3.0);
       label.position.set(0, 3.2, 0);
+      label.layers.set(1);   // 看板最後才畫(見 myiRender),平常藏起來,點了才出現
+      label.material.depthTest = false;
+      label.material.toneMapped = false;
       g.add(label);
       tiles.push({ t, g, label, base, sub: live.sub });
     });
 
-    MYI_LOTS.forEach(([lx, lr], i) => {
+    // 點綴:空地上的小樹林、沿著海岸的小樹和石頭、花 —— 數量多才有精緻感
+    const deco = new THREE.Group();
+    scene.add(deco);
+    const centers = all.map(myiPos);
+    const tree = (x, z, k, c) => {
+      const tr = new THREE.Mesh(new THREE.CylinderGeometry(0.05 * k, 0.07 * k, 0.3 * k, 6), flat('#9A6A4A'));
+      tr.position.set(x, 0.34 + 0.15 * k, z);
+      const top = new THREE.Mesh(new THREE.ConeGeometry(0.3 * k, 0.75 * k, 7), flat(c));
+      top.position.set(x, 0.34 + 0.62 * k, z);
+      [tr, top].forEach(m => { m.castShadow = true; deco.add(m); });
+    };
+    const bush = (x, z, k, c) => {
+      const m = new THREE.Mesh(new THREE.IcosahedronGeometry(0.22 * k, 0), flat(c));
+      m.position.set(x, 0.34 + 0.12 * k, z); m.scale.y = 0.8; m.castShadow = true; deco.add(m);
+    };
+    const greens = ['#6FAF6A', '#7DBA78', '#5E9F6E', '#8CC07A'];
+    const rnd = myiRand(42);
+    MYI_LOTS.forEach(([lx, lr]) => {
       if (all.some(t => t.x === lx && t.r === lr)) return;   // 已經蓋了自己新增的格子
       const p = myiPos({ x: lx, r: lr });
-      const g = new THREE.Group();
-      g.position.set(p.x, 0, p.z);
-      const base = new THREE.Mesh(new THREE.CylinderGeometry(MYI_R * 0.95, MYI_R * 0.98, 0.6, 6), flat('#B9C9A8'));
-      base.position.y = -0.1; base.receiveShadow = true;
-      const top = new THREE.Mesh(new THREE.CylinderGeometry(MYI_R * 0.88, MYI_R * 0.9, 0.14, 6), flat('#A9CF8E'));
-      top.position.y = 0.27; top.receiveShadow = true;
-      g.add(base, top);
-      [[-0.6, -0.4], [0.5, 0.5], [0.2, -0.7]].forEach(([x, z], k) => {
-        const tr = new THREE.Mesh(new THREE.ConeGeometry(0.28, 0.8, 6), flat('#5E9A5A'));
-        tr.position.set(x + i * 0.2, 0.74, z); tr.castShadow = true; g.add(tr);
-        void k;
-      });
-      ['#F28AA0', '#FFD447', '#FFFFFF', '#B9A8FF', '#F28AA0'].forEach((c, k) => {
-        const f = new THREE.Mesh(new THREE.SphereGeometry(0.07, 6, 5), flat(c));
-        f.position.set(-0.2 + Math.cos(k * 1.3) * 0.7, 0.4, 0.3 + Math.sin(k * 1.3) * 0.5); g.add(f);
-      });
-      scene.add(g);
+      for (let k = 0; k < 6; k++) { const a = k * 1.05 + rnd(), d = 0.35 + rnd() * 0.85; tree(p.x + Math.cos(a) * d, p.z + Math.sin(a) * d, 0.8 + rnd() * 0.6, greens[k % 4]); }
+      for (let k = 0; k < 6; k++) bush(p.x + (rnd() - 0.5) * 2, p.z + (rnd() - 0.5) * 2, 0.4, ['#F6A8BC', '#FFE08A', '#FFFFFF', '#C9B8FF'][k % 4]);
     });
+    myiIslandShape(0.93).getSpacedPoints(96).forEach((q, i) => {
+      const x = q.x, z = -q.y;
+      if (centers.some(c => Math.hypot(c.x - x, c.z - z) < 1.25)) return;   // 不要擋到格子上的東西
+      const r = rnd();
+      if (r < 0.5) tree(x, z, 0.55 + rnd() * 0.5, greens[i % 4]);
+      else if (r < 0.8) bush(x, z, 0.7 + rnd() * 0.6, greens[(i + 1) % 4]);
+      else { const m = new THREE.Mesh(new THREE.DodecahedronGeometry(0.16 + rnd() * 0.12, 0), flat('#C9BFB6')); m.position.set(x, 0.38, z); m.castShadow = true; deco.add(m); }
+    });
+
+    // 主角:島中間上方一顆會發光、慢慢轉的大愛心,站在奶油色台座上
+    const hp = myiPos({ x: 2, r: 0 });
+    const hero = new THREE.Group();
+    hero.position.set(hp.x, 0, hp.z - 0.3);
+    scene.add(hero);
+    [[1.15, 1.25, 0.3, 0.34, '#FFF3E6'], [0.85, 0.95, 0.35, 0.64, '#F9E2D6']].forEach(([r1, r2, h, y, c]) => {
+      const m = new THREE.Mesh(new THREE.CylinderGeometry(r1, r2, h, 32), mat(myiLin(c), { roughness: 0.6 }));
+      m.position.y = y + h / 2; m.castShadow = true; m.receiveShadow = true; hero.add(m);
+    });
+    const heart = new THREE.Mesh(myiHeartGeo(1.45, 0.6, true), new THREE.MeshStandardMaterial({ color: myiLin('#F98BAE'), emissive: myiLin('#FF6A95'), emissiveIntensity: dark ? 0.9 : 0.75, roughness: 0.32, metalness: 0.05 }));
+    heart.position.y = 3.4; heart.castShadow = true;
+    hero.add(heart);
+    spin.push({ m: heart, axis: 'y', speed: 0.55, bob: 3.4 });
+    const halo = (() => {
+      const cv = document.createElement('canvas'); cv.width = cv.height = 128;
+      const g = cv.getContext('2d'), gr = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+      gr.addColorStop(0, 'rgba(255,190,215,.85)'); gr.addColorStop(0.4, 'rgba(255,170,205,.3)'); gr.addColorStop(1, 'rgba(255,170,205,0)');
+      g.fillStyle = gr; g.fillRect(0, 0, 128, 128);
+      const tex = new THREE.CanvasTexture(cv); tex.encoding = THREE.sRGBEncoding;
+      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: dark ? 0.9 : 0.6 }));
+      sp.scale.set(7, 7, 1); sp.position.y = 3.4; return sp;
+    })();
+    hero.add(halo);
+    // 繞著愛心轉的小光點
+    for (let i = 0; i < 14; i++) {
+      const m = new THREE.Mesh(new THREE.SphereGeometry(0.05 + (i % 3) * 0.02, 8, 6), new THREE.MeshBasicMaterial({ color: myiLin(i % 2 ? '#FFF2B0' : '#FFFFFF') }));
+      hero.add(m);
+      spin.push({ m, orbit: true, r: 1.5 + (i % 4) * 0.25, a: i * 0.9, y: 2.4 + (i % 5) * 0.3, speed: 0.35 + (i % 3) * 0.1 });
+    }
+    if (typeof explorePerson === 'function') [[-1.15, 0.7, '#E0A82E'], [1.15, 0.7, '#4F7FC8']].forEach(([x, z, c]) => { const m = explorePerson(c); m.position.set(x, 0.34, z); hero.add(m); });
+
+    // 天上飄的雲
+    for (let i = 0; i < 7; i++) {
+      const c = new THREE.Group();
+      const n = 3 + (i % 2);
+      for (let k = 0; k < n; k++) {
+        const b = new THREE.Mesh(new THREE.IcosahedronGeometry(0.7 + (k % 2) * 0.35, 1), new THREE.MeshStandardMaterial({ color: myiLin(dark ? '#8C86B8' : '#FFFFFF'), roughness: 1, flatShading: true, transparent: true, opacity: 0.92 }));
+        b.position.set((k - n / 2) * 0.85, (k % 2) * 0.3, (k % 3) * 0.2); b.scale.y = 0.7;
+        c.add(b);
+      }
+      scene.add(c);
+      spin.push({ m: c, orbit: true, r: 16 + (i % 3) * 4, a: i * 0.9, y: 4 + (i % 3) * 1.2, speed: 0.012 + (i % 2) * 0.006 });
+    }
+
+    // 選到的格子:地上一圈會呼吸的光環
+    const ring = new THREE.Mesh(new THREE.RingGeometry(MYI_R * 0.92, MYI_R * 1.05, 48), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.8, depthWrite: false }));
+    ring.rotation.x = -Math.PI / 2; ring.visible = false;
+    scene.add(ring);
+    s.ring = ring;
 
     // 協作線:兩格之間的拱形管子,選到其中一格時變亮,還有光點流動
     const links = myiAllLinks().map(({ a, b, text }) => {
@@ -794,10 +1050,15 @@
     if (!s) return;
     s.links.forEach(l => {
       const on = MYI.sel && (l.a === MYI.sel || l.b === MYI.sel);
-      l.mat.opacity = MYI.sel ? (on ? 0.95 : 0.08) : 0.22;
+      l.mat.opacity = MYI.sel ? (on ? 0.95 : 0.05) : 0.16;
       l.dot.visible = !!on;
     });
-    // 全景:小看板只寫編號和名稱、貼著格子;選到的那格才顯示第二行
+    // 全景不放看板(畫面乾淨);點了一格才出現它的看板,和有協作關係的格子名稱
+    const sel = s.tiles.find(x => x.t.id === MYI.sel);
+    if (s.ring) {
+      s.ring.visible = !!sel;
+      if (sel) s.ring.material.color.copy(myiLin(MYI_ZONES[sel.t.zone].color));
+    }
     s.tiles.forEach(x => {
       const on = x.t.id === MYI.sel;
       const title = { text: `${x.t.no} ${x.t.icon} ${myiTileName(x.t)}`, bold: true, size: on ? 34 : 38 };
@@ -806,7 +1067,7 @@
       x.label.scale.set(k, k * 110 / 440, 1);
       x.label.position.y = on ? 2.6 : 1.5;
       const linked = MYI.sel && s.links.some(l => (l.a === MYI.sel && l.b === x.t.id) || (l.b === MYI.sel && l.a === x.t.id));
-      x.label.visible = !MYI.sel || on || linked;   // 拉近時只留有協作關係的格子看板,不然會擋住畫面
+      x.label.visible = !!MYI.sel && (on || linked);
       x.label.material.opacity = MYI.sel && !on ? 0.7 : 1;
     });
   }
@@ -834,28 +1095,46 @@
         x.m.position.set(Math.cos(x.a + p * 3) * x.r, x.low + (x.top - x.low) * p, Math.sin(x.a + p * 3) * x.r);
         x.m.rotation.x = p * 6;
       } else if (x.bobOnly) x.m.position.y = x.bob + Math.sin(s.t * 2 + x.m.parent.position.x) * 0.12;
+      else if (x.orbit) {
+        const a = x.a + s.t * x.speed;
+        x.m.position.set(Math.cos(a) * x.r, x.y + Math.sin(s.t * 0.8 + x.a) * 0.15, Math.sin(a) * x.r);
+      }
       else {
         x.m.rotation[x.axis] += dt * x.speed;
         if (x.bob) x.m.position.y = x.bob + Math.sin(s.t * 2) * 0.12;
       }
     });
     // 選到的那一格浮起來,其他輕輕起伏
-    s.tiles.forEach((x, i) => {
-      const want = x.t.id === MYI.sel ? 0.35 : Math.sin(s.t * 0.8 + i) * 0.04;
-      x.g.position.y += (want - x.g.position.y) * Math.min(1, dt * 5);
+    // 選到的那一格輕輕跳起來,地上的光環一呼一吸
+    s.tiles.forEach((x) => {
+      const want = x.t.id === MYI.sel ? 0.12 + Math.abs(Math.sin(s.t * 2.2)) * 0.12 : 0;
+      x.g.position.y += (want - x.g.position.y) * Math.min(1, dt * 6);
+      if (x.t.id === MYI.sel && s.ring) {
+        s.ring.position.set(x.g.position.x, 0.37, x.g.position.z);
+        s.ring.material.opacity = 0.55 + Math.sin(s.t * 3) * 0.3;
+        const k = 1 + Math.sin(s.t * 3) * 0.04;
+        s.ring.scale.set(k, k, 1);
+      }
     });
     s.links.forEach(l => { if (l.dot.visible) l.dot.position.copy(l.curve.getPoint((s.t * 0.45) % 1)); });
     // 鏡頭:飛向選中的格子,沒操作時左右輕輕擺動
     s.target.x += (s.want.x - s.target.x) * Math.min(1, dt * 2.5);
     s.target.z += (s.want.z - s.target.z) * Math.min(1, dt * 2.5);
-    const wantDist = (MYI.sel ? s.want.dist : Math.max(25, 28 / s.camera.aspect) * s.ext) * s.zoom;   // 畫面窄就拉遠,整顆心放得下;再乘上兩指/滾輪的縮放
-    s.cam.phi += ((MYI.sel ? 0.95 : 0.6) - s.cam.phi) * Math.min(1, dt * 2.5);   // 全景接近俯視才看得出愛心;選一格時壓低看細節
+    const wantDist = (MYI.sel ? s.want.dist : Math.max(29, 31.5 / s.camera.aspect) * s.ext) * s.zoom;   // 畫面窄就拉遠,整顆心放得下;再乘上兩指/滾輪的縮放
+    s.cam.phi += ((MYI.sel ? 1.05 : 0.98) - s.cam.phi) * Math.min(1, dt * 2.5);   // 全景斜斜往下看,看得到島的厚度和上面的漸層天空;選一格時再壓低一點
     s.cam.dist += (wantDist - s.cam.dist) * Math.min(1, dt * 2.5);
     const sway = now - s.lastTouch > 3000 ? Math.sin(s.t * 0.25) * 0.1 : 0;
     const theta = s.cam.theta + sway;
     s.camera.position.set(s.target.x + Math.cos(theta) * Math.sin(s.cam.phi) * s.cam.dist, Math.cos(s.cam.phi) * s.cam.dist + 1, s.target.z + Math.sin(theta) * Math.sin(s.cam.phi) * s.cam.dist);
     s.camera.lookAt(s.target.x, MYI.sel ? 1.2 : 0, s.target.z);
-    s.renderer.render(s.scene, s.camera);
+    myiRender(s);
+    // 開了後製卻跑不動(前 90 格平均超過 34ms):自動關掉後製、降解析度
+    const raw = now - (s.perf.last || now);
+    s.perf.last = now;
+    if (s.post && raw > 0 && raw < 250 && s.perf.n < 90) {
+      s.perf.n++; s.perf.sum += raw;
+      if (s.perf.n === 90 && s.perf.sum / 90 > 34) { s.post = null; s.renderer.setPixelRatio(1); myiResize(); }
+    }
     s.raf = requestAnimationFrame(myiFrame);
   }
   function myiResize() {
@@ -863,6 +1142,7 @@
     if (!s || !MYI.canvas) return;
     const w = MYI.canvas.clientWidth || 320, h = MYI.canvas.clientHeight || 300;
     s.renderer.setSize(w, h, false);
+    if (s.post) { const v = s.renderer.getDrawingBufferSize(new THREE.Vector2()); myiPostSize(s.post, v.x, v.y); }
     s.camera.aspect = w / h;
     s.camera.updateProjectionMatrix();
   }
