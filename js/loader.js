@@ -33,6 +33,7 @@
       if (API.queueSize() > 0) API.flushQueue();   // 連得上了,把先前暫存的補送出去
       $('#home-loading').classList.add('hidden');
       $('#home-content').classList.remove('hidden');
+      autoRefreshPrices();   // 現價不是最新的就自動抓一次(不等它,失敗也不打擾)
     } catch (e) {
       if (mySeq !== _loadSeq) return;
       // 連線失敗時退回顯示上次的資料,不要整頁只剩錯誤文字
