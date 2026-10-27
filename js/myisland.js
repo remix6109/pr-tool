@@ -1,10 +1,11 @@
 /* 我的島 — 參考「HEART 政策島」的玩法做的個人版:13 格六邊形加 3 塊空地拼成一顆心。
  * 作品區 = 做過、正在做的東西;家區 = 黃與蘇的真實記錄;未來區 = 跟著資料長大的目標。
- * 點一格:鏡頭飛過去、下方顯示細項與協作關係;看法可切 全景/清單/時間。
+ * 點一格:鏡頭飛過去、下方顯示細項與協作關係;看法可切 全景/清單/時間。兩指或滾輪縮放,右上角按鈕回全景。
+ * 可以自己新增格子(先填空地,再往外長)和協作線,一樣存在試算表 _island。
  * 金額只放在下方文字(隱私模式會模糊),3D 看板上不放金額。
  * 在探索頁的「我的島」顯示;three.js 共用 town3d.js 的載入。所有檔案共用全域範圍,載入順序見 index.html */
 
-  const MYI = { s: null, sel: null, view: 'map', failed: false, canvas: null };
+  const MYI = { s: null, sel: null, view: 'map', failed: false, canvas: null, form: null };
   const MYI_ZONES = {
     work: { name: '作品', color: '#E8875B', desc: '做過、正在做的東西' },
     home: { name: '家', color: '#D9607E', desc: '黃與蘇的真實記錄' },
@@ -253,8 +254,9 @@
       };
     }
     if (myiEditable(t)) {
-      const items = myiItems(t);
-      return { sub: t.id === 'next' ? `${items.filter(x => !x.done).length} 項待辦` : `${items.filter(x => x.done).length}/${items.length} 完成`, grow: 0.5, html: '' };
+      const items = myiItems(t), done = items.filter(x => x.done).length;
+      if (t.custom) return { sub: items.length ? `${done}/${items.length} 完成` : '還沒有進度', grow: items.length ? done / items.length : 0, html: '' };
+      return { sub: t.id === 'next' ? `${items.length - done} 項待辦` : `${done}/${items.length} 完成`, grow: 0.5, html: '' };
     }
     return { sub: MYI_ZONES[t.zone].name, grow: 0.5, html: '' };
   }
@@ -263,7 +265,7 @@
   // ---------- 進度:作品區與下一步可以自己打勾、新增、刪除 ----------
   // 存在試算表 _island:內建細項用 note 'ref:<格子>:<序號>' 記完成日(date 空白 = 沒完成)、'hide:<格子>:<序號>' = 刪掉;
   // note 空白的是自己新增的細項。改動先更新畫面再送後端,失敗就還原。
-  const myiEditable = (t) => t.zone === 'work' || t.id === 'next';
+  const myiEditable = (t) => t.zone === 'work' || t.id === 'next' || !!t.custom;
   const myiDefaultDone = (when) => /^\d{1,2}\/\d{1,2}$|月$/.test(when || '');   // 內建細項寫了日期的 = 已經做完
   const myiIsYmd = (d) => /^\d{4}-\d{2}-\d{2}$/.test(d || '');
   function myiRows() { return STATE.data && Array.isArray(STATE.data.island) ? STATE.data.island : []; }
@@ -281,18 +283,23 @@
       .forEach(r => out.push({ key: 'u:' + r.id, text: String(r.text || ''), when: '', done: r.date ? String(r.date).slice(0, 10) : '', row: r }));
     return out;
   }
-  async function myiSave(apply, send) {
+  // opts.rebuild:格子或協作線有變,3D 要整個重做;opts.select:做完要選哪一格
+  async function myiSave(apply, send, opts) {
     if (MYI.saving) return;
     MYI.saving = true;
+    opts = opts || {};
+    const prevSel = MYI.sel;
     const undo = apply();
-    myiAfterEdit();
+    if (opts.select !== undefined) MYI.sel = opts.select;
+    myiAfterEdit(opts.rebuild);
     try {
       await send();
       localStorage.setItem(KEY.cache, JSON.stringify(STATE.data));
       myiAfterEdit();   // 新增的那筆拿到正式 id 後重畫,按鈕才會對到它
     } catch (e) {
       undo();
-      myiAfterEdit();
+      if (opts.select !== undefined) MYI.sel = prevSel;
+      myiAfterEdit(opts.rebuild);
       alert('儲存失敗:' + e.message + '\n已還原這次修改,建議稍後再試或按「重新載入」同步');
     } finally {
       MYI.saving = false;
@@ -334,15 +341,164 @@
     if (!text || !STATE.data) return;
     myiSave(...myiPush(myiNewRow(t, text, '', '')));
   }
-  // 改完:重畫細節、更新那一格的看板
-  function myiAfterEdit() {
-    const t = MYI_TILES.find(x => x.id === MYI.sel);
+  // 改完:重畫細節、更新那一格的看板;rebuild = 格子或協作線變了,3D 整個重做
+  function myiAfterEdit(rebuild) {
+    if (MYI.s && rebuild) {
+      const keep = MYI.sel;
+      myiFill(myiData());
+      MYI.sel = null;
+      myiSelect(keep && myiTile(keep) ? keep : null);
+      return;
+    }
+    const t = myiTile(MYI.sel);
     if (MYI.s && t) {
       const x = MYI.s.tiles.find(y => y.t.id === t.id);
       if (x) x.sub = myiLive(t, myiData()).sub;
       myiHighlight();
     }
     myiRenderDetail();
+  }
+
+  // ---------- 自己新增的格子與協作線(也存在 _island) ----------
+  // 格子:tile '_tile'、text = 名稱、note 'tile:{key,icon,zone,quote,pos}';細項的 tile 欄填 key
+  // 協作線:tile '_link'、text = 說明、note 'link:<a>><b>';拿掉內建的線 = note 'unlink:<a>><b>'
+  const MYI_LAND = { work: '#EADCC6', home: '#F2D6D6', future: '#D3E4EE' };
+  const MYI_ICONS = ['🌱', '🎮', '🎨', '📚', '🏃', '✈️', '🎵', '🧪', '📷', '🍳', '💼', '🐾'];
+  const myiPosKey = (x, r) => x + ',' + r;
+  function myiJson(note, pre) {
+    try { return JSON.parse(String(note || '').slice(pre.length)); } catch (_) { return null; }
+  }
+  // 新格子放哪:先填三塊空地,再從心形外圍由近到遠;上面兩個圓弧中間的凹口最後才填
+  let myiSlotCache = null;
+  function myiSlots() {
+    if (myiSlotCache) return myiSlotCache;
+    const used = new Set(MYI_TILES.map(t => myiPosKey(t.x, t.r)));
+    const notch = [[2, 0], [1.5, -1], [2.5, -1]];
+    const skip = new Set(MYI_LOTS.concat(notch).map(p => myiPosKey(p[0], p[1])));
+    const cells = [];
+    for (let r = -3; r <= 7; r++) for (let k = -4; k <= 8; k++) {
+      const x = k + (r % 2 ? 0.5 : 0), key = myiPosKey(x, r);
+      if (!used.has(key) && !skip.has(key)) cells.push([x, r]);
+    }
+    const far = (p) => { const q = myiPos({ x: p[0], r: p[1] }); return Math.hypot(q.x, q.z * 0.9); };
+    cells.sort((a, b) => far(a) - far(b));
+    myiSlotCache = MYI_LOTS.map(p => p.slice()).concat(cells, notch);
+    return myiSlotCache;
+  }
+  function myiCustomTiles() {
+    const used = new Set(MYI_TILES.map(t => myiPosKey(t.x, t.r)));
+    const out = [];
+    myiRows().filter(r => r.tile === '_tile' && /^tile:/.test(r.note || ''))
+      .sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')))
+      .forEach(r => {
+        const j = myiJson(r.note, 'tile:');
+        if (!j || !j.key) return;
+        let pos = Array.isArray(j.pos) && j.pos.length === 2 ? j.pos.map(Number) : null;
+        if (!pos || used.has(myiPosKey(pos[0], pos[1]))) pos = myiSlots().find(p => !used.has(myiPosKey(p[0], p[1])));   // 兩台手機同時新增撞位置:往後找空位
+        if (!pos) return;
+        used.add(myiPosKey(pos[0], pos[1]));
+        const zone = MYI_ZONES[j.zone] ? j.zone : 'work';
+        out.push({ id: String(j.key), custom: true, row: r, no: String(MYI_TILES.length + out.length + 1).padStart(2, '0'),
+          zone, icon: j.icon || '🌱', name: String(r.text || '新的一格'), kind: 'custom', land: MYI_LAND[zone],
+          quote: j.quote || '', tags: ['自己新增'], x: pos[0], r: pos[1] });
+      });
+    return out;
+  }
+  const myiAllTiles = () => MYI_TILES.concat(myiCustomTiles());
+  const myiTile = (id) => id ? myiAllTiles().find(t => t.id === id) : null;
+  function myiAllLinks() {
+    const rows = myiRows().filter(r => r.tile === '_link');
+    const hidden = new Set(rows.filter(r => /^unlink:/.test(r.note || '')).map(r => r.note.slice(7)));
+    const ids = new Set(myiAllTiles().map(t => t.id));
+    const out = MYI_LINKS.map(([a, b, text]) => ({ a, b, text, key: a + '>' + b })).filter(l => !hidden.has(l.key));
+    rows.filter(r => /^link:/.test(r.note || ''))
+      .sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')))
+      .forEach(r => { const [a, b] = r.note.slice(5).split('>'); out.push({ a, b, text: String(r.text || ''), key: 'u:' + r.id, row: r }); });
+    return out.filter(l => ids.has(l.a) && ids.has(l.b) && l.a !== l.b);
+  }
+  const myiIsLinked = (a, b) => myiAllLinks().some(l => (l.a === a && l.b === b) || (l.a === b && l.b === a));
+
+  function myiAddTile(v) {
+    const name = String(v.name || '').trim().slice(0, 20);
+    if (!name || !STATE.data) return;
+    const used = new Set(myiAllTiles().map(t => myiPosKey(t.x, t.r)));
+    const pos = myiSlots().find(p => !used.has(myiPosKey(p[0], p[1])));
+    if (!pos) { alert('島上已經沒有空位了'); return; }
+    const key = 't' + Date.now().toString(36);
+    const note = 'tile:' + JSON.stringify({ key, icon: v.icon || '🌱', zone: v.zone, quote: String(v.quote || '').trim().slice(0, 60), pos });
+    MYI.form = null;
+    myiSave(...myiPush({ id: 'tmp-' + Date.now(), tile: '_tile', text: name, date: '', note, created_at: new Date().toISOString() }), { rebuild: true, select: key });
+  }
+  function myiEditTile(t, v) {
+    const name = String(v.name || '').trim().slice(0, 20);
+    if (!name || !t.row) return;
+    const j = myiJson(t.row.note, 'tile:') || {};
+    const note = 'tile:' + JSON.stringify(Object.assign(j, { icon: v.icon || '🌱', zone: v.zone, quote: String(v.quote || '').trim().slice(0, 60) }));
+    const row = t.row, prev = { text: row.text, note: row.note };
+    MYI.form = null;
+    myiSave(() => { Object.assign(row, { text: name, note }); return () => Object.assign(row, prev); },
+      () => API.updateRecord('_island', row.id, { text: name, note }), { rebuild: true });
+  }
+  // 刪格子:連它的細項、牽到它的協作線一起刪
+  function myiDeleteTile(t) {
+    if (!t.row || !confirm(`刪除「${t.name}」這一格?裡面的進度和協作線也會一起刪掉。`)) return;
+    const arr = STATE.data.island;
+    const gone = arr.filter(r => r === t.row || String(r.tile) === t.id || (r.tile === '_link' && /^(un)?link:/.test(r.note || '') && r.note.replace(/^(un)?link:/, '').split('>').includes(t.id)));
+    let snap = null;
+    myiSave(() => { snap = arr.slice(); for (let i = arr.length - 1; i >= 0; i--) if (gone.includes(arr[i])) arr.splice(i, 1); return () => { arr.length = 0; arr.push(...snap); }; },
+      async () => {
+        await API.deleteRecord('_island', t.row.id);
+        for (const r of gone) if (r !== t.row) { try { await API.deleteRecord('_island', r.id); } catch (_) { /* 已經沒有這一格,剩下的列留著也不影響 */ } }
+      }, { rebuild: true, select: null });
+  }
+  function myiAddLink(t, other, text) {
+    text = String(text || '').trim().slice(0, 40);
+    if (!other || !STATE.data || myiIsLinked(t.id, other)) return;
+    myiSave(...myiPush({ id: 'tmp-' + Date.now(), tile: '_link', text: text || '互相支援', date: '', note: 'link:' + t.id + '>' + other, created_at: new Date().toISOString() }), { rebuild: true });
+  }
+  function myiDeleteLink(key) {
+    const l = myiAllLinks().find(x => x.key === key);
+    const A = l && myiTile(l.a), B = l && myiTile(l.b);
+    if (!l || !confirm(`拿掉「${myiTileName(A)} ↔ ${myiTileName(B)}」這條協作線?`)) return;
+    if (l.row) {
+      const arr = STATE.data.island, row = l.row;
+      let at = -1;
+      myiSave(() => { at = arr.indexOf(row); arr.splice(at, 1); return () => arr.splice(at, 0, row); }, () => API.deleteRecord('_island', row.id), { rebuild: true });
+    } else {
+      myiSave(...myiPush({ id: 'tmp-' + Date.now(), tile: '_link', text: '', date: '', note: 'unlink:' + l.key, created_at: new Date().toISOString() }), { rebuild: true });
+    }
+  }
+  // 新增/編輯格子的表單
+  function myiTileFormHtml(t) {
+    const v = t ? { name: t.name, icon: t.icon, zone: t.zone, quote: t.quote } : { name: '', icon: '🌱', zone: 'work', quote: '' };
+    return `<form class="myi-form" data-myi-form="${t ? 'edit' : 'tile'}">
+      <div class="myi-sub" style="margin-top:0;">${t ? '編輯這一格' : '新增一格'}</div>
+      <label class="small muted">圖示</label>
+      <div class="myi-icons">${MYI_ICONS.map(i => `<button type="button" class="myi-ico${i === v.icon ? ' on' : ''}" data-ico="${i}">${i}</button>`).join('')}
+        <input type="text" name="icon" maxlength="4" value="${escapeHtml(v.icon)}" aria-label="自訂圖示" class="myi-ico-in"></div>
+      <label class="small muted">名稱</label>
+      <input type="text" name="name" maxlength="20" required value="${escapeHtml(v.name)}" placeholder="例如:健身、旅行、新的遊戲">
+      <label class="small muted">放在哪一區</label>
+      <div class="myi-zpick">${Object.entries(MYI_ZONES).map(([k, z]) => `<label style="--zone:${z.color}"><input type="radio" name="zone" value="${k}"${k === v.zone ? ' checked' : ''}><span>${z.name}</span></label>`).join('')}</div>
+      <label class="small muted">一句話(可不填)</label>
+      <input type="text" name="quote" maxlength="60" value="${escapeHtml(v.quote)}" placeholder="這一格對你的意義">
+      <div class="myi-form-btns"><button type="submit" class="btn small">${t ? '儲存' : '＋ 新增到島上'}</button><button type="button" class="btn ghost small" data-myi-cancel>取消</button></div>
+    </form>`;
+  }
+  function myiBindTileForm(box, t) {
+    const f = box.querySelector('[data-myi-form]');
+    if (!f) return;
+    const icon = f.querySelector('[name=icon]');
+    f.querySelectorAll('[data-ico]').forEach(b => {
+      b.onclick = () => { icon.value = b.dataset.ico; f.querySelectorAll('[data-ico]').forEach(x => x.classList.toggle('on', x === b)); };
+    });
+    f.querySelector('[data-myi-cancel]').onclick = () => { MYI.form = null; myiRenderDetail(); };
+    f.onsubmit = (e) => {
+      e.preventDefault();
+      const val = (n) => f.querySelector(`[name=${n}]`).value;   // 不能用 f.name:那是表單自己的 name 屬性
+      const v = { name: val('name'), icon: icon.value.trim(), zone: (f.querySelector('[name=zone]:checked') || {}).value || 'work', quote: val('quote') };
+      if (t) myiEditTile(t, v); else myiAddTile(v);
+    };
   }
   function myiItemsHtml(t) {
     const items = myiItems(t), edit = myiEditable(t);
@@ -361,9 +517,12 @@
   function myiTimeline(D) {
     const ev = MYI_EVENTS.map(e => Object.assign({}, e));
     // 自己打勾完成的細項(內建或自己新增的)記到完成那天
-    MYI_TILES.filter(myiEditable).forEach(t => myiItems(t).forEach(x => {
-      if ((x.row || x.ref) && myiIsYmd(x.done)) ev.push({ d: x.done, t: '✓ ' + x.text, tile: t.id });
-    }));
+    myiAllTiles().filter(myiEditable).forEach(t => {
+      if (t.custom && t.row.created_at) ev.push({ d: autodivYmd(new Date(t.row.created_at)), t: `🌱 島上多了一格「${t.name}」`, tile: t.id });
+      myiItems(t).forEach(x => {
+        if ((x.row || x.ref) && myiIsYmd(x.done)) ev.push({ d: x.done, t: '✓ ' + x.text, tile: t.id });
+      });
+    });
     if (D) {
       D.P.forEach((p, i) => { if (D.per[p].first) ev.push({ d: D.per[p].first, t: `${D.per[p].label}第一次買進`, tile: i ? 'su' : 'huang' }); });
       let cum = 0;
@@ -390,6 +549,18 @@
     g.center();
     return g;
   }
+  // 浮在格子上的圖示(emoji 畫在 canvas 上當貼圖)
+  function myiEmoji(icon) {
+    const c = document.createElement('canvas'); c.width = c.height = 128;
+    const g = c.getContext('2d');
+    g.font = '96px system-ui, "Segoe UI Emoji", "Apple Color Emoji", sans-serif';
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText(icon, 64, 70);
+    const tex = new THREE.CanvasTexture(c); tex.encoding = THREE.sRGBEncoding;
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
+    sp.scale.set(1.1, 1.1, 1);
+    return sp;
+  }
 
   const MYI_R = 1.7, MYI_W = Math.sqrt(3) * MYI_R;
   const myiPos = (t) => ({ x: (t.x - 2) * MYI_W, z: (t.r - 1.5) * 1.5 * MYI_R });
@@ -402,7 +573,7 @@
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     const camera = new THREE.PerspectiveCamera(34, 1, 0.1, 300);
     MYI.s = { renderer, camera, scene: null, tiles: [], links: [], spin: [], flows: [], raf: 0, prev: 0, t: 0, lastTouch: 0,
-      cam: { theta: Math.PI / 2, phi: 0.6, dist: 28 }, target: new THREE.Vector3(), want: { x: 0, z: 0, dist: 24 } };
+      cam: { theta: Math.PI / 2, phi: 0.6, dist: 28 }, target: new THREE.Vector3(), want: { x: 0, z: 0, dist: 24 }, zoom: 1, ext: 1 };
     myiBindControls(canvas);
     myiFill(D);
   }
@@ -427,8 +598,10 @@
     sea.rotation.x = -Math.PI / 2; sea.position.y = -0.45; sea.receiveShadow = true;
     scene.add(sea);
 
-    const spin = [], tiles = [];
-    MYI_TILES.forEach(t => {
+    const spin = [], tiles = [], all = myiAllTiles();
+    // 格子長到心形外面時,全景要拉遠一點才放得下
+    s.ext = Math.max(1, ...all.map(t => { const p = myiPos(t); return Math.max(Math.abs(p.x) + MYI_R, Math.abs(p.z) + MYI_R) / 8; }));
+    all.forEach(t => {
       const p = myiPos(t), live = myiLive(t, D), zone = MYI_ZONES[t.zone];
       const g = new THREE.Group();
       g.position.set(p.x, 0, p.z);
@@ -559,6 +732,19 @@
         cyl(0.06, 1.4, '#7A5A3A', 0, 0, T, 8);
         [[1.15, 0.5, '#E8875B'], [0.85, -0.6, '#3E93C2'], [0.55, 0.9, '#D9607E']].forEach(([y, a, c]) => { const b = box(0.85, 0.2, 0.06, c, 0, 0, T + y); b.rotation.y = a; b.position.x = Math.cos(-a) * 0.3; b.position.z = Math.sin(-a) * 0.3; });
         for (let i = 0; i < 4; i++) cyl(0.16, 0.05, '#BDB4A6', -0.5 + i * 0.25, 0.6 + (i % 2) * 0.12, T, 8);
+      } else if (t.kind === 'custom') {
+        // 自己新增的格子:台座跟著完成比例長高,上面浮著它的圖示,旁邊插一支區域顏色的旗子
+        const h = 0.25 + grow * 0.9;
+        cyl(0.62, h, '#F4EFE6', 0, 0, T, 6);
+        cyl(0.66, 0.06, zone.color, 0, 0, T + h, 6);
+        const ico = myiEmoji(t.icon);
+        ico.position.set(0, T + h + 0.75, 0);
+        g.add(ico);
+        spin.push({ m: ico, bobOnly: true, bob: T + h + 0.75 });
+        cyl(0.03, 1.2, '#5A4A3A', 0.95, -0.35);
+        const flag = add(new THREE.BoxGeometry(0.4, 0.26, 0.02), zone.color, 1.16, T + 1.05, -0.35);
+        spin.push({ m: flag, wave: true, base: flag.rotation.y });
+        ['#F28AA0', '#FFD447', '#FFFFFF'].forEach((c, k) => add(new THREE.SphereGeometry(0.07, 6, 5), c, -0.9 + k * 0.2, T + 0.06, 0.7 - (k % 2) * 0.15));
       }
       const label = exploreLabel([{ text: `${t.no} ${t.icon} ${myiTileName(t)}`, bold: true, size: 32 }, { text: live.sub, size: 24, color: zone.color }], 440, 110, 3.0);
       label.position.set(0, 3.2, 0);
@@ -567,6 +753,7 @@
     });
 
     MYI_LOTS.forEach(([lx, lr], i) => {
+      if (all.some(t => t.x === lx && t.r === lr)) return;   // 已經蓋了自己新增的格子
       const p = myiPos({ x: lx, r: lr });
       const g = new THREE.Group();
       g.position.set(p.x, 0, p.z);
@@ -588,8 +775,8 @@
     });
 
     // 協作線:兩格之間的拱形管子,選到其中一格時變亮,還有光點流動
-    const links = MYI_LINKS.map(([a, b, text]) => {
-      const A = myiPos(MYI_TILES.find(x => x.id === a)), B = myiPos(MYI_TILES.find(x => x.id === b));
+    const links = myiAllLinks().map(({ a, b, text }) => {
+      const A = myiPos(all.find(x => x.id === a)), B = myiPos(all.find(x => x.id === b));
       const curve = new THREE.QuadraticBezierCurve3(new THREE.Vector3(A.x, 0.7, A.z), new THREE.Vector3((A.x + B.x) / 2, 2.6, (A.z + B.z) / 2), new THREE.Vector3(B.x, 0.7, B.z));
       const mat = new THREE.MeshBasicMaterial({ color: '#E5486A', transparent: true, opacity: 0.22, depthWrite: false });
       const tube = new THREE.Mesh(new THREE.TubeGeometry(curve, 24, 0.035, 6), mat);
@@ -618,7 +805,7 @@
       const k = on ? 3.4 : 3.0;
       x.label.scale.set(k, k * 110 / 440, 1);
       x.label.position.y = on ? 2.6 : 1.5;
-      const linked = MYI.sel && MYI_LINKS.some(l => (l[0] === MYI.sel && l[1] === x.t.id) || (l[1] === MYI.sel && l[0] === x.t.id));
+      const linked = MYI.sel && s.links.some(l => (l.a === MYI.sel && l.b === x.t.id) || (l.b === MYI.sel && l.a === x.t.id));
       x.label.visible = !MYI.sel || on || linked;   // 拉近時只留有協作關係的格子看板,不然會擋住畫面
       x.label.material.opacity = MYI.sel && !on ? 0.7 : 1;
     });
@@ -646,7 +833,8 @@
         const p = (s.t * 0.35 + x.phase) % 1;
         x.m.position.set(Math.cos(x.a + p * 3) * x.r, x.low + (x.top - x.low) * p, Math.sin(x.a + p * 3) * x.r);
         x.m.rotation.x = p * 6;
-      } else {
+      } else if (x.bobOnly) x.m.position.y = x.bob + Math.sin(s.t * 2 + x.m.parent.position.x) * 0.12;
+      else {
         x.m.rotation[x.axis] += dt * x.speed;
         if (x.bob) x.m.position.y = x.bob + Math.sin(s.t * 2) * 0.12;
       }
@@ -660,7 +848,7 @@
     // 鏡頭:飛向選中的格子,沒操作時左右輕輕擺動
     s.target.x += (s.want.x - s.target.x) * Math.min(1, dt * 2.5);
     s.target.z += (s.want.z - s.target.z) * Math.min(1, dt * 2.5);
-    const wantDist = MYI.sel ? s.want.dist : Math.max(25, 28 / s.camera.aspect);   // 畫面窄就拉遠,整顆心放得下
+    const wantDist = (MYI.sel ? s.want.dist : Math.max(25, 28 / s.camera.aspect) * s.ext) * s.zoom;   // 畫面窄就拉遠,整顆心放得下;再乘上兩指/滾輪的縮放
     s.cam.phi += ((MYI.sel ? 0.95 : 0.6) - s.cam.phi) * Math.min(1, dt * 2.5);   // 全景接近俯視才看得出愛心;選一格時壓低看細節
     s.cam.dist += (wantDist - s.cam.dist) * Math.min(1, dt * 2.5);
     const sway = now - s.lastTouch > 3000 ? Math.sin(s.t * 0.25) * 0.1 : 0;
@@ -678,19 +866,65 @@
     s.camera.aspect = w / h;
     s.camera.updateProjectionMatrix();
   }
-  // 左右拖曳旋轉(上下滑仍可捲動頁面);點格子 = 選它,點海 = 回全景
+  // 縮放倍數(1 = 原本的距離,越小越近)
+  function myiZoom(f) {
+    const s = MYI.s;
+    if (!s) return;
+    s.zoom = Math.max(0.35, Math.min(2.2, s.zoom * f));
+    s.lastTouch = performance.now();
+  }
+  // 平移:手指往哪拖,島就往哪動(依目前鏡頭方向換算成地面上的方向)
+  function myiPan(dx, dy) {
+    const s = MYI.s;
+    if (!s) return;
+    const k = s.cam.dist * 0.0022, c = Math.cos(s.cam.theta), n = Math.sin(s.cam.theta);
+    const lim = 10 * s.ext;
+    s.want.x = Math.max(-lim, Math.min(lim, s.want.x - n * dx * k - c * dy * k));
+    s.want.z = Math.max(-lim, Math.min(lim, s.want.z + c * dx * k - n * dy * k));
+    s.lastTouch = performance.now();
+  }
+  // 回全景:取消選取、縮放歸零、鏡頭回到中間
+  function myiHome() {
+    const s = MYI.s;
+    MYI.sel = null;
+    if (s) { s.zoom = 1; s.want = { x: 0, z: 0, dist: 28 }; s.lastTouch = 0; }
+    myiHighlight();
+    myiRenderDetail();
+  }
+  // 單指左右拖曳旋轉(上下滑仍可捲動頁面);兩指捏合縮放、拖曳平移;滾輪縮放
+  // 點格子 = 選它,點海 = 回全景
   function myiBindControls(canvas) {
-    let p = null;
+    let p = null, pinch = null;
+    const pts = new Map();
     const ray = new THREE.Raycaster(), v2 = new THREE.Vector2();
-    canvas.addEventListener('pointerdown', (e) => { p = { x: e.clientX, sx: e.clientX, sy: e.clientY, drag: false }; });
+    const two = () => { const [a, b] = [...pts.values()]; return { d: Math.hypot(a.x - b.x, a.y - b.y) || 1, mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2 }; };
+    canvas.addEventListener('pointerdown', (e) => {
+      pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pts.size === 2 && MYI.s) { const q = two(); pinch = { d0: q.d, z0: MYI.s.zoom, mx: q.mx, my: q.my }; p = null; }
+      else if (pts.size === 1) p = { x: e.clientX, sx: e.clientX, sy: e.clientY, drag: false };
+    });
     canvas.addEventListener('pointermove', (e) => {
-      if (!p || !MYI.s) return;
+      if (pts.has(e.pointerId)) pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (!MYI.s) return;
+      if (pinch && pts.size >= 2) {
+        const q = two();
+        MYI.s.zoom = Math.max(0.35, Math.min(2.2, pinch.z0 * pinch.d0 / q.d));
+        myiPan(q.mx - pinch.mx, q.my - pinch.my);
+        pinch.mx = q.mx; pinch.my = q.my;
+        return;
+      }
+      if (!p) return;
       if (!p.drag && Math.abs(e.clientX - p.sx) > 8 && Math.abs(e.clientX - p.sx) > Math.abs(e.clientY - p.sy)) p.drag = true;
       if (p.drag) { MYI.s.cam.theta += (e.clientX - p.x) * 0.008; MYI.s.lastTouch = performance.now(); }
       p.x = e.clientX;
     });
+    const lift = (e) => { pts.delete(e.pointerId); if (pts.size < 2) pinch = null; };
+    canvas.addEventListener('wheel', (e) => { e.preventDefault(); myiZoom(Math.exp(e.deltaY * 0.0012)); }, { passive: false });
+    canvas.addEventListener('touchmove', (e) => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });   // 兩指時不要捲動頁面
     canvas.addEventListener('pointerup', (e) => {
-      const s = MYI.s;
+      const s = MYI.s, wasPinch = !!pinch || pts.size > 1;
+      lift(e);
+      if (wasPinch) { p = null; return; }
       if (p && s && Math.abs(e.clientX - p.sx) + Math.abs(e.clientY - p.sy) < 8) {
         const r = canvas.getBoundingClientRect();
         v2.set((e.clientX - r.left) / r.width * 2 - 1, -(e.clientY - r.top) / r.height * 2 + 1);
@@ -702,15 +936,18 @@
       }
       p = null;
     });
-    canvas.addEventListener('pointercancel', () => { p = null; });
+    canvas.addEventListener('pointercancel', (e) => { lift(e); p = null; });
   }
 
   // ---------- 面板 ----------
   function myiSelect(id) {
     MYI.sel = id && MYI.sel === id ? null : id;   // 再點一次同一格 = 回全景
-    const s = MYI.s, t = MYI_TILES.find(x => x.id === MYI.sel);
+    const s = MYI.s, t = myiTile(MYI.sel);
+    if (!t) MYI.sel = null;
+    if (MYI.form !== 'tile' || t) MYI.form = null;   // 換格子就收起表單
     if (s) {
       if (t) { const p = myiPos(t); s.want = { x: p.x, z: p.z, dist: 12 }; } else s.want = { x: 0, z: 0, dist: 28 };
+      s.zoom = 1;
       s.lastTouch = 0;
     }
     myiHighlight();
@@ -718,37 +955,58 @@
   }
 
   function myiDetailHtml(t, D) {
-    const zone = MYI_ZONES[t.zone], live = myiLive(t, D);
-    const links = MYI_LINKS.filter(l => l[0] === t.id || l[1] === t.id);
+    const zone = MYI_ZONES[t.zone], live = myiLive(t, D), all = myiAllTiles();
+    const links = myiAllLinks().filter(l => l.a === t.id || l.b === t.id);
+    const others = all.filter(o => o.id !== t.id && !links.some(l => l.a === o.id || l.b === o.id));
+    const top = `<div class="myi-top"><button type="button" class="btn ghost small" data-myi-home>← 回全景</button>
+      ${t.custom ? `<span><button type="button" class="btn ghost small" data-myi-edit>✏️ 編輯</button> <button type="button" class="btn ghost small" data-myi-deltile>🗑 刪除這一格</button></span>` : ''}</div>`;
+    if (t.custom && MYI.form === 'edit') return `<div class="myi-sheet" style="--zone:${zone.color}">${top}${myiTileFormHtml(t)}</div>`;
     return `<div class="myi-sheet" style="--zone:${zone.color}">
+      ${top}
       <div class="myi-kicker">TILE ${t.no}・${zone.name}</div>
-      <div class="myi-title">${t.icon} ${escapeHtml(myiTileName(t))}</div>
-      <div class="myi-quote">「${escapeHtml(t.quote)}」</div>
+      <div class="myi-title">${escapeHtml(t.icon)} ${escapeHtml(myiTileName(t))}</div>
+      ${t.quote ? `<div class="myi-quote">「${escapeHtml(t.quote)}」</div>` : ''}
       <div class="myi-chips">${(t.tags || []).map(x => `<span class="myi-chip">${escapeHtml(x)}</span>`).join('')}<span class="myi-chip">${links.length} 條協作</span></div>
       ${live.html ? `<div class="myi-live">${live.html}</div>` : ''}
       ${myiItemsHtml(t)}
-      ${links.length ? `<div class="myi-sub">協作關係</div><div class="myi-links">${links.map(l => {
-        const o = MYI_TILES.find(x => x.id === (l[0] === t.id ? l[1] : l[0]));
-        return `<button type="button" class="myi-link" data-myi="${o.id}"><b>${o.icon} ${escapeHtml(myiTileName(o))}</b><span class="muted small">${escapeHtml(l[2])}</span></button>`;
-      }).join('')}</div>` : ''}
+      <div class="myi-sub">協作關係 <span class="muted small" style="font-weight:400;">・粉紅色的線,點名字可以跳過去</span></div>
+      <div class="myi-links">${links.map(l => {
+        const o = all.find(x => x.id === (l.a === t.id ? l.b : l.a));
+        return `<div class="myi-link-row"><button type="button" class="myi-link" data-myi="${o.id}"><b>${escapeHtml(o.icon)} ${escapeHtml(myiTileName(o))}</b><span class="muted small">${escapeHtml(l.text)}</span></button>
+          <button type="button" class="myi-del" data-unlink="${escapeHtml(l.key)}" aria-label="拿掉這條協作線">✕</button></div>`;
+      }).join('')}${links.length ? '' : '<div class="muted small">還沒有協作線。</div>'}</div>
+      ${others.length ? `<form class="myi-add myi-link-add"><select aria-label="連到哪一格">${others.map(o => `<option value="${o.id}">${o.no} ${escapeHtml(o.icon)} ${escapeHtml(myiTileName(o))}</option>`).join('')}</select>
+        <input type="text" maxlength="40" placeholder="怎麼互相支援(可不填)" aria-label="協作說明"><button type="submit" class="btn small">＋ 連線</button></form>` : ''}
     </div>`;
   }
 
   function myiRenderDetail() {
     const box = $('#myi-detail');
     if (!box) return;
-    const D = myiData(), t = MYI_TILES.find(x => x.id === MYI.sel);
-    box.innerHTML = t ? myiDetailHtml(t, D) : `<div class="myi-sheet">
+    const D = myiData(), t = myiTile(MYI.sel), n = myiAllTiles().length;
+    box.innerHTML = t ? myiDetailHtml(t, D) : MYI.form === 'tile' ? `<div class="myi-sheet">${myiTileFormHtml(null)}</div>` : `<div class="myi-sheet">
       <div class="myi-kicker">HELLO / 我的島</div>
       <div class="myi-title">每一格,都是你的一部分</div>
-      <div class="muted small" style="margin:6px 0 10px;">13 格六邊形加 3 塊空地拼成一顆心(空地留給之後的新作品)。點一格(或下面的清單)看細項,粉紅色的線是格子之間的協作關係。家和未來區用的是 APP 裡的真實記錄,會跟著長大。</div>
+      <div class="muted small" style="margin:6px 0 10px;">${n} 格六邊形拼成一顆心。點一格(或下面的清單)看細項,粉紅色的線是格子之間的協作關係;家和未來區用的是 APP 裡的真實記錄,會跟著長大。兩指或滾輪可以縮放,右上角 ⌂ 回全景。</div>
       <div class="myi-zones">${Object.values(MYI_ZONES).map(z => `<div class="myi-zone" style="--zone:${z.color}"><b>${z.name}</b><span class="muted small">${z.desc}</span></div>`).join('')}</div>
+      <div class="myi-acts"><button type="button" class="btn small" data-myi-newtile>＋ 新增一格<span class="muted small">新作品、新目標都可以,先填空地再往外長</span></button></div>
     </div>`;
     box.querySelectorAll('[data-myi]').forEach(b => { b.onclick = () => { MYI.sel = null; myiSelect(b.dataset.myi); }; });
+    const on = (sel, fn) => { const b = box.querySelector(sel); if (b) b.onclick = fn; };
+    on('[data-myi-home]', myiHome);
+    on('[data-myi-newtile]', () => { MYI.form = 'tile'; myiRenderDetail(); });
+    if (MYI.form) myiBindTileForm(box, MYI.form === 'edit' ? t : null);
+    if (t) {
+      on('[data-myi-edit]', () => { MYI.form = 'edit'; myiRenderDetail(); });
+      on('[data-myi-deltile]', () => myiDeleteTile(t));
+      box.querySelectorAll('[data-unlink]').forEach(b => { b.onclick = () => myiDeleteLink(b.dataset.unlink); });
+      const lf = box.querySelector('.myi-link-add');
+      if (lf) lf.onsubmit = (e) => { e.preventDefault(); myiAddLink(t, lf.querySelector('select').value, lf.querySelector('input').value); };
+    }
     if (t && myiEditable(t)) {
       box.querySelectorAll('[data-chk]').forEach(b => { b.onclick = () => myiToggle(t, b.dataset.chk); });
       box.querySelectorAll('[data-del]').forEach(b => { b.onclick = () => myiDelete(t, b.dataset.del); });
-      const f = box.querySelector('.myi-add');
+      const f = box.querySelector('.myi-add:not(.myi-link-add)');
       if (f) f.onsubmit = (e) => { e.preventDefault(); myiAdd(t, f.querySelector('input').value); };
     }
     // 學習之樹:直接開下一堂課,或打開錯題本(只看答錯的)
@@ -770,18 +1028,21 @@
 
   function myiRenderList(box, D) {
     box.innerHTML = Object.entries(MYI_ZONES).map(([k, z]) => `<div class="myi-sub" style="color:${z.color}">${z.name}・${z.desc}</div>
-      <div class="ex-list">${MYI_TILES.filter(t => t.zone === k).map(t => `<button type="button" class="ex-item" data-myi="${t.id}">
-        <span class="ex-ico">${t.icon}</span><span><b>${t.no} ${escapeHtml(myiTileName(t))}</b><br><span class="muted small">${escapeHtml(myiLive(t, D).sub)}</span></span></button>`).join('')}</div>`).join('');
+      <div class="ex-list">${myiAllTiles().filter(t => t.zone === k).map(t => `<button type="button" class="ex-item" data-myi="${t.id}">
+        <span class="ex-ico">${escapeHtml(t.icon)}</span><span><b>${t.no} ${escapeHtml(myiTileName(t))}</b><br><span class="muted small">${escapeHtml(myiLive(t, D).sub)}</span></span></button>`).join('')}</div>`).join('')
+      + '<div class="myi-acts"><button type="button" class="btn small" data-myi-newtile>＋ 新增一格<span class="muted small">會切回全景,填好就蓋到島上</span></button></div>';
+    const b = box.querySelector('[data-myi-newtile]');
+    b.onclick = () => { MYI.view = 'map'; MYI.sel = null; MYI.form = 'tile'; renderExplorePanel(); };
   }
 
   function myiRenderTime(box, D) {
     const today = autodivYmd(new Date());
     const ev = myiTimeline(D);
     box.innerHTML = `<div class="myi-time">${ev.map(e => {
-      const t = MYI_TILES.find(x => x.id === e.tile) || MYI_TILES[0];
+      const t = myiTile(e.tile) || MYI_TILES[0];
       return `<button type="button" class="myi-ev${e.d > today ? ' soon' : ''}" data-myi="${t.id}" style="--zone:${MYI_ZONES[t.zone].color}">
         <span class="myi-ev-d">${escapeHtml(e.d.slice(0, 4))}<br><b>${escapeHtml(e.d.slice(5).replace('-', '/'))}</b></span>
-        <span class="myi-ev-t">${escapeHtml(e.t)}${e.money ? ' ' + myiW(e.money) : ''}${e.d > today ? ' <span class="ex-soon">即將</span>' : ''}<br><span class="muted small">${t.icon} ${escapeHtml(myiTileName(t))}</span></span>
+        <span class="myi-ev-t">${escapeHtml(e.t)}${e.money ? ' ' + myiW(e.money) : ''}${e.d > today ? ' <span class="ex-soon">即將</span>' : ''}<br><span class="muted small">${escapeHtml(t.icon)} ${escapeHtml(myiTileName(t))}</span></span>
       </button>`;
     }).join('')}</div>`;
   }
@@ -791,7 +1052,9 @@
     const tab = (v, label) => `<button type="button" class="chip${MYI.view === v ? ' active' : ''}" data-myi-view="${v}">${label}</button>`;
     return `<div class="myi">
       <div class="myi-tabs">${tab('map', '🗺️ 全景')}${tab('list', '☰ 清單')}${tab('time', '◷ 時間')}</div>
-      <div class="myi-stage${MYI.view === 'map' && !MYI.failed ? '' : ' hidden'}" id="myi-stage"><div class="explore-hint small">點一格看看・左右滑動旋轉</div></div>
+      <div class="myi-stage${MYI.view === 'map' && !MYI.failed ? '' : ' hidden'}" id="myi-stage">
+        <div class="myi-ctrl"><button type="button" data-myi-z="in" aria-label="放大">＋</button><button type="button" data-myi-z="out" aria-label="縮小">－</button><button type="button" data-myi-z="home" aria-label="回全景">⌂</button></div>
+        <div class="explore-hint small">點一格看看・左右滑動旋轉・兩指縮放</div></div>
       <div id="myi-detail" class="${MYI.view === 'map' ? '' : 'hidden'}"></div>
       <div id="myi-body"></div>
     </div>`;
@@ -801,6 +1064,9 @@
     const root = $('.myi');
     if (!root) return;
     root.querySelectorAll('[data-myi-view]').forEach(b => { b.onclick = () => { MYI.view = b.dataset.myiView; renderExplorePanel(); }; });
+    root.querySelectorAll('[data-myi-z]').forEach(b => {
+      b.onclick = () => { const z = b.dataset.myiZ; if (z === 'home') myiHome(); else myiZoom(z === 'in' ? 0.75 : 1 / 0.75); };
+    });
     const D = myiData();
     const body = $('#myi-body');
     if (MYI.view === 'list') myiRenderList(body, D);

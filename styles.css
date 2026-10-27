@@ -1066,3 +1066,24 @@ th { color: var(--muted); font-weight: 600; font-size: .8rem; }
 .myi-del { flex: 0 0 auto; border: 0; background: transparent; color: var(--muted); cursor: pointer; padding: 2px 4px; font-size: .85rem; }
 .myi-add { display: flex; gap: 6px; margin-top: 8px; }
 .myi-add input { flex: 1; min-width: 0; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); }
+/* 我的島:縮放按鈕、回全景、自己新增格子與協作線 */
+.myi-ctrl { position: absolute; top: 10px; right: 10px; display: flex; flex-direction: column; gap: 6px; z-index: 2; }
+.myi-ctrl button { width: 38px; height: 38px; border-radius: 12px; border: 1px solid rgba(0,0,0,.08); background: rgba(255,255,255,.9); color: #2A3938; font-size: 1.15rem; font-weight: 700; line-height: 1; cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,.12); }
+.myi-ctrl button:active { transform: scale(.94); }
+.myi-top { display: flex; justify-content: space-between; align-items: center; gap: 6px; flex-wrap: wrap; margin: -4px 0 8px; }
+.myi-link-row { display: flex; align-items: center; gap: 4px; }
+.myi-link-row .myi-link { flex: 1; }
+.myi-link-add select { flex: 0 1 42%; min-width: 0; padding: 8px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); }
+.myi-form { display: flex; flex-direction: column; gap: 6px; }
+.myi-form > input { padding: 9px 10px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); }
+.myi-icons { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.myi-ico { width: 36px; height: 36px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface-2); font-size: 1.1rem; cursor: pointer; padding: 0; }
+.myi-ico.on { border: 2px solid var(--accent, #E5486A); }
+.myi-ico-in { width: 54px; height: 36px; text-align: center; border-radius: 10px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-size: 1.05rem; }
+.myi-zpick { display: flex; gap: 6px; }
+.myi-zpick label { flex: 1; cursor: pointer; }
+.myi-zpick input { position: absolute; opacity: 0; pointer-events: none; }
+.myi-zpick span { display: block; text-align: center; padding: 8px; border-radius: 10px; border: 1px solid var(--border); border-top: 4px solid var(--zone); background: var(--surface-2); }
+.myi-zpick input:checked + span { background: var(--zone); color: #fff; font-weight: 700; }
+.myi-form-btns { display: flex; gap: 8px; margin-top: 6px; }
+@media (max-width: 420px) { .myi-link-add { flex-wrap: wrap; } .myi-link-add select { flex: 1 1 100%; } }
