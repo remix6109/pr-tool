@@ -1267,7 +1267,7 @@
     box.innerHTML = t ? myiDetailHtml(t, D) : MYI.form === 'tile' ? `<div class="myi-sheet">${myiTileFormHtml(null)}</div>` : `<div class="myi-sheet">
       <div class="myi-kicker">HELLO / 我的島</div>
       <div class="myi-title">每一格,都是你的一部分</div>
-      <div class="muted small" style="margin:6px 0 10px;">${n} 格六邊形拼成一顆心。點一格(或下面的清單)看細項,粉紅色的線是格子之間的協作關係;家和未來區用的是 APP 裡的真實記錄,會跟著長大。兩指或滾輪可以縮放,右上角 ⌂ 回全景。</div>
+      <div class="muted small" style="margin:6px 0 10px;">${n} 格拼成一座愛心島,地上的色塊就是一格。點一格(或下面的清單)看細項和名字,粉紅色的線是格子之間的協作關係;家和未來區用的是 APP 裡的真實記錄,會跟著長大。兩指或滾輪可以縮放,右上角 ⌂ 回全景。</div>
       <div class="myi-zones">${Object.values(MYI_ZONES).map(z => `<div class="myi-zone" style="--zone:${z.color}"><b>${z.name}</b><span class="muted small">${z.desc}</span></div>`).join('')}</div>
       <div class="myi-acts"><button type="button" class="btn small" data-myi-newtile>＋ 新增一格<span class="muted small">新作品、新目標都可以,先填空地再往外長</span></button></div>
     </div>`;
