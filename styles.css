@@ -1127,3 +1127,39 @@ html[data-theme="dark"] .town3d-hud .gain { color: #FF8A7A; } html[data-theme="d
 .pnl-pct { font-size: .8rem; font-weight: 600; font-variant-numeric: tabular-nums; }
 .pnl-note { margin-top: 6px; }
 @media (max-width: 380px) { .pnl-val { font-size: .98rem; } .pnl-chip { padding: 8px 9px; } }
+
+/* 定期定額計畫 */
+.dca-row { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 12px; background: var(--surface-2); margin-bottom: 6px; }
+.dca-row.off { opacity: .6; }
+.dca-main { flex: 1; min-width: 0; }
+.dca-form { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+.dca-form label { display: flex; flex-direction: column; gap: 4px; }
+.dca-form input, .dca-form select { padding: 9px 10px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-size: 1rem; }
+/* 系統狀態 */
+.st-sum { padding: 10px 14px; border-radius: 12px; font-weight: 700; margin-bottom: 10px; background: var(--surface-2); border-left: 5px solid var(--border); }
+.st-sum.ok { border-left-color: #3FA66B; } .st-sum.warn { border-left-color: #E0A030; } .st-sum.bad { border-left-color: #D2533F; }
+.st-row { display: flex; gap: 10px; align-items: flex-start; padding: 9px 4px; border-bottom: 1px solid var(--border); line-height: 1.4; }
+.st-row:last-of-type { border-bottom: 0; }
+.st-dot { flex: 0 0 auto; }
+/* 年度回顧 */
+.rv-years { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+.rv-hero { border-radius: 18px; padding: 20px 18px; color: #3A3142; background: linear-gradient(135deg, #C9C4F4, #F3D9EC 55%, #FDE5D2); }
+.rv-kicker { font-size: .72rem; font-weight: 700; letter-spacing: .12em; color: #7A5C9E; }
+.rv-title { font-size: 1.9rem; font-weight: 800; line-height: 1.2; }
+.rv-sub { color: #6B6472; margin-top: 2px; }
+.rv-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin-top: 10px; }
+.rv-stat { display: flex; flex-direction: column; gap: 2px; padding: 12px; border-radius: 14px; background: var(--surface-2); min-width: 0; }
+.rv-stat b { font-size: 1.2rem; font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; }
+.rv-ico { font-size: 1.2rem; }
+.rv-bars { display: grid; grid-template-columns: repeat(12, 1fr); gap: 4px; height: 130px; padding: 10px; border-radius: 14px; background: var(--surface-2); }
+.rv-bar { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; font-size: .7rem; color: var(--muted); }
+.rv-bar-col { flex: 1; width: 100%; display: flex; align-items: flex-end; justify-content: center; gap: 2px; }
+.rv-bar-col i, .rv-legend i { display: block; width: 42%; min-height: 2px; border-radius: 4px 4px 0 0; }
+.rv-bar-col i.inv, .rv-legend i.inv { background: linear-gradient(#F08CA6, #B9A8FF); }
+.rv-bar-col i.div, .rv-legend i.div { background: #F2B33D; }
+.rv-legend { margin-top: 6px; } .rv-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; vertical-align: -1px; margin-right: 4px; }
+.rv-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.rv-list li { padding: 8px 12px; border-radius: 10px; background: var(--surface-2); }
+.rv-people { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px; }
+.rv-person { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: 12px; background: var(--surface-2); }
+.rv-img { display: block; width: 100%; max-width: 420px; margin: 12px auto 8px; border-radius: 16px; box-shadow: 0 10px 30px rgba(60, 40, 80, .2); }

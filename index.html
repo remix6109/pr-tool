@@ -105,6 +105,12 @@
           <div class="muted small" style="margin-top:8px;">依證交所除權息資料與你除息前 2 個營業日的持股推算(買太靠近除息日的不算)。金額與入帳日為預估。按「確認 / 修改入帳」會打開已填好的股利表單,把金額和日期改成實際入帳的數字再儲存,就不用另外手動新增。</div>
         </div>
 
+        <div class="card hidden" id="card-pending-dca">
+          <div class="card-title">📆 待確認買進 <small class="muted" style="font-weight:500;font-size:.75em;">(定期定額)</small></div>
+          <div id="pending-dca-list"></div>
+          <div class="muted small" style="margin-top:8px;">依你設定的定期定額計畫提醒。按「記一筆買進」會帶入表單,填上實際成交價和股數後才會記帳。</div>
+        </div>
+
         <div class="card" data-collapse="payout">
           <div class="card-title">本月配息行事曆 <small class="muted" style="font-weight:500;font-size:.75em;">(估)</small></div>
           <div id="payout-calendar"></div>
@@ -653,6 +659,8 @@
     </div>
     <button class="btn ghost wide" id="btn-refresh">🔄 重新載入資料</button>
     <button class="btn ghost wide" id="btn-datacheck">🔍 資料檢查</button>
+    <button class="btn ghost wide" id="btn-status">🩺 系統狀態</button>
+    <button class="btn ghost wide" id="btn-dca">📆 定期定額計畫</button>
     <button class="btn ghost wide" id="btn-deleted-history">📋 最近刪除</button>
     <button class="btn ghost wide" id="btn-change-pin">🔑 變更 PIN</button>
     <button class="btn ghost wide" id="btn-change-api">🔗 變更 API URL</button>
@@ -680,6 +688,29 @@
 </div>
 
 <!-- 資料檢查 -->
+<!-- 系統狀態 -->
+<div class="modal hidden" id="modal-status">
+  <div class="modal-box wide">
+    <h2>系統狀態</h2>
+    <div id="status-body"></div>
+    <div class="modal-actions">
+      <button class="btn ghost" id="status-recheck">重新檢查</button>
+      <button class="btn primary" data-close>關閉</button>
+    </div>
+  </div>
+</div>
+
+<!-- 定期定額計畫 -->
+<div class="modal hidden" id="modal-dca">
+  <div class="modal-box wide">
+    <h2>定期定額計畫</h2>
+    <div id="dca-body"></div>
+    <div class="modal-actions">
+      <button class="btn primary" data-close>關閉</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal hidden" id="modal-datacheck">
   <div class="modal-box wide">
     <h2>資料檢查</h2>
@@ -761,6 +792,9 @@
 <script src="js/explore-data.js"></script>
 <script src="js/explore.js"></script>
 <script src="js/myisland.js"></script>
+<script src="js/review.js"></script>
+<script src="js/dca.js"></script>
+<script src="js/status.js"></script>
 <script src="js/market.js"></script>
 <script src="js/fx.js"></script>
 <script src="js/main.js"></script>

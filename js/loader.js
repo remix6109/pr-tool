@@ -25,7 +25,9 @@
         }
       }
       // 拉最新資料
+      const t0 = Date.now();
       const data = normalizeDataDates(await API.getAll());
+      STATE.lastSync = { ok: true, at: Date.now(), ms: Date.now() - t0 };   // 給「系統狀態」看
       if (mySeq !== _loadSeq) return;   // 已有更新的呼叫接管，丟棄過期結果
       STATE.data = data;
       localStorage.setItem(KEY.cache, JSON.stringify(data));
@@ -35,6 +37,7 @@
       $('#home-content').classList.remove('hidden');
       autoRefreshPrices();   // 現價不是最新的就自動抓一次(不等它,失敗也不打擾)
     } catch (e) {
+      STATE.lastSync = { ok: false, at: Date.now(), error: e.message };
       if (mySeq !== _loadSeq) return;
       // 連線失敗時退回顯示上次的資料,不要整頁只剩錯誤文字
       let fallback = STATE.data;

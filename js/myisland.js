@@ -1448,7 +1448,7 @@
   function myIslandHtml() {
     const tab = (v, label) => `<button type="button" class="chip${MYI.view === v ? ' active' : ''}" data-myi-view="${v}">${label}</button>`;
     return `<div class="myi">
-      <div class="myi-tabs">${tab('map', '🗺️ 全景')}${tab('list', '☰ 清單')}${tab('time', '◷ 時間')}</div>
+      <div class="myi-tabs">${tab('map', '🗺️ 全景')}${tab('list', '☰ 清單')}${tab('time', '◷ 時間')}${tab('review', '✨ 回顧')}</div>
       <div class="myi-stage${MYI.view === 'map' && !MYI.failed ? '' : ' hidden'}" id="myi-stage">
         <div class="myi-ctrl"><button type="button" data-myi-z="in" aria-label="放大">＋</button><button type="button" data-myi-z="out" aria-label="縮小">－</button><button type="button" data-myi-z="home" aria-label="回全景">⌂</button></div>
         <div class="explore-hint small">點一格看看・左右滑動旋轉・兩指縮放</div></div>
@@ -1468,6 +1468,7 @@
     const body = $('#myi-body');
     if (MYI.view === 'list') myiRenderList(body, D);
     else if (MYI.view === 'time') myiRenderTime(body, D);
+    else if (MYI.view === 'review' && typeof reviewRender === 'function') reviewRender(body);
     body.querySelectorAll('[data-myi]').forEach(b => { b.onclick = () => { MYI.view = 'map'; MYI.sel = null; renderExplorePanel(); myiSelect(b.dataset.myi); }; });
     if (MYI.view !== 'map') return;
     myiRenderDetail();

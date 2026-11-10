@@ -122,6 +122,7 @@
     applyCollapseStates();
     FX.afterRender();
     renderPendingDividends();
+    renderPendingDca();
   }
 
   // 三條線:

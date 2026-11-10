@@ -108,6 +108,9 @@
 
   function bindSettings() {
     bindDataCheck();
+    $('#btn-status').onclick = () => { closeAllModals(); openModal('modal-status'); renderStatus(); };
+    $('#status-recheck').onclick = () => renderStatus();
+    $('#btn-dca').onclick = () => { closeAllModals(); openModal('modal-dca'); renderDcaManager(); };
     $('#btn-settings').onclick = () => {
       renderPalettePicker();
       renderFxPicker();

@@ -14,11 +14,11 @@ const ctx = {
 ctx.window = ctx;
 vm.createContext(ctx);
 // 與 index.html 相同的載入順序(只載入純計算會用到的檔案)
-const files = ['config', 'utils', 'appearance', 'portfolio', 'autodiv', 'datacheck', 'daily'];
+const files = ['config', 'utils', 'appearance', 'portfolio', 'autodiv', 'datacheck', 'daily', 'dca', 'review', 'status'];
 const src = files.map(f => fs.readFileSync(path.join(root, f + '.js'), 'utf8')).join('\n;\n');
 vm.runInContext(src + '\n;this.__t = { STATE, CONFIG, AUTODIV, _exDiv, replayPurchases, computeRealizedPL, computeOpenHoldings, computePersonStats,' +
   ' autodivSharesBefore, autodivBizDaysBefore, autodivEstimateNet, autodivInterval, autodivIntervalFor, autodivAnnualPerShare,' +
-  ' computePayoutEvents, computePendingDividends, runDataCheck, autodivParseRoc, trailing12Dividends, dividendYieldOnCost, autodivFindRecord, _payDates, autodivPayDate, twYmd, normalizeDataDates, computeDailyValues, dailyPnlSince, fmt };', ctx);
+  ' computePayoutEvents, computePendingDividends, runDataCheck, autodivParseRoc, trailing12Dividends, dividendYieldOnCost, autodivFindRecord, _payDates, autodivPayDate, twYmd, normalizeDataDates, computeDailyValues, dailyPnlSince, computePendingDca, dcaPlans, computeYearReview, statusExpectedCloseDay, statusLocalChecks, fmt };', ctx);
 const T = ctx.__t;
 
 let pass = 0, fail = 0;
@@ -167,6 +167,70 @@ near('本月損益率的分母含新投入', mon.pct, (83500 - 31500 - 50020) / 
 eq('期間開始前沒有資料 → 算不出來', T.dailyPnlSince(dv, '2026-10-28'), null);
 eq('最新一點比期間還早 → 算不出來', T.dailyPnlSince(dv, '2026-11-09'), null);
 eq('只算那個人的', T.computeDailyValues('蘇').map(x => x.value), [31000, 32000, 31500, 32000, 33000, 33000]);
+
+// ---------- 定期定額:到期還沒記的才提醒 ----------
+const plans = [
+  { id: 'a', person: '黃', symbol: '0056', amount: 3000, day: 5, start: '2026-10', on: true },
+  { id: 'b', person: '蘇', symbol: '0050', amount: 5000, day: 20, start: '2026-11', on: true },
+  { id: 'c', person: '黃', symbol: '00919', amount: 2000, day: 1, start: '2026-01', on: false }
+];
+delete store['pr.dcaDismissed'];
+set({ purchases: [P('a', '黃', '代號0056', 3000, 30, 100, 20, '2026-10-06')], meta: { dca_plans: JSON.stringify(plans) } });
+eq('讀得到計畫', T.dcaPlans().length, 3);
+eq('10 月買過了、11 月到期還沒買 → 提醒 11 月那筆', T.computePendingDca('2026-11-10').map(x => x.key), ['a|2026-11']);
+eq('到期日是那個月的那一天', T.computePendingDca('2026-11-10')[0].due, '2026-11-05');
+eq('還沒到那一天不提醒;暫停的不提醒', T.computePendingDca('2026-11-04').length, 0);
+eq('開始月份以前的不提醒', T.computePendingDca('2026-11-25').map(x => x.key), ['a|2026-11', 'b|2026-11']);
+store['pr.dcaDismissed'] = JSON.stringify(['a|2026-11']);
+eq('按過「這個月略過」就不再提醒', T.computePendingDca('2026-11-25').map(x => x.key), ['b|2026-11']);
+delete store['pr.dcaDismissed'];
+eq('跨年:1 月時會看去年 12 月(依到期日排序)', T.computePendingDca('2027-01-06').map(x => x.key), ['a|2026-12', 'b|2026-12', 'a|2027-01']);
+set({ purchases: [], meta: {} });
+eq('沒有設定計畫就什麼都沒有', T.computePendingDca('2026-11-10'), []);
+set({ purchases: [], meta: { dca_plans: '{壞掉的 JSON' } });
+eq('計畫資料壞掉不當機', T.dcaPlans(), []);
+
+// ---------- 年度回顧 ----------
+set({ purchases: [
+  P('a', '黃', '0056', 60000, 30, 2000, 20, '2025-12-10'),
+  P('b', '黃', '0056', 30000, 30, 1000, 20, '2026-01-10'),
+  P('c', '蘇', '0050', 50000, 100, 500, 20, '2026-01-20'),       // 累計突破 10 萬
+  P('d', '黃', '00919', 10000, 20, 500, 20, '2026-03-05'),
+  P('e', '黃', '00919', -6000, 24, -250, 30, '2026-06-01')       // 賣出不算投入
+], dividends: [
+  { person: '黃', symbol: '0056', total: 1500, date: '2026-04-15' },
+  { person: '蘇', symbol: '0050', total: 900, date: '2026-07-20' },
+  { person: '黃', symbol: '0056', total: 800, date: '2025-10-15' }
+], island: [
+  { tile: 'next', text: '做完年度回顧', date: '2026-11-10', note: '' },
+  { tile: '_tile', text: '健身', date: '', note: 'tile:{"key":"t1"}' },
+  { tile: 'app', text: '舊的事', date: '2025-05-01', note: 'ref:app:0' }
+] });
+const rv = T.computeYearReview('2026');
+eq('今年投入(含手續費,不含賣出)', rv.invested, 30020 + 50020 + 10020);
+eq('買進筆數與有買的月份', [rv.buys, rv.activeMonths, rv.symbols], [3, 2, 3]);
+eq('賣出拿回的錢另外算', rv.sold, 6000 - 30);
+eq('今年配息', [rv.div, rv.divN], [2400, 2]);
+eq('買最多的、配息最多的', [rv.topSym.sym, rv.topDiv.sym], ['0050', '0056']);
+eq('投入最多的月份', rv.bestMonth.month, 1);
+eq('里程碑只算今年跨過的', rv.milestones, [{ date: '2026-01-20', level: 100000 }]);
+eq('各自的統計', [rv.per['黃'].invested, rv.per['蘇'].invested, rv.per['蘇'].divN], [40040, 50020, 1]);
+eq('島上今年完成的事(不含格子定義)', rv.done, ['做完年度回顧']);
+eq('不是今年第一次買', rv.firstBuyThisYear, null);
+eq('第一次買進的那一年會標出來', T.computeYearReview('2025').firstBuyThisYear, '2025-12-10');
+
+// ---------- 系統狀態 ----------
+const at = (y, m, d, hh, mm) => new Date(y, m - 1, d, hh, mm);
+eq('平日收盤後 → 今天', T.statusExpectedCloseDay(at(2026, 11, 10, 15, 0)), '2026-11-10');
+eq('平日收盤前 → 前一個交易日', T.statusExpectedCloseDay(at(2026, 11, 10, 10, 0)), '2026-11-09');
+eq('週一早上 → 上週五', T.statusExpectedCloseDay(at(2026, 11, 9, 9, 0)), '2026-11-06');
+eq('週末 → 週五', [T.statusExpectedCloseDay(at(2026, 11, 7, 16, 0)), T.statusExpectedCloseDay(at(2026, 11, 8, 16, 0))], ['2026-11-06', '2026-11-06']);
+const priceLevel = (latest) => { set({ price_history: [{ date: latest, symbol: '0056', close_price: 30 }] }); return T.statusLocalChecks(at(2026, 11, 10, 15, 0)).find(x => x.label === '每日收盤價').level; };
+eq('收盤價有記到今天 → 正常', priceLevel('2026-11-10'), 'ok');
+eq('差一天 → 提醒(可能休市)', priceLevel('2026-11-09'), 'warn');
+eq('差三天以上 → 排程可能沒跑', priceLevel('2026-11-05'), 'bad');
+T.STATE.lastSync = { ok: false, at: Date.now(), error: '連線逾時' };
+eq('同步失敗會標出來', T.statusLocalChecks(at(2026, 11, 10, 15, 0)).find(x => x.label === '資料同步').level, 'bad');
 
 console.log(`\n${fail === 0 ? '✅ 全部通過' : '❌ 有失敗'}:${pass} 通過、${fail} 失敗`);
 process.exit(fail === 0 ? 0 : 1);
