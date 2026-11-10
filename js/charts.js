@@ -1,8 +1,69 @@
 /* 圖表:淨值、持股、歷史圖 — 由 app.js 拆出;所有檔案共用全域範圍,載入順序見 index.html */
+  // 資產走勢有兩種看法:長期(每月一點,市值是用今日價回推的估算)、每日(用每天的真實收盤價)
+  function networthMode() {
+    let m = 'month';
+    try { m = localStorage.getItem('pr.networthMode') || 'month'; } catch (_) {}
+    return m === 'daily' ? 'daily' : 'month';
+  }
+  function bindNetworthMode(personFilter, mode, dailyCount) {
+    $$('#networth-mode [data-nw]').forEach(b => {
+      b.classList.toggle('active', b.dataset.nw === mode);
+      b.onclick = () => {
+        try { localStorage.setItem('pr.networthMode', b.dataset.nw); } catch (_) {}
+        renderNetWorthChart(personFilter);
+      };
+    });
+    const note = $('#networth-note');
+    if (!note) return;
+    note.innerHTML = mode === 'daily'
+      ? (dailyCount >= 2 ? '每一點是當天收盤後的<b>真實市值</b>(當天持股 × 當天收盤價)。收盤價從 2026/10/28 起每個交易日自動記錄,所以這條線會一天一天變長。'
+        : '每日收盤價還不夠兩天,暫時畫不出來;每個交易日下午會自動記錄,過幾天再來看。')
+      : '「估算市值」用<b>今日價格</b>回推歷史持股(非當時真實價格);「真實快照」每月 1 號自動寫一筆。想看真實的每日變化,切到「每日(真實收盤)」。';
+  }
+
+  function renderDailyChart(canvas, series) {
+    const palette = STATE.chartColors || getCurrentPalette().chart;
+    const colValue = palette[0] || '#3b82f6', colCost = palette[1] || '#94a3b8';
+    const md = (s) => +s.slice(5, 7) + '/' + +s.slice(8, 10);
+    const opts = chartBarOptions();
+    opts.scales.x.ticks.maxTicksLimit = 8;
+    opts.scales.y.grace = '5%';
+    opts.interaction = { mode: 'index', intersect: false };
+    if (_charts.networth) _charts.networth.destroy();
+    _charts.networth = new Chart(canvas, {
+      type: 'line',
+      data: {
+        labels: series.map(x => md(x.date)),
+        datasets: [
+          { label: '真實市值 (每日收盤)', data: series.map(x => Math.round(x.value)),
+            borderColor: colValue, backgroundColor: FX.gradient(colValue), tension: 0.25, pointRadius: series.length > 40 ? 0 : 2, borderWidth: 2.5, fill: true },
+          { label: '累計投入', data: series.map(x => Math.round(x.cost)),
+            borderColor: colCost, backgroundColor: 'transparent', tension: 0, pointRadius: 0, borderWidth: 2, borderDash: [5, 5], stepped: true }
+        ]
+      },
+      options: opts
+    });
+  }
+
   function renderNetWorthChart(personFilter) {
     const canvas = $('#chart-networth');
     const empty  = $('#networth-empty');
     if (!canvas || !window.Chart) return;
+    const mode = networthMode();
+    const daily = mode === 'daily' ? computeDailyValues(personFilter) : [];
+    bindNetworthMode(personFilter, mode, daily.length);
+    if (mode === 'daily') {
+      if (daily.length < 2) {
+        if (empty) { empty.classList.remove('hidden'); empty.textContent = '每日收盤價還不夠兩天。'; }
+        canvas.style.display = 'none';
+        if (_charts.networth) { _charts.networth.destroy(); _charts.networth = null; }
+        return;
+      }
+      if (empty) empty.classList.add('hidden');
+      canvas.style.display = '';
+      renderDailyChart(canvas, daily);
+      return;
+    }
     const purchases = (STATE.data.purchases || []).filter(r => !personFilter || r.person === personFilter);
     const snaps = ((STATE.data && STATE.data.snapshots) || []).filter(r => !personFilter || r.person === personFilter);
     if (purchases.length === 0) {

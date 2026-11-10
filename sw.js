@@ -1,7 +1,7 @@
 /* Service Worker — 離線可看(讀取);寫入仍要網路。
  * 改 SW 邏輯時,改下面 CACHE_VERSION,所有客戶端會自動拿新版。
  */
-const CACHE_VERSION = 'v84';
+const CACHE_VERSION = 'v85';
 const APP_CACHE = 'pr-app-' + CACHE_VERSION;
 const API_CACHE = 'pr-api-' + CACHE_VERSION;
 
@@ -17,6 +17,7 @@ const SHELL_ASSETS = [
   './js/auth.js',
   './js/ui.js',
   './js/loader.js',
+  './js/daily.js',
   './js/dashboard.js',
   './js/charts.js',
   './js/portfolio.js',
@@ -30,6 +31,7 @@ const SHELL_ASSETS = [
   './js/autodiv.js',
   './js/datacheck.js',
   './js/town.js',
+  './js/luxe3d.js',
   './js/town3d.js',
   './js/explore-data.js',
   './js/explore.js',

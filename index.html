@@ -153,12 +153,13 @@
 
         <div class="card" id="card-networth" data-collapse="networth">
           <div class="card-title">資產淨值走勢</div>
+          <div class="seg seg-mini" id="networth-mode" style="margin-bottom:8px;">
+            <button type="button" class="seg-btn" data-nw="month">長期(每月)</button>
+            <button type="button" class="seg-btn" data-nw="daily">每日(真實收盤)</button>
+          </div>
           <div id="networth-empty" class="muted small hidden">尚未有購買紀錄,無法畫資產走勢。</div>
           <div class="chart-wrap"><canvas id="chart-networth"></canvas></div>
-          <div class="muted small" style="margin-top:8px;">
-            「估算市值」用<b>今日價格</b>回推歷史持股(非當時真實價格);
-            「真實快照」每月 1 號自動寫一筆,日後愈來愈準。
-          </div>
+          <div class="muted small" id="networth-note" style="margin-top:8px;"></div>
         </div>
 
         <div class="card" data-collapse="savings">
@@ -741,6 +742,7 @@
 <script src="js/auth.js"></script>
 <script src="js/ui.js"></script>
 <script src="js/loader.js"></script>
+<script src="js/daily.js"></script>
 <script src="js/dashboard.js"></script>
 <script src="js/charts.js"></script>
 <script src="js/portfolio.js"></script>
@@ -754,6 +756,7 @@
 <script src="js/autodiv.js"></script>
 <script src="js/datacheck.js"></script>
 <script src="js/town.js"></script>
+<script src="js/luxe3d.js"></script>
 <script src="js/town3d.js"></script>
 <script src="js/explore-data.js"></script>
 <script src="js/explore.js"></script>

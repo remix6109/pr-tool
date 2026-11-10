@@ -108,6 +108,7 @@
         <div class="stat"><span class="label">預估年配息 <small class="muted">(${s.annualManual ? '含手動設定' : '依實際配息'})</small></span><span class="val">${fmt.money(s.annualYield)}</span></div>
         <div class="stat"><span class="label">真實年化 IRR <small class="muted">(含股利)</small> <button type="button" class="info-btn" data-info="irr" title="什麼是 IRR?">ⓘ</button></span><span class="val">${irrHtml}</span></div>
         <div class="stat"><span class="label">銀行餘額</span><span class="val">${fmt.money(s.bankBalance)}</span></div>
+        ${dailyPnlHtml(p)}
       </div>
     `;
 

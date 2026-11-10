@@ -18,7 +18,16 @@
     WALK: 1.3,            // 配息:小人走到中央的秒數
     MAX_H: 9,             // 最高那棟的高度
     MIN_FLOOR: 0.16,      // 金額很小的那層至少這麼厚,才點得到
-    YEAR_COLORS: ['#F3E6CC', '#EACB9C', '#DDAA6E', '#C98A52', '#B06C3E', '#8E5533']
+    YEAR_COLORS: ['#FFF4E2', '#FFE3C4', '#FFD0B0', '#FFC2AC', '#FAB0B0', '#F2A7B8']   // 越早越淺:奶油 → 蜜桃 → 珊瑚 → 玫瑰
+  };
+  // 配色:白天是晴朗的粉彩藍天,深色模式是有星星的紫色夜晚(窗戶和路燈會亮);陰天、下雨再往灰色靠
+  const TOWN3D_PAL = {
+    day: { skyTop: '#8FBDF0', skyMid: '#C9E2F7', skyLow: '#FDEBD9', sea: '#7CC3CC', shallow: '#A8E2DA', sand: '#F0D6A8', earth: '#D8B48C',
+      grass: '#BFE0A0', grass2: '#A6D389', path: '#F2E3C4', plaza: '#FAF0DE', grey: '#B4BCC8', cloud: '#FFFFFF', rainCloud: '#C2CAD4',
+      hemiSky: '#FFF4EC', hemiGround: '#B4A696', sun: '#FFE8D0', sunI: 1.6, hemiI: 0.36, exposure: 1.0, lamp: 0.25 },
+    night: { skyTop: '#141633', skyMid: '#2A2552', skyLow: '#4E3E66', sea: '#3D3A5E', shallow: '#5B5A82', sand: '#A8998F', earth: '#6E5A68',
+      grass: '#5C7C6A', grass2: '#4F6F60', path: '#9A8E84', plaza: '#B0A69C', grey: '#3A3C4C', cloud: '#8C86B8', rainCloud: '#5E5A80',
+      hemiSky: '#D2CAF2', hemiGround: '#3A2A44', sun: '#E2DAFF', sunI: 0.8, hemiI: 0.45, exposure: 1.15, lamp: 3.0 }
   };
 
   function town3dLoadThree() {
@@ -66,56 +75,129 @@
   }
 
   // ---------- 素材 ----------
+  // 窗戶貼圖:一張 4 扇 × 2 排。map = 白天的樣子(牆的顏色由材質決定);glow = 晚上哪幾扇亮著(有幾扇是暗的,才不會整面一樣)
   function town3dWindowTex() {
-    const c = document.createElement('canvas'); c.width = c.height = 64;
-    const g = c.getContext('2d');
-    g.fillStyle = '#FFFFFF'; g.fillRect(0, 0, 64, 64);
-    [[9, 14], [37, 14]].forEach(([x, y]) => {
-      g.fillStyle = '#5A6B73'; g.fillRect(x, y, 18, 30);
-      g.fillStyle = '#FFF2C4'; g.fillRect(x + 2, y + 2, 14, 26);
+    const mk = (draw) => {
+      const c = document.createElement('canvas'); c.width = c.height = 128;
+      draw(c.getContext('2d'));
+      const t = new THREE.CanvasTexture(c);
+      t.wrapS = t.wrapT = THREE.RepeatWrapping;
+      t.encoding = THREE.sRGBEncoding;
+      return t;
+    };
+    const cells = [];
+    for (let r = 0; r < 2; r++) for (let k = 0; k < 4; k++) cells.push([5 + k * 32, 9 + r * 64, 22, 42]);
+    const rr = (g, x, y, w, h, rad) => { g.beginPath(); g.roundRect ? g.roundRect(x, y, w, h, rad) : g.rect(x, y, w, h); g.fill(); };
+    const map = mk(g => {
+      g.fillStyle = '#FFFFFF'; g.fillRect(0, 0, 128, 128);
+      cells.forEach(([x, y, w, h]) => {
+        g.fillStyle = 'rgba(90,70,60,.10)'; g.fillRect(x - 3, y + h + 3, w + 6, 3);          // 窗台的影子
+        g.fillStyle = '#8E9AA6'; rr(g, x, y, w, h, 4);                                        // 窗框
+        const gr = g.createLinearGradient(x, y, x + w, y + h);
+        gr.addColorStop(0, '#FFFFFF'); gr.addColorStop(1, '#D6ECF7');   // 貼圖會乘上牆的顏色,玻璃要夠淺才不會變髒
+        g.fillStyle = gr; rr(g, x + 2, y + 2, w - 4, h - 4, 3);                               // 玻璃
+        g.fillStyle = 'rgba(150,200,230,.35)'; g.beginPath(); g.moveTo(x + 3, y + h - 3); g.lineTo(x + w - 3, y + 12); g.lineTo(x + w - 3, y + h - 3); g.fill();   // 玻璃下半的淡藍
+        g.fillStyle = '#A9B4BE'; g.fillRect(x + 2, y + h / 2 - 1, w - 4, 2);                  // 窗格
+        g.fillStyle = '#F6EFE3'; g.fillRect(x - 2, y + h, w + 4, 3);                          // 窗台
+      });
     });
-    const t = new THREE.CanvasTexture(c);
-    t.wrapS = t.wrapT = THREE.RepeatWrapping;
-    t.encoding = THREE.sRGBEncoding;
-    return t;
+    const glow = mk(g => {
+      g.fillStyle = '#000'; g.fillRect(0, 0, 128, 128);
+      cells.forEach(([x, y, w, h], i) => {
+        if (i === 2 || i === 5) return;                                                       // 這兩扇沒開燈
+        g.fillStyle = i % 3 ? '#FFFFFF' : '#C9C9C9'; rr(g, x + 2, y + 2, w - 4, h - 4, 3);
+      });
+    });
+    return { map, glow };
   }
 
   function town3dLabel() {
     const c = document.createElement('canvas'); c.width = 256; c.height = 104;
     const tex = new THREE.CanvasTexture(c); tex.encoding = THREE.sRGBEncoding;
-    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, toneMapped: false }));
     sp.scale.set(2.9, 1.18, 1);
     sp.renderOrder = 10;
+    sp.layers.set(1);   // 看板在柔光算完之後才畫(見 luxRender),字才不會糊、也不會發光
     sp.draw = (title, sub, subColor) => {
       const g = c.getContext('2d');
       g.clearRect(0, 0, 256, 104);
-      g.fillStyle = 'rgba(255,255,255,.92)';
-      g.beginPath(); g.roundRect ? g.roundRect(6, 6, 244, 92, 20) : g.rect(6, 6, 244, 92); g.fill();
+      g.shadowColor = 'rgba(50,35,60,.28)'; g.shadowBlur = 8; g.shadowOffsetY = 3;
+      g.fillStyle = 'rgba(255,255,255,.96)';
+      g.beginPath(); g.roundRect ? g.roundRect(12, 8, 232, 84, 26) : g.rect(12, 8, 232, 84); g.fill();
+      g.shadowColor = 'transparent'; g.shadowBlur = 0; g.shadowOffsetY = 0;
       g.textAlign = 'center';
-      g.fillStyle = '#2A3938'; g.font = 'bold 40px system-ui, sans-serif'; g.fillText(title, 128, 50);
-      g.fillStyle = subColor || '#5C6B6A'; g.font = '26px system-ui, sans-serif'; g.fillText(sub, 128, 84);
+      g.fillStyle = '#3A3142'; g.font = 'bold 38px system-ui, sans-serif'; g.fillText(title, 128, 49);
+      g.fillStyle = subColor || '#6B6472'; g.font = '25px system-ui, sans-serif'; g.fillText(sub, 128, 80);
       tex.needsUpdate = true;
     };
     return sp;
   }
 
+  // 天空:依天氣調整(陰天、下雨往灰色靠);晴朗的夜晚有星星
+  function town3dSetSky(kind) {
+    const s = TOWN3D.s, P = s.pal;
+    if (s.scene.background && s.scene.background.dispose) s.scene.background.dispose();
+    s.scene.background = luxWeatherSky(P, kind, s.dark);
+  }
+
+  // 草地貼圖:草的深淺色塊、從廣場通到每棟大樓的小路、環狀步道、花
+  // 圓柱頂面的貼圖座標:u 對應 z、v 對應 x(畫布的 y 要反過來)
+  function town3dGroundTex(P, R, RG, angles, size) {
+    const cv = document.createElement('canvas'); cv.width = cv.height = size;
+    const g = cv.getContext('2d');
+    const X = (x, z) => (z / (2 * RG) + 0.5) * size, Y = (x, z) => (0.5 - x / (2 * RG)) * size, S = (r) => r / (2 * RG) * size;
+    const rnd = luxRand(angles.length * 53 + 11);
+    g.fillStyle = P.grass; g.fillRect(0, 0, size, size);
+    for (let i = 0; i < 70; i++) {
+      const a = rnd() * Math.PI * 2, r = rnd() * RG, x = Math.cos(a) * r, z = Math.sin(a) * r, rad = S(0.6 + rnd() * 1.4);
+      const gr = g.createRadialGradient(X(x, z), Y(x, z), 0, X(x, z), Y(x, z), rad);
+      gr.addColorStop(0, P.grass2); gr.addColorStop(1, 'rgba(0,0,0,0)');
+      g.globalAlpha = 0.55; g.fillStyle = gr; g.beginPath(); g.arc(X(x, z), Y(x, z), rad, 0, Math.PI * 2); g.fill();
+    }
+    g.globalAlpha = 1;
+    g.strokeStyle = P.path; g.lineCap = 'round';
+    g.lineWidth = S(0.55);
+    g.beginPath(); g.arc(X(0, 0), Y(0, 0), S(R - 1.75), 0, Math.PI * 2); g.stroke();     // 環狀步道
+    g.lineWidth = S(0.8);
+    angles.forEach(a => {
+      g.beginPath(); g.moveTo(X(Math.cos(a) * 1.8, Math.sin(a) * 1.8), Y(Math.cos(a) * 1.8, Math.sin(a) * 1.8));
+      g.lineTo(X(Math.cos(a) * (R - 0.9), Math.sin(a) * (R - 0.9)), Y(Math.cos(a) * (R - 0.9), Math.sin(a) * (R - 0.9))); g.stroke();
+    });
+    g.fillStyle = P.path;
+    g.beginPath(); g.arc(X(0, 0), Y(0, 0), S(2.75), 0, Math.PI * 2); g.fill();               // 廣場外圈
+    angles.forEach(a => { g.beginPath(); g.arc(X(Math.cos(a) * R, Math.sin(a) * R), Y(Math.cos(a) * R, Math.sin(a) * R), S(1.75), 0, Math.PI * 2); g.fill(); });   // 大樓前的空地
+    ['#F7A8BE', '#FFE08A', '#FFFFFF', '#CDBBFF'].forEach((c, k) => {
+      g.fillStyle = c;
+      for (let i = 0; i < 45; i++) {
+        const a = rnd() * Math.PI * 2, r = R + 1.4 + rnd() * 1.6, x = Math.cos(a) * r, z = Math.sin(a) * r;
+        g.beginPath(); g.arc(X(x, z), Y(x, z), S(0.05 + (k % 2) * 0.02), 0, Math.PI * 2); g.fill();
+      }
+    });
+    const edge = g.createRadialGradient(size / 2, size / 2, size * 0.36, size / 2, size / 2, size / 2);
+    edge.addColorStop(0, 'rgba(0,0,0,0)'); edge.addColorStop(1, 'rgba(60,40,30,.16)');
+    g.fillStyle = edge; g.fillRect(0, 0, size, size);                                         // 邊緣稍微壓暗,島才有厚度感
+    const tex = new THREE.CanvasTexture(cv);
+    tex.encoding = THREE.sRGBEncoding;
+    tex.anisotropy = 4;
+    return tex;
+  }
+
   function town3dInit(canvas) {
     const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-    renderer.outputEncoding = THREE.sRGBEncoding;
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    const hq = luxSetup(renderer);
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 300);
-    const hemi = new THREE.HemisphereLight('#FFFFFF', '#6E7F5A', 0.8);
-    const sun = new THREE.DirectionalLight('#FFF4E0', 0.9);
+    const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 400);
+    const hemi = new THREE.HemisphereLight(0xffffff, 0xffffff, 0.4);
+    const sun = new THREE.DirectionalLight(0xffffff, 1.5);
     sun.castShadow = true;
-    sun.shadow.mapSize.set(1024, 1024);
+    sun.shadow.mapSize.set(hq ? 2048 : 1024, hq ? 2048 : 1024);
+    sun.shadow.bias = -0.0005;
     scene.add(hemi, sun, camera);
     const content = new THREE.Group();
     scene.add(content);
+    const win = town3dWindowTex();
     TOWN3D.s = {
-      renderer, scene, camera, sun, hemi, content, winTex: town3dWindowTex(),
+      renderer, scene, camera, sun, hemi, content, winTex: win.map, winGlow: win.glow, hq, post: hq ? luxPostInit(renderer) : null, perf: { n: 0, sum: 0 },
       cam: { theta: 0.9, phi: 1.0 }, R: 5, raf: 0, prev: 0, t: 0, lastTouch: 0,
       floors: [], pile: null, pileWant: 0, growT: 99, picks: [], fx: [], labels: [], bldg: {}
     };
@@ -128,35 +210,80 @@
     if (s.deco && s.deco.weather) s.camera.remove(s.deco.weather.grp);
     s.content.children.slice().forEach(o => {
       s.content.remove(o);
-      o.traverse(x => { if (x.geometry) x.geometry.dispose(); if (x.material && x.material !== s.sharedMat) { if (x.material.map && x.material.map !== s.winTex) x.material.map.dispose(); x.material.dispose && x.material.dispose(); } });
+      o.traverse(x => {
+        if (x.geometry) x.geometry.dispose();
+        [].concat(x.material || []).forEach(m => {
+          ['map', 'emissiveMap', 'alphaMap'].forEach(k => { if (m[k] && m[k] !== s.winTex && m[k] !== s.winGlow) m[k].dispose(); });
+          m.dispose();
+        });
+      });
     });
     const floorsBy = town3dFloors(person);
     const order = items.map(it => it.sym).filter(sym => floorsBy[sym]);
     Object.keys(floorsBy).forEach(sym => { if (!order.includes(sym)) order.push(sym); });
     const n = order.length, R = Math.max(4.6, n * 0.95);
     s.R = R;
-    const flat = (color, extra) => new THREE.MeshStandardMaterial(Object.assign({ color, flatShading: true, roughness: 0.9 }, extra || {}));
-
-    // 島、廣場、樹
     const dark = document.documentElement.dataset.theme === 'dark';
-    const sky = new THREE.Color(dark ? '#22323A' : '#D3E8EF');
-    s.scene.background = sky;
-    s.scene.fog = new THREE.Fog(sky, R * 4, R * 9);
-    const sea = new THREE.Mesh(new THREE.CircleGeometry(R * 9, 40), flat(dark ? '#29495A' : '#9CCADA'));
-    sea.rotation.x = -Math.PI / 2; sea.position.y = -0.35; s.content.add(sea);
-    const island = new THREE.Mesh(new THREE.CylinderGeometry(R + 3, R + 3.8, 0.9, 26), flat(dark ? '#55744B' : '#8DB86E'));
-    island.position.y = 0.0; island.receiveShadow = true; s.content.add(island);
-    const TOP = 0.45;
-    const plaza = new THREE.Mesh(new THREE.CylinderGeometry(1.9, 2.1, 0.12, 22), flat('#DCD3C3'));
-    plaza.position.y = TOP + 0.06; plaza.receiveShadow = true; s.content.add(plaza);
-    let seed = n * 31 + 7;
-    const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
-    const treeGeo = new THREE.ConeGeometry(0.45, 1.2, 6), leaf = flat(dark ? '#3F6B4A' : '#5E9A5A');
-    for (let i = 0; i < 22; i++) {
-      const a = rnd() * Math.PI * 2, r = R + 1.1 + rnd() * 1.7, k = 0.7 + rnd() * 0.5;
-      const t = new THREE.Mesh(treeGeo, leaf);
-      t.position.set(Math.cos(a) * r, TOP + 0.6 * k, Math.sin(a) * r); t.scale.setScalar(k); t.castShadow = true;
-      s.content.add(t);
+    const P = dark ? TOWN3D_PAL.night : TOWN3D_PAL.day;
+    s.pal = P; s.dark = dark;
+    s.renderer.toneMappingExposure = P.exposure;
+    s.hemi.color.copy(luxLin(P.hemiSky)); s.hemi.groundColor.copy(luxLin(P.hemiGround)); s.sun.color.copy(luxLin(P.sun));
+    s.scene.fog = null;
+    town3dSetSky(null);
+    const mat = (color, extra) => new THREE.MeshStandardMaterial(Object.assign({ color: luxLin(color), roughness: 0.9 }, extra || {}));
+    const flat = (color, extra) => {   // 道具:粉彩化、平面著色(低多邊形的切面感)
+      extra = Object.assign({}, extra || {});
+      if (typeof extra.emissive === 'string') extra.emissive = luxLin(extra.emissive);
+      return new THREE.MeshStandardMaterial(Object.assign({ color: luxPastel(color, dark), flatShading: true, roughness: 0.85 }, extra));
+    };
+    const put = (m, x, y, z, shadow = true) => { m.position.set(x, y, z); m.castShadow = shadow; s.content.add(m); return m; };
+
+    // 海(往外淡出到天空的漸層,沒有地平線)→ 淺水 → 沙灘 → 草地
+    const TOP = 0.45, RG = R + 3.2;
+    const angles = order.map((_, i) => (i / n) * Math.PI * 2 + Math.PI / 2);
+    const disc = (r, y, color, opacity, extra) => {
+      const m = new THREE.Mesh(new THREE.CircleGeometry(r, 64), mat(color, Object.assign({ roughness: 0.5, transparent: true, opacity, depthWrite: false }, extra || {})));
+      m.rotation.x = -Math.PI / 2; m.position.y = y; m.receiveShadow = true; s.content.add(m);
+    };
+    disc(RG * 3.4, -0.75, P.sea, 1, { metalness: 0.05, alphaMap: luxFadeTex() });
+    disc(RG + 3.6, -0.72, P.shallow, 0.35);
+    disc(RG + 2.5, -0.69, P.shallow, 0.5);
+    const sand = new THREE.Mesh(new THREE.CylinderGeometry(RG + 0.95, RG + 1.6, 1.0, 64), mat(P.sand, { roughness: 1 }));
+    sand.receiveShadow = true; put(sand, 0, -0.22, 0);
+    const earth = mat(P.earth, { roughness: 1 });
+    const island = new THREE.Mesh(new THREE.CylinderGeometry(RG, RG + 0.28, 0.34, 64),
+      [earth, mat('#FFFFFF', { map: town3dGroundTex(P, R, RG, angles, s.hq ? 1024 : 512), roughness: 0.95 }), earth]);
+    island.receiveShadow = true; put(island, 0, TOP - 0.17, 0);
+    // 中央廣場(金幣堆放在這裡)
+    const plaza = new THREE.Mesh(new THREE.CylinderGeometry(1.9, 2.05, 0.12, 40), mat(P.plaza, { roughness: 0.7 }));
+    plaza.receiveShadow = true; put(plaza, 0, TOP + 0.06, 0, false);
+    const rim = new THREE.Mesh(new THREE.TorusGeometry(1.93, 0.06, 8, 48), mat(P.path, { roughness: 0.7 }));
+    rim.rotation.x = Math.PI / 2; put(rim, 0, TOP + 0.12, 0, false);
+
+    // 點綴:外圈的樹、矮叢、石頭,廣場旁的路燈(晚上會亮)
+    const rnd = luxRand(n * 31 + 7);
+    const greens = dark ? ['#4E8266', '#5A9070', '#44785E', '#679A74'] : ['#6FAF6A', '#7DBA78', '#5E9F6E', '#8CC07A'];
+    const nearPath = (a) => angles.some(b => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b))) < 0.5 / Math.max(1, n / 6));
+    for (let i = 0; i < 46; i++) {
+      const a = rnd() * Math.PI * 2, r = R + 1.5 + rnd() * 1.45, k = 0.6 + rnd() * 0.6, x = Math.cos(a) * r, z = Math.sin(a) * r, t = rnd();
+      if (r < R + 1.9 && nearPath(a)) continue;   // 大樓正後方留空,才不會擋到
+      if (t < 0.45) {
+        put(new THREE.Mesh(new THREE.CylinderGeometry(0.06 * k, 0.09 * k, 0.4 * k, 6), flat('#9A6A4A')), x, TOP + 0.2 * k, z);
+        put(new THREE.Mesh(new THREE.ConeGeometry(0.42 * k, 1.1 * k, 7), flat(greens[i % 4])), x, TOP + 0.85 * k, z);
+      } else if (t < 0.7) {
+        put(new THREE.Mesh(new THREE.CylinderGeometry(0.06 * k, 0.09 * k, 0.5 * k, 6), flat('#9A6A4A')), x, TOP + 0.25 * k, z);
+        put(new THREE.Mesh(new THREE.IcosahedronGeometry(0.48 * k, 1), flat(greens[i % 4])), x, TOP + 0.85 * k, z).scale.y = 0.9;
+      } else if (t < 0.9) {
+        put(new THREE.Mesh(new THREE.IcosahedronGeometry(0.3 * k, 0), flat(greens[(i + 1) % 4])), x, TOP + 0.16 * k, z).scale.y = 0.75;
+      } else {
+        put(new THREE.Mesh(new THREE.DodecahedronGeometry(0.22 * k, 0), flat('#C9BFB6')), x, TOP + 0.1, z);
+      }
+    }
+    const lampN = Math.min(6, Math.max(3, Math.round(n / 2)));
+    for (let i = 0; i < lampN; i++) {
+      const a = (i + 0.5) / lampN * Math.PI * 2, x = Math.cos(a) * 2.45, z = Math.sin(a) * 2.45;
+      put(new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.05, 0.95, 6), flat('#6B6472')), x, TOP + 0.47, z);
+      put(new THREE.Mesh(new THREE.SphereGeometry(0.16, 12, 10), new THREE.MeshStandardMaterial({ color: luxLin('#FFF3C8'), emissive: luxLin('#FFD98A'), emissiveIntensity: P.lamp, roughness: 0.4 })), x, TOP + 1.02, z, false);
     }
 
     // 樓層
@@ -172,27 +299,49 @@
     s.fx = [];
     s.TOP = TOP;
     const geo = new THREE.BoxGeometry(1, 1, 1); geo.translate(0, 0.5, 0);
-    const slabGeo = new THREE.BoxGeometry(1.72, 0.07, 1.72), slabMat = flat('#7D6A55');
+    const slabGeo = new THREE.BoxGeometry(1.7, 0.05, 1.7), slabMat = mat(dark ? '#6E5A68' : '#D2BBAA', { roughness: 0.8 });
     const chgColor = (it) => {
-      if (!it) return '#9AA5A4';
-      if (TOWN.mode === 'chg') return it.chg === null ? '#9AA5A4' : it.chg > 0 ? '#D2533F' : it.chg < 0 ? '#3E9B54' : '#9AA5A4'   /* 台股習慣:紅漲綠跌 */;
-      return !it.yld ? '#9AA5A4' : it.yld >= 6 ? '#3F7373' : it.yld >= 3 ? '#6E9AA0' : '#9AA5A4';
+      if (!it) return '#B7C0BF';
+      if (TOWN.mode === 'chg') return it.chg === null ? '#B7C0BF' : it.chg > 0 ? '#E5604F' : it.chg < 0 ? '#46AD63' : '#B7C0BF'   /* 台股習慣:紅漲綠跌 */;
+      return !it.yld ? '#B7C0BF' : it.yld >= 6 ? '#3F7373' : it.yld >= 3 ? '#6E9AA0' : '#B7C0BF';
     };
+    // 樓層材質:同一年、同樣排數的共用一份。晚上窗戶會亮(emissiveMap)
+    const floorMats = {};
+    const floorMat = (year, rows) => {
+      const key = year + '|' + rows;
+      if (floorMats[key]) return floorMats[key];
+      const tex = s.winTex.clone(); tex.needsUpdate = true; tex.repeat.set(1, rows / 2);
+      const o = { color: luxLin(yearColor(year)), map: tex, roughness: 0.8 };
+      if (dark) {
+        const gl = s.winGlow.clone(); gl.needsUpdate = true; gl.repeat.set(1, rows / 2);
+        Object.assign(o, { emissive: luxLin('#FFD890'), emissiveMap: gl, emissiveIntensity: 1.1 });
+      }
+      return (floorMats[key] = new THREE.MeshStandardMaterial(o));
+    };
+    const awnings = ['#F6A8BC', '#9CCFE6', '#FFD98A', '#B8E0A8'];
     order.forEach((sym, i) => {
-      const a = (i / n) * Math.PI * 2 + Math.PI / 2;
+      const a = angles[i];
       const g = new THREE.Group();
       g.position.set(Math.cos(a) * R, TOP, Math.sin(a) * R);
       g.rotation.y = -a + Math.PI / 2;
       s.content.add(g);
-      const base = new THREE.Mesh(new THREE.BoxGeometry(2, 0.08, 2), flat('#CFC7B8'));
+      const base = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.08, 2.1), mat(P.plaza, { roughness: 0.75 }));
       base.position.y = 0.04; base.receiveShadow = true; g.add(base);
+      // 門口(朝向廣場那一面):門、遮雨棚、兩盆矮樹。樓還沒蓋起來時先藏著
+      const extras = new THREE.Group();
+      const ex = (m, x, y2, z) => { m.position.set(x, y2, z); m.castShadow = true; extras.add(m); return m; };
+      ex(new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.5, 0.06), flat('#8A5A44')), 0, 0.33, -0.82);
+      ex(new THREE.Mesh(new THREE.BoxGeometry(0.78, 0.07, 0.34), flat(awnings[i % 4])), 0, 0.68, -0.95).rotation.x = -0.35;
+      [-0.62, 0.62].forEach(x => {
+        ex(new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.08, 0.14, 8), flat('#C98F6A')), x, 0.15, -0.93);
+        ex(new THREE.Mesh(new THREE.IcosahedronGeometry(0.15, 0), flat(greens[i % 4])), x, 0.33, -0.93);
+      });
+      g.add(extras);
       let y = 0.08;
       const myFloors = [];
       floorsBy[sym].forEach((f, k) => {
         const h = Math.max(TOWN3D.MIN_FLOOR, f.money / unit);
-        const tex = s.winTex.clone(); tex.needsUpdate = true;
-        tex.repeat.set(2, Math.max(1, Math.round(h / 0.55)));
-        const m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: yearColor(f.date.slice(0, 4)), map: tex, roughness: 0.85 }));
+        const m = new THREE.Mesh(geo, floorMat(f.date.slice(0, 4), Math.max(1, Math.round(h / 0.55))));
         m.scale.set(1.6, Math.max(0.001, h - 0.035), 1.6);
         m.position.y = y;
         m.castShadow = m.receiveShadow = true;
@@ -208,15 +357,22 @@
         if (!f.gone) y += h;
       });
       const it = items.find(x => x.sym === sym);
-      const roof = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.16, 1.8), flat(chgColor(it)));
+      const roof = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.16, 1.8), mat(chgColor(it), { roughness: 0.7 }));
       roof.position.y = y + 0.08; roof.castShadow = true; g.add(roof);
+      // 屋頂上的小東西(跟著屋頂一起升高):水塔、冷氣機、天線
+      const rt = (m, x, y2, z) => { m.position.set(x, y2, z); m.castShadow = true; roof.add(m); return m; };
+      rt(new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.3, 10), flat('#EDE6DA')), -0.45, 0.27, 0.4);
+      rt(new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.12, 10), flat('#C9BFB6')), -0.45, 0.48, 0.4);
+      rt(new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.2, 0.26), flat('#D9DEE2')), 0.35, 0.18, 0.45);
+      rt(new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.6, 5), flat('#6B6472')), -0.6, 0.38, -0.55);
+      rt(new THREE.Mesh(new THREE.SphereGeometry(0.045, 8, 6), new THREE.MeshStandardMaterial({ color: luxLin('#FF8A7A'), emissive: luxLin('#FF4A3A'), emissiveIntensity: dark ? 2 : 0.4 })), -0.6, 0.7, -0.55);
       const label = town3dLabel();
       label.final = it ? fmt.money(it.value) : '';
       label.draw(sym, TOWN3D.grow ? '' : label.final, '#5C6B6A');   // 播放中只顯示代號,播完才顯示今天市值
       s.labels.push({ label, sym });
       label.position.y = y + 1.05;
       g.add(label);
-      g.userData = { roof, label, top: y, floors: myFloors };
+      g.userData = { roof, label, top: y, floors: myFloors, extras };
       s.bldg[sym] = g;
     });
     // 時間軸:從第一筆買進到今天,每層在實際買進的那天長出來、配息在入帳那天落進金幣堆
@@ -258,7 +414,7 @@
     const div = (STATE.data.dividends || []).filter(r => r.person === person).reduce((a, r) => a + (Number(r.total) || 0), 0);
     const MAXC = 260;
     const coinGeo = new THREE.CylinderGeometry(0.2, 0.2, 0.065, 12);
-    const coinMat = new THREE.MeshStandardMaterial({ color: '#FFD447', metalness: 0.35, roughness: 0.3, emissive: '#B07800', emissiveIntensity: 0.4 });
+    const coinMat = new THREE.MeshStandardMaterial({ color: luxLin('#FFD447'), metalness: 0.35, roughness: 0.3, emissive: luxLin('#C08A00'), emissiveIntensity: 0.6 });
     const pile = new THREE.InstancedMesh(coinGeo, coinMat, MAXC);
     const m4 = new THREE.Matrix4();
     for (let i = 0; i < MAXC; i++) {
@@ -310,6 +466,7 @@
       g.userData.label.position.y = y + 1.05 + (g.userData.labelUp || 0);
       g.userData.roof.visible = y > 0.1;
       g.userData.label.visible = y > 0.1;
+      g.userData.extras.visible = y > 0.1;
     });
     let cum = 0;
     s.divRows.forEach(d => { if (d.at <= t) cum += d.money; });
@@ -348,12 +505,12 @@
   function town3dFxParts() {
     const s = TOWN3D.s;
     if (s.fxParts) return s.fxParts;
-    const std = (color, extra) => new THREE.MeshStandardMaterial(Object.assign({ color, flatShading: true, roughness: 0.8 }, extra || {}));
+    const std = (color, extra) => new THREE.MeshStandardMaterial(Object.assign({ color: luxLin(color), flatShading: true, roughness: 0.8 }, extra || {}));
     s.fxParts = {
-      crateGeo: new THREE.BoxGeometry(0.5, 0.5, 0.5), crateMat: std('#C98F52'), bandGeo: new THREE.BoxGeometry(0.52, 0.1, 0.52), bandMat: std('#7A5432'),
-      bodyGeo: new THREE.CylinderGeometry(0.12, 0.15, 0.4, 8), bodyMat: std('#3F7373'),
-      headGeo: new THREE.SphereGeometry(0.13, 10, 8), headMat: std('#F2D2B0'),
-      coinGeo: new THREE.CylinderGeometry(0.2, 0.2, 0.07, 14), coinMat: new THREE.MeshStandardMaterial({ color: '#FFD447', metalness: 0.35, roughness: 0.3, emissive: '#B07800', emissiveIntensity: 0.5 })
+      crateGeo: new THREE.BoxGeometry(0.5, 0.5, 0.5), crateMat: std('#D9A066'), bandGeo: new THREE.BoxGeometry(0.52, 0.1, 0.52), bandMat: std('#8A6040'),
+      bodyGeo: new THREE.CylinderGeometry(0.12, 0.15, 0.4, 8), bodyMat: std('#5FA3A3'),
+      headGeo: new THREE.SphereGeometry(0.13, 10, 8), headMat: std('#F7DCC0'),
+      coinGeo: new THREE.CylinderGeometry(0.2, 0.2, 0.07, 14), coinMat: new THREE.MeshStandardMaterial({ color: luxLin('#FFD447'), metalness: 0.35, roughness: 0.3, emissive: luxLin('#C08A00'), emissiveIntensity: 0.7 })
     };
     return s.fxParts;
   }
@@ -468,9 +625,10 @@
     g.lineWidth = 8; g.strokeStyle = 'rgba(255,255,255,.95)'; g.strokeText(text, 128, 56);
     g.fillStyle = color; g.fillText(text, 128, 56);
     const tex = new THREE.CanvasTexture(c); tex.encoding = THREE.sRGBEncoding;
-    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false, depthWrite: false }));
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false, depthWrite: false, toneMapped: false }));
     sp.scale.set(2.6, 0.81, 1);
     sp.renderOrder = 20;
+    sp.layers.set(1);
     s.content.add(sp);
     s.fx.push({ obj: sp, start: t, dur: 1.4, update(p) {
       sp.position.set(at.x, at.y + p * 0.9, at.z);
@@ -527,7 +685,11 @@
   function town3dDecorate(person, items) {
     const s = TOWN3D.s, P = town3dFxParts();
     const deco = { flags: [], halos: [], waiters: [], roofs: [], weather: null, t: 0 };
-    const flat = (color, extra) => new THREE.MeshStandardMaterial(Object.assign({ color, flatShading: true, roughness: 0.8 }, extra || {}));
+    const flat = (color, extra) => {
+      extra = Object.assign({}, extra || {});
+      if (typeof extra.emissive === 'string') extra.emissive = luxLin(extra.emissive);
+      return new THREE.MeshStandardMaterial(Object.assign({ color: luxLin(color), flatShading: true, roughness: 0.8 }, extra));
+    };
     items.forEach(it => {
       const g = s.bldg[it.sym];
       if (!g) return;
@@ -536,7 +698,7 @@
       if (it.cost > 0) {
         const ret = (it.value - it.cost) / it.cost;
         const halo = new THREE.Mesh(new THREE.TorusGeometry(0.95, 0.07, 8, 36),
-          new THREE.MeshBasicMaterial({ color: ret >= 0 ? '#FF5A47' : '#45D16A', transparent: true, opacity: Math.min(0.95, 0.3 + Math.abs(ret) * 2.2), depthWrite: false }));
+          new THREE.MeshBasicMaterial({ color: luxLin(ret >= 0 ? '#FF5A47' : '#45D16A'), transparent: true, opacity: Math.min(0.95, 0.3 + Math.abs(ret) * 2.2), depthWrite: false }));
         halo.rotation.x = Math.PI / 2;
         halo.position.y = top + 0.55;
         g.add(halo);
@@ -587,27 +749,28 @@
   // 今日天氣:依持股市值加權的今日漲跌 → 晴(漲)、多雲(小跌)、小雨(跌 1% 以上)
   function town3dWeather(items) {
     const s = TOWN3D.s;
-    let wv = 0, w = 0;
-    items.forEach(it => { if (it.chg !== null && it.chg !== undefined) { wv += it.value * it.chg; w += it.value; } });
-    const chg = w > 0 ? wv / w : null;
-    const kind = chg === null ? null : chg >= 0 ? 'sun' : chg > -1 ? 'cloud' : 'rain';
+    const { chg, kind } = luxWeatherKind(items);
     const grp = new THREE.Group();
     s.camera.add(grp);
-    const out = { kind, chg, grp, clouds: [], rain: null, sky0: s.scene.background.clone() };
+    const out = { kind, chg, grp, clouds: [], rain: null };
     if (kind === 'sun') {
-      const sunM = new THREE.Mesh(new THREE.SphereGeometry(1.3, 20, 14), new THREE.MeshBasicMaterial({ color: '#FFE27A', fog: false }));
+      // 晴天:白天是太陽,晚上是月亮;亮到會被柔光暈開
+      const sunM = new THREE.Mesh(new THREE.SphereGeometry(1.3, 24, 16), new THREE.MeshBasicMaterial({ color: luxLin(s.dark ? '#FFF6DC' : '#FFE27A') }));
       sunM.position.set(7.5, 5.2, -24);
-      const glow = new THREE.Mesh(new THREE.RingGeometry(1.5, 2.6, 32), new THREE.MeshBasicMaterial({ color: '#FFE9A8', transparent: true, opacity: 0.35, fog: false }));
-      glow.position.copy(sunM.position);
+      const glow = luxGlowSprite(s.dark ? '226,220,255' : '255,226,150', s.dark ? 0.55 : 0.85);
+      glow.scale.set(10, 10, 1);
+      glow.position.set(7.5, 5.2, -24.2);
       grp.add(sunM, glow);
       out.glow = glow;
+      out.sun = [sunM, glow];
+      out.sun.forEach(m => { m.position.x = Math.min(7.5, 8.7 * s.camera.aspect - 2.4); });   // 畫面窄時往內收,才不會被切掉
     }
     if (kind === 'cloud' || kind === 'rain') {
-      const cm = new THREE.MeshStandardMaterial({ color: kind === 'rain' ? '#8E9AA3' : '#F4F6F8', flatShading: true, roughness: 1, fog: false });
+      const cm = new THREE.MeshStandardMaterial({ color: luxLin(kind === 'rain' ? s.pal.rainCloud : s.pal.cloud), flatShading: true, roughness: 1 });
       for (let i = 0; i < 4; i++) {
         const c = new THREE.Group();
         [[0, 0, 1.2], [1.1, -0.2, 0.9], [-1.1, -0.25, 0.85], [0.4, 0.5, 0.8]].forEach(([x, y, r]) => {
-          const b = new THREE.Mesh(new THREE.IcosahedronGeometry(r, 0), cm); b.position.set(x, y, 0); c.add(b);
+          const b = new THREE.Mesh(new THREE.IcosahedronGeometry(r, 1), cm); b.position.set(x, y, 0); b.scale.y = 0.75; c.add(b);
         });
         c.position.set(-12 + i * 8, 5 + (i % 2) * 1.2, -24 - (i % 3) * 2);
         grp.add(c);
@@ -619,7 +782,7 @@
       for (let i = 0; i < N; i++) pos.set([(Math.random() * 2 - 1) * R, Math.random() * 12, (Math.random() * 2 - 1) * R], i * 3);
       const geo = new THREE.BufferGeometry();
       geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-      out.rain = new THREE.Points(geo, new THREE.PointsMaterial({ color: '#BFD4E6', size: 0.09, transparent: true, opacity: 0.8 }));
+      out.rain = new THREE.Points(geo, new THREE.PointsMaterial({ color: luxLin('#CFE0F0'), size: 0.09, transparent: true, opacity: 0.8 }));
       s.content.add(out.rain);
     }
     return out;
@@ -636,15 +799,10 @@
     const W = d.weather;
     W.grp.visible = on;
     if (W.rain) W.rain.visible = on;
-    const dark = document.documentElement.dataset.theme === 'dark';
-    const sky = W.sky0.clone();
-    if (on && W.kind === 'cloud') sky.lerp(new THREE.Color('#AEB8BF'), 0.5);
-    if (on && W.kind === 'rain') sky.lerp(new THREE.Color('#7D8A93'), 0.65);
-    s.scene.background = sky;
-    s.scene.fog.color = sky;
-    const k = !on || !W.kind ? 1 : W.kind === 'sun' ? 1.15 : W.kind === 'cloud' ? 0.75 : 0.55;
-    s.sun.intensity = (dark ? 0.75 : 0.9) * k;
-    s.hemi.intensity = 0.8 * (0.6 + 0.4 * k);
+    town3dSetSky(on ? W.kind : null);
+    const k = on ? luxWeatherLight(W.kind) : 1;
+    s.sun.intensity = s.pal.sunI * k;
+    s.hemi.intensity = s.pal.hemiI * (0.6 + 0.4 * k);
     if (on && W.chg !== null) {
       const icon = W.kind === 'sun' ? '☀️' : W.kind === 'cloud' ? '⛅' : '🌧️';
       s.weatherHtml = `<br>${icon} 今日 <span class="${W.chg >= 0 ? 'gain' : 'loss'}">${W.chg >= 0 ? '+' : ''}${W.chg.toFixed(2)}%</span>`;
@@ -661,7 +819,7 @@
     d.roofs.forEach(r => { r.material.emissive.set('#E8A23A'); r.material.emissiveIntensity = 0.25 + Math.sin(d.t * 3) * 0.2; });
     d.waiters.forEach(w => { w.man.position.y = s.TOP + 0.05 + Math.abs(Math.sin(d.t * 4 + w.k)) * 0.1; w.coin.rotation.y += dt * 3; });
     const W = d.weather;
-    if (W.glow) W.glow.rotation.z += dt * 0.3;
+    if (W.glow) W.glow.material.opacity = 0.85 + Math.sin(d.t * 1.2) * 0.15;   // 光暈一呼一吸
     W.clouds.forEach((c, i) => { c.position.x += dt * (0.4 + i * 0.1); if (c.position.x > 16) c.position.x = -16; });
     if (W.rain) {
       const p = W.rain.geometry.attributes.position;
@@ -702,11 +860,12 @@
       s.cam.theta += d * Math.min(1, dt * 1.6);
     } else if (now - s.lastTouch > 3000) s.cam.theta += dt * 0.1;
     const aspect = s.camera.aspect;
-    const dist = Math.max(s.R * 4.3, (s.R + 3.2) / (0.364 * aspect) * 1.35);    // 畫面窄時拉遠(0.364 = tan 20°)
+    const dist = Math.max(s.R * 4.3, (s.R + 4.4) / (0.364 * aspect) * 1.35);    // 畫面窄時拉遠(0.364 = tan 20°)
     const { theta, phi } = s.cam;
     s.camera.position.set(Math.cos(theta) * Math.sin(phi) * dist, Math.cos(phi) * dist + 1, Math.sin(theta) * Math.sin(phi) * dist);
     s.camera.lookAt(0, TOWN3D.MAX_H * 0.36, 0);
-    s.renderer.render(s.scene, s.camera);
+    luxRender(s);
+    if (luxPerf(s, now)) town3dResize();   // 跑不動就自動關掉柔光
     s.raf = requestAnimationFrame(town3dFrame);
   }
   function town3dResize() {
@@ -714,8 +873,11 @@
     if (!s) return;
     const c = s.renderer.domElement, w = c.clientWidth || 320, h = c.clientHeight || 300;
     s.renderer.setSize(w, h, false);
+    if (s.post) { const v = s.renderer.getDrawingBufferSize(new THREE.Vector2()); luxPostSize(s.post, v.x, v.y); }
     s.camera.aspect = w / h;
     s.camera.updateProjectionMatrix();
+    const W = s.deco && s.deco.weather;
+    if (W && W.sun) W.sun.forEach(m => { m.position.x = Math.min(7.5, 8.7 * w / h - 2.4); });
   }
 
   // 左右拖曳旋轉(上下滑仍然捲動頁面);點樓層看那筆買進、點金幣看配息

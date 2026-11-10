@@ -1087,3 +1087,43 @@ th { color: var(--muted); font-weight: 600; font-size: .8rem; }
 .myi-zpick input:checked + span { background: var(--zone); color: #fff; font-weight: 700; }
 .myi-form-btns { display: flex; gap: 8px; margin-top: 6px; }
 @media (max-width: 420px) { .myi-link-add { flex-wrap: wrap; } .myi-link-add select { flex: 1 1 100%; } }
+
+/* 3D 畫面上的浮層:毛玻璃(持股小鎮、我的島、探索地圖共用) */
+.town3d-stage, .myi-stage { border-radius: 18px; box-shadow: 0 10px 30px rgba(60, 40, 80, .14), inset 0 0 0 1px rgba(255, 255, 255, .35); }
+.town3d-hud, .town3d-years, .myi-stage .explore-hint, .myi-ctrl button {
+  background: rgba(255, 255, 255, .62); color: #3A3142; border: 1px solid rgba(255, 255, 255, .7);
+  -webkit-backdrop-filter: blur(12px) saturate(1.4); backdrop-filter: blur(12px) saturate(1.4);
+  box-shadow: 0 4px 14px rgba(50, 35, 70, .12);
+}
+.town3d-hud { border-radius: 14px; padding: 8px 12px; }
+.town3d-years { border-radius: 999px; padding: 4px 10px; }
+.town3d-years i { border-radius: 50%; box-shadow: 0 0 0 1px rgba(0, 0, 0, .08); }
+.myi-stage .explore-hint { border-radius: 999px; padding: 4px 10px; }
+.myi-ctrl button { border-radius: 14px; }
+html[data-theme="dark"] .town3d-hud, html[data-theme="dark"] .town3d-years, html[data-theme="dark"] .myi-stage .explore-hint, html[data-theme="dark"] .myi-ctrl button {
+  background: rgba(34, 28, 58, .55); color: #F3EEFB; border-color: rgba(255, 255, 255, .16);
+}
+html[data-theme="dark"] .town3d-hud .gain { color: #FF8A7A; } html[data-theme="dark"] .town3d-hud .loss { color: #6FD58A; }
+.town3d-banner.ms { background: linear-gradient(135deg, rgba(255, 190, 90, .92), rgba(240, 120, 150, .92)); box-shadow: 0 8px 24px rgba(200, 100, 80, .35); }
+/* 我的島:天氣、島嶼圖鑑 */
+.myi-weather { display: inline-block; margin: 2px 0 4px; padding: 4px 12px; border-radius: 999px; background: var(--surface-2); font-size: .85rem; }
+.myi-weather .gain { color: var(--up); font-weight: 700; } .myi-weather .loss { color: var(--down); font-weight: 700; }
+.myi-guide { margin-top: 10px; border-radius: 12px; background: var(--surface-2); padding: 0 12px; }
+.myi-guide summary { cursor: pointer; padding: 10px 0; font-weight: 700; display: flex; align-items: baseline; gap: 8px; list-style: none; }
+.myi-guide summary::-webkit-details-marker { display: none; }
+.myi-guide summary::after { content: '＋'; margin-left: auto; color: var(--muted); }
+.myi-guide[open] summary::after { content: '－'; }
+.myi-guide ul { list-style: none; margin: 0; padding: 0 0 10px; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px; }
+.myi-guide li { display: flex; gap: 10px; align-items: flex-start; line-height: 1.35; }
+.myi-guide-ico { flex: 0 0 auto; width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; background: var(--surface); font-size: 1.1rem; }
+/* 首頁:今日／本週／本月損益 */
+.pnl-strip { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }
+.pnl-strip.empty { display: block; padding: 10px 12px; border-radius: 12px; background: var(--surface-2); }
+.pnl-chip { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: 14px; background: var(--surface-2); border-top: 3px solid var(--border); min-width: 0; }
+.pnl-chip.gain { border-top-color: var(--up); } .pnl-chip.loss { border-top-color: var(--down); }   /* 台股習慣:紅漲綠跌 */
+.pnl-label { font-size: .8rem; color: var(--muted); display: flex; justify-content: space-between; gap: 4px; }
+.pnl-label small { opacity: .8; }
+.pnl-val { font-size: 1.1rem; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pnl-pct { font-size: .8rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.pnl-note { margin-top: 6px; }
+@media (max-width: 380px) { .pnl-val { font-size: .98rem; } .pnl-chip { padding: 8px 9px; } }

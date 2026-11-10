@@ -14,11 +14,11 @@ const ctx = {
 ctx.window = ctx;
 vm.createContext(ctx);
 // 與 index.html 相同的載入順序(只載入純計算會用到的檔案)
-const files = ['config', 'utils', 'appearance', 'portfolio', 'autodiv', 'datacheck'];
+const files = ['config', 'utils', 'appearance', 'portfolio', 'autodiv', 'datacheck', 'daily'];
 const src = files.map(f => fs.readFileSync(path.join(root, f + '.js'), 'utf8')).join('\n;\n');
 vm.runInContext(src + '\n;this.__t = { STATE, CONFIG, AUTODIV, _exDiv, replayPurchases, computeRealizedPL, computeOpenHoldings, computePersonStats,' +
   ' autodivSharesBefore, autodivBizDaysBefore, autodivEstimateNet, autodivInterval, autodivIntervalFor, autodivAnnualPerShare,' +
-  ' computePayoutEvents, computePendingDividends, runDataCheck, autodivParseRoc, trailing12Dividends, dividendYieldOnCost, autodivFindRecord, _payDates, autodivPayDate, twYmd, normalizeDataDates, fmt };', ctx);
+  ' computePayoutEvents, computePendingDividends, runDataCheck, autodivParseRoc, trailing12Dividends, dividendYieldOnCost, autodivFindRecord, _payDates, autodivPayDate, twYmd, normalizeDataDates, computeDailyValues, dailyPnlSince, fmt };', ctx);
 const T = ctx.__t;
 
 let pass = 0, fail = 0;
@@ -143,6 +143,30 @@ eq('純日期不動', T.twYmd('2026-03-16'), '2026-03-16');
 eq('顯示用 fmt.date', T.fmt.date('2025-03-09T16:00:00.000Z'), '2025-03-10');
 const nd = T.normalizeDataDates({ purchases: [{ date: '2025-03-02T16:00:00.000Z', created_at: '2025-03-02T16:00:00.000Z' }], dividends: [{ date: '2026-04-14' }], meta: {} });
 eq('整批正規化只改 date 欄', [nd.purchases[0].date, nd.purchases[0].created_at, nd.dividends[0].date], ['2025-03-03', '2025-03-02T16:00:00.000Z', '2026-04-14']);
+
+// ---------- 每日真實市值與損益 ----------
+const H = (date, symbol, close_price) => ({ date, symbol, close_price });
+set({ purchases: [
+  P('a', '黃', '0056', 30000, 30, 1000, 20, '2026-10-01'),
+  P('b', '黃', '代號0050', 50000, 100, 500, 20, '2026-11-03'),      // 月中再買一檔
+  P('c', '蘇', '0056', 30000, 30, 1000, 20, '2026-10-01')
+], price_history: [
+  H('2026-10-28', '0056', 31), H('2026-10-29', '0056', 32), H('2026-10-30', '0056', 31.5),
+  H('2026-11-03', '0056', 32), H('2026-11-04', '0056', 33), H('2026-11-04', '0050', 102), H('2026-11-05', '0056', 33), H('2026-11-05', '0050', 101)
+]});
+const dv = T.computeDailyValues('黃');
+eq('每日市值:有持股沒收盤價的那天不算', dv.map(x => x.date), ['2026-10-28', '2026-10-29', '2026-10-30', '2026-11-04', '2026-11-05']);
+eq('每日市值:當天持股 × 當天收盤', [dv[0].value, dv[3].value, dv[4].value], [31000, 33000 + 51000, 33000 + 50500]);
+eq('累計投入含手續費', [dv[0].cost, dv[4].cost], [30020, 80040]);
+eq('新投入的錢記在下一個算得出來的點', dv[3].flow, 50020);
+const today1 = T.dailyPnlSince(dv, '2026-11-05');
+eq('今日損益 = 市值變化', Math.round(today1.pnl), -500);
+const mon = T.dailyPnlSince(dv, '2026-11-01');
+eq('本月損益要扣掉新投入的錢', Math.round(mon.pnl), 83500 - 31500 - 50020);
+near('本月損益率的分母含新投入', mon.pct, (83500 - 31500 - 50020) / (31500 + 50020) * 100, 0.001);
+eq('期間開始前沒有資料 → 算不出來', T.dailyPnlSince(dv, '2026-10-28'), null);
+eq('最新一點比期間還早 → 算不出來', T.dailyPnlSince(dv, '2026-11-09'), null);
+eq('只算那個人的', T.computeDailyValues('蘇').map(x => x.value), [31000, 32000, 31500, 32000, 33000, 33000]);
 
 console.log(`\n${fail === 0 ? '✅ 全部通過' : '❌ 有失敗'}:${pass} 通過、${fail} 失敗`);
 process.exit(fail === 0 ? 0 : 1);
