@@ -123,6 +123,7 @@
     FX.afterRender();
     renderPendingDividends();
     renderPendingDca();
+    renderQuant(p);
   }
 
   // 三條線:

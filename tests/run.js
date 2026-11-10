@@ -14,11 +14,11 @@ const ctx = {
 ctx.window = ctx;
 vm.createContext(ctx);
 // 與 index.html 相同的載入順序(只載入純計算會用到的檔案)
-const files = ['config', 'utils', 'appearance', 'portfolio', 'autodiv', 'datacheck', 'daily', 'dca', 'review', 'status'];
+const files = ['config', 'utils', 'appearance', 'portfolio', 'autodiv', 'datacheck', 'daily', 'quant', 'dca', 'review', 'status'];
 const src = files.map(f => fs.readFileSync(path.join(root, f + '.js'), 'utf8')).join('\n;\n');
 vm.runInContext(src + '\n;this.__t = { STATE, CONFIG, AUTODIV, _exDiv, replayPurchases, computeRealizedPL, computeOpenHoldings, computePersonStats,' +
   ' autodivSharesBefore, autodivBizDaysBefore, autodivEstimateNet, autodivInterval, autodivIntervalFor, autodivAnnualPerShare,' +
-  ' computePayoutEvents, computePendingDividends, runDataCheck, autodivParseRoc, trailing12Dividends, dividendYieldOnCost, autodivFindRecord, _payDates, autodivPayDate, twYmd, normalizeDataDates, computeDailyValues, dailyPnlSince, computePendingDca, dcaPlans, computeYearReview, statusExpectedCloseDay, statusLocalChecks, fmt };', ctx);
+  ' computePayoutEvents, computePendingDividends, runDataCheck, autodivParseRoc, trailing12Dividends, dividendYieldOnCost, autodivFindRecord, _payDates, autodivPayDate, twYmd, normalizeDataDates, computeDailyValues, dailyPnlSince, computePendingDca, dcaPlans, computeYearReview, statusExpectedCloseDay, statusLocalChecks, quantDrawdown, quantVol, quantStats, quantReplay, quantTwr, quantBacktest, quantRows, fmt };', ctx);
 const T = ctx.__t;
 
 let pass = 0, fail = 0;
@@ -231,6 +231,45 @@ eq('差一天 → 提醒(可能休市)', priceLevel('2026-11-09'), 'warn');
 eq('差三天以上 → 排程可能沒跑', priceLevel('2026-11-05'), 'bad');
 T.STATE.lastSync = { ok: false, at: Date.now(), error: '連線逾時' };
 eq('同步失敗會標出來', T.statusLocalChecks(at(2026, 11, 10, 15, 0)).find(x => x.label === '資料同步').level, 'bad');
+
+// ---------- 風險與回測 ----------
+const D7 = ['2026-01-02', '2026-01-05', '2026-01-06', '2026-01-07', '2026-01-08', '2026-01-09', '2026-01-12'];
+const dd1 = T.quantDrawdown(D7, [100, 110, 99, 88, 95, 115, 103]);
+near('最大回檔:從最高點到最低點', dd1.pct, -20, 0.001);
+eq('最大回檔:高點、低點、漲回來的日期', [dd1.peak, dd1.trough, dd1.recover], ['2026-01-05', '2026-01-07', '2026-01-09']);
+eq('還沒漲回高點 → recover 是 null', T.quantDrawdown(D7.slice(0, 2), [100, 80]).recover, null);
+eq('一路上漲 → 沒有回檔', T.quantDrawdown(D7.slice(0, 3), [100, 101, 102]).pct, 0);
+eq('不到 60 個交易日不算波動度', T.quantVol([1, 2, 3]), null);
+const steady = Array.from({ length: 80 }, (_, i) => 100 * Math.pow(1.01, i));
+near('每天漲一樣多 → 波動度是 0', T.quantVol(steady), 0, 1e-6);
+const zig = Array.from({ length: 253 }, (_, i) => i % 2 ? 101 : 100);
+near('每天 ±1% 來回 → 年化波動約 15.8%', T.quantVol(zig), Math.log(1.01) * Math.sqrt(252) * 100 * Math.sqrt(252 / 251), 0.2);
+const st2 = T.quantStats(['2024-01-02', '2025-01-02', '2026-01-02'], [100, 150, 200]);
+near('兩年翻倍 → 年化約 41.4%', st2.cagr, (Math.sqrt(2) - 1) * 100, 0.1);
+eq('不到一年不給年化', T.quantStats(['2026-01-02', '2026-06-02'], [100, 120]).cagr, null);
+near('可以指定從哪一天開始算', T.quantStats(['2024-01-02', '2025-01-02', '2026-01-02'], [100, 150, 200], '2025-01-01').total, 33.333, 0.01);
+// 重播買賣:加碼不算賺,配息要加回來
+const QA = { A: { d: D7.slice(0, 5), c: [10, 11, 11, 12.1, 11.6], a: [10, 11, 11, 12.1, 12.1], div: [['2026-01-08', 0.5]] } };
+const rowsA = [{ date: '2026-01-02', sym: 'A', shares: 100, money: 1000, price: 10 }, { date: '2026-01-06', sym: 'A', shares: 100, money: 1100, price: 11 }];
+const rp = T.quantReplay(rowsA, QA);
+eq('每天的市值 = 當天持股 × 當天收盤', rp.map(x => Math.round(x.value)), [1000, 1100, 2200, 2420, 2320]);
+eq('累計投入與當天新投入', [rp.map(x => x.cost), rp[2].flow], [[1000, 1000, 2100, 2100, 2100], 1100]);
+eq('除息日的配息 = 除息前持有的股數 × 每股配息', rp[4].div, 100);
+eq('時間加權:加碼那天不算報酬、除息那天不算虧', T.quantTwr(rp).map(v => Math.round(v * 10) / 10), [100, 110, 110, 121, 121]);
+eq('假日記的買進算在下一個交易日', T.quantReplay([{ date: '2026-01-03', sym: 'A', shares: 100, money: 1100, price: 11 }], QA)[0].date, '2026-01-05');
+const late = T.quantReplay([{ date: '2026-01-02', sym: 'A', shares: 100, money: 1000, price: 10 }, { date: '2026-01-02', sym: 'L', shares: 100, money: 2000, price: 20 }],
+  { A: QA.A, L: { d: D7.slice(2, 5), c: [30, 33, 33], a: [30, 33, 33], div: [] } });
+eq('行情比買進晚出現:換成真實收盤價的那一下不算賺賠', T.quantTwr(late).map(v => Math.round(v * 10) / 10), [100, 103.3, 103.3, 113.7, 113.7]);
+// 回測
+const QB = { A: { d: ['2026-01-02', '2026-02-02', '2026-03-02'], c: [10, 20, 40], a: [10, 20, 40], div: [] }, B: { d: ['2026-01-02', '2026-02-02', '2026-03-02'], c: [10, 10, 20], a: [10, 10, 20], div: [] } };
+const bt = T.quantBacktest([{ date: '2026-01-02', sym: 'A', shares: 100, money: 1000 }, { date: '2026-03-02', sym: 'A', shares: 25, money: 1000 }, { date: '2026-02-02', sym: 'Z', shares: 1, money: 500 }], QB, 'B');
+eq('回測:沒有歷史股價的標的不算進來', [bt.invested, bt.excluded], [2000, ['Z']]);
+near('回測:實際買法', bt.actual, 1000 * 4 + 1000, 0.01);
+near('回測:每月平均買', bt.monthly, 2000 / 3 * (4 + 2 + 1), 0.01);
+near('回測:同樣的錢買對照標的', bt.bench, 1000 * 2 + 1000, 0.01);
+near('回測:假日買的用下一個交易日的價格', T.quantBacktest([{ date: '2026-01-15', sym: 'A', shares: 1, money: 1000 }], QB, 'B').actual, 2000, 0.01);
+set({ purchases: [P('a', '黃', '代號0056', 3000, 30, 100, 20, '2026-10-06'), P('b', '蘇', '0050', 5000, 50, 100, 20, '2026-10-07'), P('c', '黃', '0056', -1500, 30, -50, 10, '2026-10-08')] });
+eq('quantRows:只取那個人、代號去掉前綴、賣出是負的', T.quantRows('黃').map(r => [r.sym, r.shares, r.money]), [['0056', 100, 3020], ['0056', -50, -1490]]);
 
 console.log(`\n${fail === 0 ? '✅ 全部通過' : '❌ 有失敗'}:${pass} 通過、${fail} 失敗`);
 process.exit(fail === 0 ? 0 : 1);

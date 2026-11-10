@@ -15,8 +15,10 @@
     });
     const note = $('#networth-note');
     if (!note) return;
+    const full = typeof QUANT !== 'undefined' && !!QUANT.series;
     note.innerHTML = mode === 'daily'
-      ? (dailyCount >= 2 ? '每一點是當天收盤後的<b>真實市值</b>(當天持股 × 當天收盤價)。收盤價從 2026/10/28 起每個交易日自動記錄,所以這條線會一天一天變長。'
+      ? (dailyCount >= 2 ? (full ? '每一點是當天收盤後的<b>真實市值</b>(當天持股 × 當天收盤價),從第一筆買進那天開始。'
+          : '每一點是當天收盤後的<b>真實市值</b>(當天持股 × 當天收盤價)。' + (QUANT.error ? '更早的歷史股價暫時取不到,先顯示 2026/10/28 之後自動記錄的部分。' : '正在讀取更早的歷史股價…'))
         : '每日收盤價還不夠兩天,暫時畫不出來;每個交易日下午會自動記錄,過幾天再來看。')
       : '「估算市值」用<b>今日價格</b>回推歷史持股(非當時真實價格);「真實快照」每月 1 號自動寫一筆。想看真實的每日變化,切到「每日(真實收盤)」。';
   }
@@ -24,7 +26,10 @@
   function renderDailyChart(canvas, series) {
     const palette = STATE.chartColors || getCurrentPalette().chart;
     const colValue = palette[0] || '#3b82f6', colCost = palette[1] || '#94a3b8';
-    const md = (s) => +s.slice(5, 7) + '/' + +s.slice(8, 10);
+    const long = series.length > 1 && Date.parse(series[series.length - 1].date) - Date.parse(series[0].date) > 300 * 864e5;
+    const md = (s) => (long ? s.slice(2, 4) + '/' : '') + +s.slice(5, 7) + '/' + +s.slice(8, 10);
+    const step = Math.max(1, Math.ceil(series.length / 300));   // 點太多時抽樣,手機才畫得動
+    series = series.filter((_, i) => i % step === 0 || i === series.length - 1);
     const opts = chartBarOptions();
     opts.scales.x.ticks.maxTicksLimit = 8;
     opts.scales.y.grace = '5%';
@@ -50,7 +55,17 @@
     const empty  = $('#networth-empty');
     if (!canvas || !window.Chart) return;
     const mode = networthMode();
-    const daily = mode === 'daily' ? computeDailyValues(personFilter) : [];
+    // 有長期日線(風險與回測用的那份)就從第一筆買進開始畫;還沒有就先用試算表每天記錄的收盤價,並在背景去抓
+    let daily = [];
+    if (mode === 'daily') {
+      const full = QUANT.series ? quantReplay(quantRows(personFilter), QUANT.series) : [];
+      daily = full.length >= 2 ? full : computeDailyValues(personFilter);
+      if (!QUANT.series && !QUANT.error && !QUANT.nwWait) {
+        QUANT.nwWait = true;
+        quantLoad().then(() => { if (networthMode() === 'daily') renderNetWorthChart(STATE.defaultPerson); }).catch(() => { if (networthMode() === 'daily') renderNetWorthChart(STATE.defaultPerson); })
+          .finally(() => { QUANT.nwWait = false; });
+      }
+    }
     bindNetworthMode(personFilter, mode, daily.length);
     if (mode === 'daily') {
       if (daily.length < 2) {

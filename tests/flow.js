@@ -16,6 +16,24 @@ const now = new Date(), TODAY = now.getFullYear() + '-' + pad(now.getMonth() + 1
 const QUOTE = {};   // 假的市場中繼站報價:每檔都比資料裡的現價高一點,看得出有沒有更新
 SYMS.forEach(([s, name, p0], i) => { QUOTE[s] = { name, price: p0 + 1.11 + i, prev: p0, chgPct: 1, time: '13:30:00', date: TODAY }; });
 
+// 假的長期日線:最近 420 個平日,每檔一條固定的隨機漫步(每次跑都一樣)
+function fakePrices(sym) {
+  let seed = [...sym].reduce((a, ch) => a * 31 + ch.charCodeAt(0), 7) % 2147483647 || 1;
+  const rnd = () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; };
+  const d = [], c = [], a = [], div = [];
+  let p = (QUOTE[sym] ? QUOTE[sym].prev : 100) * 0.8, adj = 1;
+  for (let k = 599; k >= 0; k--) {
+    const t = new Date(now.getFullYear(), now.getMonth(), now.getDate() - k);
+    if (t.getDay() % 6 === 0) continue;
+    const ymd = t.getFullYear() + '-' + pad(t.getMonth() + 1) + '-' + pad(t.getDate());
+    p *= 1 + (rnd() - 0.47) * 0.02;
+    if (QUOTE[sym] && d.length && d.length % 63 === 0) { div.push([ymd, 0.3]); adj *= 1 + 0.3 / p; }
+    d.push(ymd); c.push(Math.round(p * 100) / 100); a.push(Math.round(p * adj * 10000) / 10000);
+  }
+  return { d, c, a, div };
+}
+let pricesDown = false;   // 模擬中繼站的歷史股價暫時取不到
+
 (async () => {
   const srv = await startFakeServer();
   const browser = await chromium.launch({ channel: 'chrome', headless: !SHOW, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
@@ -38,6 +56,12 @@ SYMS.forEach(([s, name, p0], i) => { QUOTE[s] = { name, price: p0 + 1.11 + i, pr
         const stocks = {};
         (u.searchParams.get('tw') || '').split(',').forEach(c => { if (QUOTE[c]) stocks[c] = QUOTE[c]; });
         return json({ ok: true, data: { at: new Date().toISOString(), taiex: null, stocks, txfDay: null, txfNight: null, intl: {}, errors: [] } });
+      }
+      if (u.pathname === '/prices') {
+        if (pricesDown) return json({ ok: false, error: '測試:暫時取不到' });
+        const series = {};
+        (u.searchParams.get('s') || '').split(',').slice(0, 6).forEach(c => { series[c] = fakePrices(c); });
+        return json({ ok: true, data: { at: new Date().toISOString(), series } });
       }
       return json({ ok: false, error: '測試環境沒有這個資料' });
     }
@@ -221,6 +245,40 @@ SYMS.forEach(([s, name, p0], i) => { QUOTE[s] = { name, price: p0 + 1.11 + i, pr
       ok(await ev(() => _charts.networth.data.labels.length) >= 2, '每日走勢應該至少有兩個點');
       await page.click('#networth-mode [data-nw="month"]');
       ok(await until(() => _charts.networth && _charts.networth.data.datasets.length === 3), '切回「長期」後應該是三條線');
+    },
+
+    async '風險與回測'() {
+      await nav('home');
+      ok(await ev(() => document.querySelector('#card-quant').classList.contains('collapsed')), '「風險與回測」預設應該是收起來的(展開才抓資料)');
+      pricesDown = true;
+      await ev(() => { QUANT.series = null; QUANT.error = ''; QUANT.at = 0; });   // 前面的流程可能已經抓過,清掉才測得到「取不到」的畫面
+      await page.locator('#card-quant > .card-title').scrollIntoViewIfNeeded();
+      await page.click('#card-quant > .card-title');
+      ok(await until(() => !!document.querySelector('#quant-retry')), '歷史股價取不到時,應該顯示說明和「再試一次」');
+      pricesDown = false;
+      await page.click('#quant-retry');
+      ok(await until(() => document.querySelectorAll('#quant-body .q-tile').length >= 4, null, 15000), '重試後沒有顯示整體的風險指標');
+      const tiles = await ev(() => [...document.querySelectorAll('#quant-body .q-tile')].map(t => t.textContent.replace(/\s+/g, ' ')));
+      ok(tiles.some(t => t.includes('持股報酬') && /[+-]\d/.test(t)) && tiles.some(t => t.includes('最大回檔')) && tiles.some(t => t.includes('0050')), `整體指標不完整:${tiles.join(' | ').slice(0, 120)}`);
+      ok(await until(() => !!_charts.quant && _charts.quant.data.datasets.length === 3), '報酬走勢圖應該有三條線(我的持股、0050、加權指數)');
+      const chk = await ev(() => { const s = quantReplay(quantRows(STATE.defaultPerson), QUANT.series), t = quantTwr(s); return { n: s.length, first: s[0].date, firstBuy: quantRows(STATE.defaultPerson)[0].date, last: Math.round(s[s.length - 1].value), shown: t[t.length - 1] }; });
+      ok(chk.n > 100 && chk.first >= chk.firstBuy, `整體序列應該從第一筆買進開始(${chk.first} / ${chk.firstBuy},${chk.n} 天)`);
+      await page.click('#quant-tabs [data-q="each"]');
+      const held = await ev(() => Object.keys(computeOpenHoldings(STATE.defaultPerson)).length);
+      const extra = await ev(() => Object.keys(computeOpenHoldings(STATE.defaultPerson)).includes(QUANT.BENCH) ? 1 : 2);   // 自己有買 0050 就不重複列
+      ok(await until((n) => document.querySelectorAll('#quant-body .q-table tbody tr').length === n, held + extra), '「各檔」應該列出每一檔持股,加上 0050(沒持有時)和加權指數');
+      await page.click('#quant-tabs [data-q="bt"]');
+      ok(await until(() => document.querySelectorAll('#quant-body .q-bt').length === 3), '「回測」應該有三種買法');
+      const bt = await ev(() => { const b = quantBacktest(quantRows(STATE.defaultPerson), QUANT.series, QUANT.BENCH); return { actual: Math.round(b.actual), shown: document.querySelector('#quant-body .q-bt .town-num').textContent }; });
+      ok(Number(bt.shown.replace(/[^\d-]/g, '')) === bt.actual, `回測顯示 ${bt.shown},算出來是 ${bt.actual}`);
+      ok((await page.textContent('#quant-body')).includes('不是買賣建議'), '下方應該有「不是買賣建議」的說明');
+      // 資產走勢的「每日」要變成從第一筆買進開始
+      await page.locator('#networth-mode').scrollIntoViewIfNeeded();
+      await page.click('#networth-mode [data-nw="daily"]');
+      ok(await until(() => _charts.networth && _charts.networth.data.labels.length > 100), '有長期日線後,「每日」走勢應該從第一筆買進開始(超過 100 個點)');
+      ok((await page.textContent('#networth-note')).includes('第一筆買進'), '「每日」走勢下方的說明沒有更新');
+      await page.click('#networth-mode [data-nw="month"]');
+      await page.click('#quant-tabs [data-q="all"]');
     },
 
     async '持股小鎮'() {
