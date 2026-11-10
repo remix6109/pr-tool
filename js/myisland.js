@@ -285,7 +285,7 @@
   }
   // opts.rebuild:格子或協作線有變,3D 要整個重做;opts.select:做完要選哪一格
   async function myiSave(apply, send, opts) {
-    if (MYI.saving) return;
+    if (MYI.saving) { showToast('上一個修改還在儲存,等一下再按一次', 2500); return; }   // 不要悄悄忽略
     MYI.saving = true;
     opts = opts || {};
     const prevSel = MYI.sel;
