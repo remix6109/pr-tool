@@ -28,7 +28,9 @@
   "ai-injection": 2,
   "fin-equalization": 2,
   "ai-ads": 2,
-  "fin-nhi-reform": 2
+  "fin-nhi-reform": 2,
+  "ai-scam-stats": 2,
+  "fin-etf-share-class": 2
  },
  "tools": [
   "chatgpt",
