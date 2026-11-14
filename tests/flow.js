@@ -33,6 +33,13 @@ function fakePrices(sym) {
   return { d, c, a, div };
 }
 let pricesDown = false;   // 模擬中繼站的歷史股價暫時取不到
+let newsExtra = 0;        // 假新聞:多出幾則「剛發布」的(模擬有新新聞進來)
+function fakeNews(cat, origin) {
+  const list = [];
+  for (let i = 0; i < newsExtra; i++) list.push({ id: cat + '-new-' + i, title: `【${cat}】剛發布的新聞 ${i + 1}`, url: 'https://news.cnyes.com/news/id/9' + i, time: new Date(Date.now() - 60e3).toISOString(), source: '鉅亨網', image: origin + '/icon.svg', stocks: [] });
+  for (let i = 0; i < 8; i++) list.push({ id: cat + '-' + i, title: `【${cat}】測試新聞第 ${i + 1} 則`, url: 'https://news.cnyes.com/news/id/' + i, time: new Date(Date.now() - (i + 1) * 600e3).toISOString(), source: '鉅亨網', image: origin + '/icon.svg', stocks: [] });
+  return list;
+}
 
 (async () => {
   const srv = await startFakeServer();
@@ -56,6 +63,11 @@ let pricesDown = false;   // 模擬中繼站的歷史股價暫時取不到
         const stocks = {};
         (u.searchParams.get('tw') || '').split(',').forEach(c => { if (QUOTE[c]) stocks[c] = QUOTE[c]; });
         return json({ ok: true, data: { at: new Date().toISOString(), taiex: null, stocks, txfDay: null, txfNight: null, intl: {}, errors: [] } });
+      }
+      if (u.pathname === '/news') {
+        const cats = {};
+        (u.searchParams.get('cat') || '').split(',').forEach(c => { cats[c] = fakeNews(c, srv.url); });
+        return json({ ok: true, data: { at: new Date().toISOString(), cats } });
       }
       if (u.pathname === '/prices') {
         if (pricesDown) return json({ ok: false, error: '測試:暫時取不到' });
@@ -105,7 +117,7 @@ let pricesDown = false;   // 模擬中繼站的歷史股價暫時取不到
       ok(await ev(() => document.querySelector('#screen-app') && !document.querySelector('#screen-app').classList.contains('hidden')), '沒有進到 APP 畫面(卡在設定或解鎖)');
       const st = await ev(() => { const s = computePersonStats()[STATE.defaultPerson]; return { cost: s.totalCost, value: s.marketValue, shares: s.totalShares }; });
       ok(st.cost > 0 && st.value > 0 && st.shares > 0, `總本金/市值/股數應該大於 0,實際 ${JSON.stringify(st)}`);
-      ok((await page.textContent('.person-card')).includes(st.shares.toLocaleString('en-US')), '個人卡片上沒有顯示總股數');
+      ok(await until((t) => document.querySelector('.person-card').textContent.includes(t), st.shares.toLocaleString('en-US')), '個人卡片上沒有顯示總股數');   // 數字有滾動動畫,等它跑完
       ok(await ev(() => STATE.lastSync && STATE.lastSync.ok), '沒有記錄到資料同步成功');
     },
 
@@ -480,6 +492,36 @@ let pricesDown = false;   // 模擬中繼站的歷史股價暫時取不到
       ok(await until((t) => (document.documentElement.dataset.theme || '') !== t, t0), '按主題按鈕沒有切換');
       await page.waitForTimeout(400);
       await page.click('#btn-theme');
+    },
+
+    async '新聞列表不會一直重建(不閃爍)'() {
+      await nav('market');
+      if (await ev(() => document.querySelector('#card-news').classList.contains('collapsed'))) await page.click('#card-news > .card-title');
+      await page.click('[data-news-tab="tw"]');
+      ok(await until(() => document.querySelectorAll('#news-list a.news-item').length === 8, null, 10000), '新聞分頁沒有列出新聞');
+      // 在每一則和它的縮圖上做記號;如果列表被整個重建,記號就會不見
+      await ev(() => document.querySelectorAll('#news-list a.news-item').forEach((a, i) => { a.__mark = 'm' + i; const img = a.querySelector('img'); if (img) img.__mark = 'm' + i; }));
+      const marks = () => ev(() => [...document.querySelectorAll('#news-list a.news-item')].map(a => (a.__mark || '-') + '/' + ((a.querySelector('img') || {}).__mark || '-')).join(','));
+      const before = await marks();
+      await ev(async () => { await marketTick(true); await marketTick(true); renderMarketCards(); renderNews(); });
+      ok(await marks() === before, '市場頁定時更新後,新聞列表被整個重建了(縮圖會重新載入,看起來會閃)');
+      // 「幾分鐘前」要照樣更新
+      await ev(() => { MKT.news.cats.tw[0].time = new Date(Date.now() - 3 * 3600e3).toISOString(); renderNews(); });
+      ok((await page.textContent('#news-list a.news-item .news-meta')).includes('3 小時前'), '新聞的時間沒有跟著更新');
+      ok(await marks() === before, '只更新時間時不應該重建列表');
+      // 有新的新聞進來:補在最上面,原本的 8 則沿用(記號還在)
+      newsExtra = 2;
+      await ev(async () => { await marketLoad('news', true); renderNews(); });
+      ok(await until(() => document.querySelectorAll('#news-list a.news-item').length === 10), '有新新聞時列表沒有更新');
+      const after = (await marks()).split(',');
+      ok(after.slice(0, 2).every(x => x === '-/-') && after.slice(2).join(',') === before, `新的兩則應該在最上面,原本的 8 則要沿用舊元素:${after.join(',')}`);
+      ok((await page.textContent('#news-list a.news-item .news-title')).includes('剛發布'), '最上面應該是剛發布的新聞');
+      // 切到別的分頁再切回來
+      await page.click('[data-news-tab="us"]');
+      ok(await until(() => (document.querySelector('#news-list a.news-item .news-title') || {}).textContent.includes('【us】')), '切換新聞分頁後內容沒有換');
+      await page.click('[data-news-tab="tw"]');
+      ok(await until(() => (document.querySelector('#news-list a.news-item .news-title') || {}).textContent.includes('【tw】')), '切回原本的分頁後內容不對');
+      newsExtra = 0;
     },
 
     async '市場頁'() {

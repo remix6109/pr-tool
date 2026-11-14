@@ -606,6 +606,49 @@
     return out.sort((a, b) => (b.n.time || '').localeCompare(a.n.time || ''));
   }
 
+  // 市場頁每 30 秒會重畫一次。新聞列表如果每次都整個重建,縮圖會重新載入,看起來一閃一閃。
+  // 所以:內容沒變就不動;新聞有增減時,原本就在的那幾則沿用舊的元素(圖片不用重載),只補上新的。
+  function newsSetMessage(box, html) {
+    if (box._msg === html) return false;
+    box._msg = html; box._keys = null;
+    box.innerHTML = html;
+    return true;
+  }
+  function newsItemHtml({ n, why, cat }) {
+    return `<a class="news-item" href="${escapeHtml(n.url)}" ${n.external ? (n.reader ? 'data-news-ext="1"' : '') : `data-news-id="${escapeHtml(String(n.id))}" data-news-cat="${escapeHtml(cat)}"`} target="_blank" rel="noopener noreferrer">
+        ${n.image ? `<img class="news-img" src="${escapeHtml(n.image)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : '<span class="news-img"></span>'}
+        <span class="news-body">
+          <span class="news-title">${escapeHtml(n.title)}</span>
+          ${why ? `<span class="news-why">相關:${escapeHtml(why)}</span>` : ''}
+          <span class="news-meta"></span>
+        </span>
+      </a>`;
+  }
+  const newsKey = (x) => [x.cat, x.n.id, x.n.url, x.n.title, x.n.image || '', x.why || ''].join('\u0001');
+  function newsDrawList(box, items, footerHtml) {
+    const keys = items.map(newsKey);
+    const same = box._keys && box._keys.length === keys.length && keys.every((k, i) => k === box._keys[i]) && box._foot === footerHtml;
+    if (!same) {
+      const old = new Map();
+      if (box._keys) [...box.querySelectorAll('a.news-item')].forEach((a, i) => old.set(box._keys[i], a));
+      const tpl = document.createElement('template');
+      const nodes = items.map((x, i) => {
+        const keep = old.get(keys[i]);
+        if (keep) return keep;                                   // 這則原本就在:沿用,縮圖不用重載
+        tpl.innerHTML = newsItemHtml(x);
+        return tpl.content.firstElementChild;
+      });
+      tpl.innerHTML = footerHtml;
+      box.replaceChildren(...nodes, ...tpl.content.childNodes);
+      box._keys = keys; box._foot = footerHtml; box._msg = null;
+    }
+    // 「幾分鐘前」會隨時間變:只改那幾個字
+    box.querySelectorAll('a.news-item .news-meta').forEach((el, i) => {
+      const n = items[i].n, t = (n.source || '') + '・' + timeAgo(n.time);
+      if (el.textContent !== t) el.textContent = t;
+    });
+  }
+
   function renderNews() {
     const card = $('#card-news');
     if (!card || card.classList.contains('collapsed')) return;
@@ -616,31 +659,24 @@
     });
     loadNewsCat(tab);
     const box = $('#news-list');
-    if (!MKT.news) { box.innerHTML = `<div class="muted small">${MKT.error ? '讀取失敗:' + escapeHtml(MKT.error) : '新聞讀取中…'}</div>`; return; }
-    if (tab === 'mine' && !MKT.holdings) { box.innerHTML = '<div class="muted small">正在讀取你的成分股,用來比對相關新聞…</div>'; return; }
+    if (!MKT.news) { newsSetMessage(box, `<div class="muted small">${MKT.error ? '讀取失敗:' + escapeHtml(MKT.error) : '新聞讀取中…'}</div>`); return; }
+    if (tab === 'mine' && !MKT.holdings) { newsSetMessage(box, '<div class="muted small">正在讀取你的成分股,用來比對相關新聞…</div>'); return; }
     const raw = (MKT.news.cats || {})[tab];
-    if (tab !== 'mine' && !NEWS_BASE.includes(tab) && !raw) { box.innerHTML = '<div class="muted small">新聞讀取中…</div>'; return; }
+    if (tab !== 'mine' && !NEWS_BASE.includes(tab) && !raw) { newsSetMessage(box, '<div class="muted small">新聞讀取中…</div>'); return; }
     if (raw && raw.error) {
-      box.innerHTML = `<div class="muted small">讀取失敗:${escapeHtml(raw.error)}</div><button type="button" class="btn ghost small" id="news-retry" style="margin-top:8px;">🔄 重新整理</button>`;
+      newsSetMessage(box, `<div class="muted small">讀取失敗:${escapeHtml(raw.error)}</div><button type="button" class="btn ghost small" id="news-retry" style="margin-top:8px;">🔄 重新整理</button>`);
       $('#news-retry').onclick = () => { MKT.news.cats[tab] = null; renderNews(); loadNewsCat(tab, true); };
       return;
     }
     const items = newsItems(tab).slice(0, 30);
     if (!items.length) {
-      box.innerHTML = `<div class="muted small">${tab === 'mine' ? '最近的新聞裡沒有提到你持有的 ETF 或主要成分股。' : '目前沒有新聞。'}</div>`;
+      newsSetMessage(box, `<div class="muted small">${tab === 'mine' ? '最近的新聞裡沒有提到你持有的 ETF 或主要成分股。' : '目前沒有新聞。'}</div>`);
       return;
     }
     const ext = items.some(x => x.n.external);
-    box.innerHTML = items.map(({ n, why, cat }) => `<a class="news-item" href="${escapeHtml(n.url)}" ${n.external ? (n.reader ? 'data-news-ext="1"' : '') : `data-news-id="${escapeHtml(String(n.id))}" data-news-cat="${escapeHtml(cat)}"`} target="_blank" rel="noopener noreferrer">
-        ${n.image ? `<img class="news-img" src="${escapeHtml(n.image)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : '<span class="news-img"></span>'}
-        <span class="news-body">
-          <span class="news-title">${escapeHtml(n.title)}</span>
-          ${why ? `<span class="news-why">相關:${escapeHtml(why)}</span>` : ''}
-          <span class="news-meta">${escapeHtml(n.source || '')}・${timeAgo(n.time)}</span>
-        </span>
-      </a>`).join('') + (ext
-        ? `<div class="muted small" style="margin-top:6px;">新聞來源:${escapeHtml([...new Set(items.map(x => x.n.source).filter(Boolean))].join('、'))}。點新聞在 APP 內閱讀,內文下方有原文連結。</div>`
-        : '<div class="muted small" style="margin-top:6px;">新聞來源:鉅亨網。點新聞在 APP 內閱讀,內文下方有原文連結。「與我持股相關」是比對新聞標註的相關股票與標題,可能漏掉或多抓。</div>');
+    newsDrawList(box, items, ext
+      ? `<div class="muted small" style="margin-top:6px;">新聞來源:${escapeHtml([...new Set(items.map(x => x.n.source).filter(Boolean))].join('、'))}。點新聞在 APP 內閱讀,內文下方有原文連結。</div>`
+      : '<div class="muted small" style="margin-top:6px;">新聞來源:鉅亨網。點新聞在 APP 內閱讀,內文下方有原文連結。「與我持股相關」是比對新聞標註的相關股票與標題,可能漏掉或多抓。</div>');
   }
 
   // 在 APP 內閱讀:中繼站取出那一篇、清理成安全格式後顯示
